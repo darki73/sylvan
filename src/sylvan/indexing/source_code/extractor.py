@@ -134,6 +134,67 @@ def parse_file(content: str, filename: str, language: str) -> list[Symbol]:
     return symbols
 
 
+_HANDLER_WRAPPERS = frozenset({
+    "defineEventHandler", "defineNuxtRouteMiddleware",
+    "eventHandler", "defineNitroPlugin",
+})
+
+
+def _try_extract_export_default(
+    node: object,
+    spec: LanguageSpec,
+    source_bytes: bytes,
+    filename: str,
+    language: str,
+    symbols: list[Symbol],
+) -> None:
+    """Extract export default defineEventHandler() as a named function.
+
+    Nuxt server routes use ``export default defineEventHandler(...)``
+    which produces no named symbol. This extracts it using the filename
+    to generate a meaningful name (e.g., ``health.get.ts`` -> ``healthGet``).
+
+    Args:
+        node: The export_statement AST node.
+        spec: Language extraction specification.
+        source_bytes: Raw source file bytes.
+        filename: Relative file path.
+        language: Language identifier.
+        symbols: Accumulator list for extracted symbols.
+    """
+    text = source_bytes[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
+    if not any(w in text for w in _HANDLER_WRAPPERS):
+        return
+
+    from pathlib import PurePosixPath
+    stem = PurePosixPath(filename).stem
+    parts = stem.split(".")
+    if len(parts) >= 2:
+        name = parts[0] + "".join(p.capitalize() for p in parts[1:])
+    else:
+        name = parts[0]
+
+    start = node.start_byte
+    end = node.end_byte
+    symbols.append(Symbol(
+        symbol_id=make_symbol_id(filename, name, "function"),
+        name=name,
+        qualified_name=name,
+        kind="function",
+        language=language,
+        signature="export default defineEventHandler()",
+        docstring=extract_docstring(node, spec, source_bytes, language),
+        summary=f"Server route handler: {stem}",
+        keywords=extract_keywords(name, None, []),
+        parent_symbol_id=None,
+        line_start=node.start_point[0] + 1,
+        line_end=node.end_point[0] + 1,
+        byte_offset=start,
+        byte_length=end - start,
+        content_hash=compute_content_hash(source_bytes[start:end]),
+    ))
+
+
 def _walk_tree(
     node: object,
     spec: LanguageSpec,
@@ -197,6 +258,15 @@ def _walk_tree(
         and parent_symbol is None
     ):
         try_extract_python_constant(
+            node, spec, source_bytes, filename, language, symbols,
+        )
+
+    if (
+        node.type == "export_statement"
+        and language in ("javascript", "typescript", "tsx")
+        and parent_symbol is None
+    ):
+        _try_extract_export_default(
             node, spec, source_bytes, filename, language, symbols,
         )
 

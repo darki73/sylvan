@@ -729,7 +729,7 @@ def detect_language(filename: str) -> str | None:
         Language identifier string, or None if unrecognized.
     """
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    return get_language_for_extension(ext)
+    return get_language_for_extension(ext) or LANGUAGE_EXTENSIONS.get(ext)
 
 
 def get_spec(language: str) -> LanguageSpec | None:
