@@ -65,6 +65,9 @@ async def remove_repo(repo: str) -> dict:
     await repo_obj.delete()
     counts["repos"] = 1
 
+    from sylvan.database.orm.runtime.connection_manager import get_backend
+    await get_backend().commit()
+
     meta.set("repo", repo)
     meta.set("repo_id", repo_id)
     meta.set("total_deleted", sum(counts.values()))
