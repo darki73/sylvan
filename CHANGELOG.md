@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2
+
+- Fixed: `sylvan remove` now commits deletes (data wasn't persisting across runs)
+- Fixed: `sylvan remove` on nonexistent repo shows clean message instead of traceback + hang
+- Fixed: `remove` command in CLI docs
+
 ## 1.1.1
 
 - Fixed: CLI indexing now waits for background tasks (embeddings, summaries) before exiting — no more lost embeddings

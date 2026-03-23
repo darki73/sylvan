@@ -215,7 +215,7 @@ def remove(
         from sylvan.context import SylvanContext, using_context
         from sylvan.database.backends.sqlite.backend import SQLiteBackend
         from sylvan.database.migrations.runner import run_migrations
-        from sylvan.tools.meta.remove_repo import remove_repo
+        from sylvan.database.orm import Repo
 
         cfg = get_config()
         backend = SQLiteBackend(cfg.db_path)
@@ -224,6 +224,13 @@ def remove(
 
         ctx = SylvanContext(backend=backend, config=cfg)
         async with using_context(ctx):
+            repo_obj = await Repo.where(name=name).first()
+            if repo_obj is None:
+                await backend.disconnect()
+                typer.echo(f"Repository '{name}' not found.")
+                raise typer.Exit(1)
+
+            from sylvan.tools.meta.remove_repo import remove_repo
             result = await remove_repo(repo=name)
 
         await backend.disconnect()
