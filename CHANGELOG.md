@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0
+
+Major extraction improvements for Vue/Nuxt and TypeScript projects:
+
+- Vue SFC: extracts symbols from `<script setup lang="ts">` blocks
+- TypeScript: extracts `const` assignments — arrow functions, reactive state (`ref`, `computed`), Vue macros (`defineProps`, `defineEmits`, `withDefaults`), composable calls (`useAuth`, `useFetch`), and literal constants
+- TypeScript: extracts destructured composable returns (`const { t } = useI18n()`)
+- Nuxt: extracts `export default defineEventHandler()` from server routes using filename as symbol name
+- Fixed `.vue` file detection (language registry fallback to extension map)
+
+On a real Nuxt 4 project: 364 → 2,891 symbols (~8x improvement).
+
 ## 1.1.6
 
 - Vue SFC support: extracts symbols from `<script setup lang="ts">` blocks as TypeScript
