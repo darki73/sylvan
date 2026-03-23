@@ -1,6 +1,7 @@
-"""LRU query cache for frequently repeated single-record lookups."""
+"""LRU query cache with TTL for frequently repeated single-record lookups."""
 
 import threading
+import time
 from collections import OrderedDict
 from typing import Any
 
@@ -9,35 +10,39 @@ from sylvan.logging import get_logger
 logger = get_logger(__name__)
 
 _MAX_CACHE_SIZE = 512
+_DEFAULT_TTL = 30  # seconds
 
 
 class QueryCache:
-    """Thread-safe LRU cache for ORM single-record lookups.
+    """Thread-safe LRU cache with per-entry TTL.
 
-    Caches results of find-by-unique-key queries to avoid repeated
-    SQLite round-trips for the same record within a session.
-    Uses ``OrderedDict`` with ``move_to_end`` for true LRU eviction.
+    Entries expire after ``ttl`` seconds to prevent stale reads when
+    external processes (CLI, other instances) modify the database.
 
     Attributes:
-        _cache: The underlying LRU cache ordered dict.
+        _cache: The underlying LRU cache mapping key -> (value, timestamp).
         _hits: Number of cache hits.
         _misses: Number of cache misses.
     """
 
-    def __init__(self, max_size: int = _MAX_CACHE_SIZE) -> None:
+    def __init__(self, max_size: int = _MAX_CACHE_SIZE, ttl: int = _DEFAULT_TTL) -> None:
         """Initialize the query cache.
 
         Args:
             max_size: Maximum number of cached entries.
+            ttl: Time-to-live in seconds for each entry.
         """
-        self._cache: OrderedDict[str, Any] = OrderedDict()
+        self._cache: OrderedDict[str, tuple[Any, float]] = OrderedDict()
         self._max_size = max_size
+        self._ttl = ttl
         self._hits = 0
         self._misses = 0
         self._lock = threading.Lock()
 
     def get(self, key: str) -> tuple[bool, Any]:
         """Look up a cached result.
+
+        Returns a miss if the entry has expired.
 
         Args:
             key: Cache key (e.g., 'Symbol:path::Foo#function').
@@ -47,27 +52,33 @@ class QueryCache:
         """
         with self._lock:
             if key in self._cache:
+                value, ts = self._cache[key]
+                if time.monotonic() - ts > self._ttl:
+                    del self._cache[key]
+                    self._misses += 1
+                    return False, None
                 self._hits += 1
-                self._cache.move_to_end(key)  # LRU: mark as recently used
-                return True, self._cache[key]
+                self._cache.move_to_end(key)
+                return True, value
             self._misses += 1
             return False, None
 
     def put(self, key: str, value: Any) -> None:
-        """Store a result in the cache.
+        """Store a result in the cache with the current timestamp.
 
         Args:
             key: Cache key.
             value: The model instance to cache.
         """
+        now = time.monotonic()
         with self._lock:
             if key in self._cache:
                 self._cache.move_to_end(key)
-                self._cache[key] = value
+                self._cache[key] = (value, now)
             else:
                 if len(self._cache) >= self._max_size:
-                    self._cache.popitem(last=False)  # Remove least recently used
-                self._cache[key] = value
+                    self._cache.popitem(last=False)
+                self._cache[key] = (value, now)
 
     def invalidate(self, key: str) -> None:
         """Remove a specific entry from the cache.
