@@ -42,8 +42,40 @@ def compute_content_hash(source_bytes: bytes) -> str:
     return hashlib.sha256(source_bytes).hexdigest()
 
 
+def _extract_vue_script(content: str) -> tuple[str, str, int]:
+    """Extract the <script> block from a Vue SFC.
+
+    Args:
+        content: Full Vue file content.
+
+    Returns:
+        Tuple of (script_content, effective_language, byte_offset).
+        effective_language is 'typescript' if lang="ts", else 'javascript'.
+        byte_offset is the byte position of the script content in the original file.
+    """
+    import re
+
+    match = re.search(
+        r'<script\b[^>]*>(.*?)</script>',
+        content,
+        re.DOTALL | re.IGNORECASE,
+    )
+    if not match:
+        return "", "typescript", 0
+
+    tag = content[match.start():match.start(1)]
+    lang = "typescript" if "ts" in tag.lower() else "javascript"
+    byte_offset = len(content[:match.start(1)].encode("utf-8"))
+
+    return match.group(1), lang, byte_offset
+
+
 def parse_file(content: str, filename: str, language: str) -> list[Symbol]:
     """Parse source code and extract symbols.
+
+    For Vue SFCs, extracts the ``<script>`` block and parses it as
+    TypeScript/JavaScript. Symbol byte offsets are adjusted to point
+    into the original file.
 
     Args:
         content: Source code text.
@@ -53,6 +85,13 @@ def parse_file(content: str, filename: str, language: str) -> list[Symbol]:
     Returns:
         List of Symbol objects extracted from the file.
     """
+    vue_byte_offset = 0
+    if language == "vue":
+        script_content, language, vue_byte_offset = _extract_vue_script(content)
+        if not script_content:
+            return []
+        content = script_content
+
     spec = get_spec(language)
     if spec is None:
         return []
@@ -87,6 +126,10 @@ def parse_file(content: str, filename: str, language: str) -> list[Symbol]:
 
     disambiguate_overloads(symbols)
     classify_methods(symbols)
+
+    if vue_byte_offset:
+        for sym in symbols:
+            sym.byte_offset += vue_byte_offset
 
     return symbols
 
