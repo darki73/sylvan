@@ -252,6 +252,25 @@ async def _dispatch(name: str, arguments: dict) -> dict:
 
     backend = await _get_or_create_backend()
 
+    # Gate: require workflow guide before real tools (checked early so
+    # followers don't proxy write tools before the agent sees the rules)
+    from sylvan.session.tracker import get_session as _early_session
+    _ungated = {
+        "get_workflow_guide", "list_repos", "list_libraries",
+        "get_session_stats", "get_dashboard_url", "get_server_config",
+        "get_logs", "suggest_queries",
+    }
+    if not _early_session()._workflow_loaded and name not in _ungated:
+        return {
+            "setup_required": True,
+            "message": (
+                "Sylvan session is not configured. Call get_workflow_guide "
+                "first to load the tool usage rules, then retry your request."
+            ),
+            "blocked_tool": name,
+            "blocked_args": arguments,
+        }
+
     # If we're a follower and this is a write tool, proxy to leader
     from sylvan.cluster.proxy import is_write_tool, proxy_to_leader
     from sylvan.cluster.state import get_cluster_state
@@ -289,23 +308,6 @@ async def _dispatch(name: str, arguments: dict) -> dict:
             from sylvan.session.tracker import get_session as _get_session
             session = _get_session()
             session.record_tool_call(name)
-
-            # Gate: require workflow guide before real tools
-            ungated = {
-                "get_workflow_guide", "list_repos", "list_libraries",
-                "get_session_stats", "get_dashboard_url", "get_server_config",
-                "get_logs", "suggest_queries",
-            }
-            if not session._workflow_loaded and name not in ungated:
-                return {
-                    "setup_required": True,
-                    "message": (
-                        "Sylvan session is not configured. Call get_workflow_guide "
-                        "first to load the tool usage rules, then retry your request."
-                    ),
-                    "blocked_tool": name,
-                    "blocked_args": arguments,
-                }
 
             handlers = _get_handlers()
             handler = handlers.get(name)
