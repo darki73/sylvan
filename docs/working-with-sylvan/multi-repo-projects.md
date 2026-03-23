@@ -6,9 +6,28 @@ so you can search, analyze dependencies, and check blast radius across all of
 them at once.
 
 
-## Creating a workspace with `index_workspace`
+## Creating a workspace
 
-The fastest way to set up a multi-repo workspace is to index everything at once:
+### From the CLI
+
+```bash
+# All at once — index and group
+sylvan workspace create my-stack -d "Full-stack application" \
+    -p /home/dev/frontend \
+    -p /home/dev/backend \
+    -p /home/dev/shared-types
+
+# Or step by step
+sylvan workspace create my-stack -d "Full-stack application"
+sylvan index /home/dev/frontend
+sylvan index /home/dev/backend
+sylvan workspace add my-stack --repo frontend
+sylvan workspace add my-stack --repo backend
+```
+
+### From MCP tools
+
+The `index_workspace` tool does the same thing in one call:
 
 ```
 index_workspace(
@@ -22,9 +41,8 @@ index_workspace(
 )
 ```
 
-This indexes all three folders, groups them into a workspace called `my-stack`,
-and resolves cross-repo imports automatically. Each folder becomes its own repo
-in the index, but the workspace ties them together.
+Either way, each folder becomes its own repo in the index, but the workspace
+ties them together. Cross-repo imports are resolved automatically.
 
 
 ## Searching across repos with `workspace_search`

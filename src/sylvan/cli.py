@@ -21,6 +21,9 @@ app.add_typer(migrate_app, name="migrate")
 library_app = typer.Typer(help="Third-party library indexing.")
 app.add_typer(library_app, name="library")
 
+workspace_app = typer.Typer(help="Multi-repo workspace management.")
+app.add_typer(workspace_app, name="workspace")
+
 
 @app.callback()
 def default(ctx: typer.Context) -> None:
@@ -669,6 +672,205 @@ def library_mappings() -> None:
         return
     for key, url in sorted(overrides.items()):
         typer.echo(f"  {key} -> {url}")
+
+
+@workspace_app.command("create")
+def workspace_create(
+    name: str = typer.Argument(..., help="Workspace name."),
+    description: str = typer.Option("", "--description", "-d", help="Workspace description."),
+    paths: Annotated[list[str] | None, typer.Option("--path", "-p", help="Paths to index and add (can repeat).")] = None,
+) -> None:
+    """Create a workspace, optionally indexing and adding projects.
+
+    Args:
+        name: Unique workspace name.
+        description: Optional description.
+        paths: Paths to index and add to the workspace.
+    """
+    async def _run() -> None:
+        from sylvan.config import get_config
+        from sylvan.context import SylvanContext, using_context
+        from sylvan.database.backends.sqlite.backend import SQLiteBackend
+        from sylvan.database.migrations.runner import run_migrations
+        from sylvan.database.workspace import async_add_repo_to_workspace, async_create_workspace
+
+        cfg = get_config()
+        backend = SQLiteBackend(cfg.db_path)
+        await backend.connect()
+        await run_migrations(backend)
+
+        ctx = SylvanContext(backend=backend, config=cfg)
+        async with using_context(ctx):
+            ws_id = await async_create_workspace(backend, name, description)
+            typer.echo(f"Workspace '{name}' created (id={ws_id})")
+
+            if paths:
+                from sylvan.database.orm import Repo
+                from sylvan.indexing.pipeline.orchestrator import index_folder
+
+                for p in paths:
+                    resolved = str(Path(p).resolve())
+                    repo_name = Path(p).resolve().name
+                    typer.echo(f"  Indexing {resolved}...")
+                    result = await index_folder(resolved, name=repo_name)
+                    typer.echo(f"    {result.files_indexed} files, {result.symbols_extracted} symbols")
+
+                    repo = await Repo.where(name=repo_name).first()
+                    if repo:
+                        await async_add_repo_to_workspace(backend, ws_id, repo.id)
+                        typer.echo(f"    Added '{repo_name}' to workspace")
+
+        await backend.disconnect()
+
+    asyncio.run(_run())
+
+
+@workspace_app.command("list")
+def workspace_list() -> None:
+    """List all workspaces with repo counts."""
+    async def _run() -> list[dict]:
+        from sylvan.config import get_config
+        from sylvan.database.backends.sqlite.backend import SQLiteBackend
+        from sylvan.database.migrations.runner import run_migrations
+        from sylvan.database.workspace import async_list_workspaces
+
+        cfg = get_config()
+        backend = SQLiteBackend(cfg.db_path)
+        await backend.connect()
+        await run_migrations(backend)
+        result = await async_list_workspaces(backend)
+        await backend.disconnect()
+        return result
+
+    workspaces = asyncio.run(_run())
+    if not workspaces:
+        typer.echo("No workspaces.")
+        typer.echo("Create one with: sylvan workspace create <name>")
+        return
+    for ws in workspaces:
+        symbols = ws.get("total_symbols") or 0
+        typer.echo(f"  {ws['name']}: {ws.get('repo_count', 0)} repos, {symbols} symbols")
+        if ws.get("description"):
+            typer.echo(f"    {ws['description']}")
+
+
+@workspace_app.command("add")
+def workspace_add(
+    name: str = typer.Argument(..., help="Workspace name."),
+    repo: str = typer.Option(..., "--repo", "-r", help="Repo name to add."),
+) -> None:
+    """Add an already-indexed repo to a workspace.
+
+    Args:
+        name: Workspace name.
+        repo: Repository name (as shown in `sylvan status`).
+    """
+    async def _run() -> None:
+        from sylvan.config import get_config
+        from sylvan.context import SylvanContext, using_context
+        from sylvan.database.backends.sqlite.backend import SQLiteBackend
+        from sylvan.database.migrations.runner import run_migrations
+        from sylvan.database.orm import Repo
+        from sylvan.database.workspace import async_add_repo_to_workspace
+
+        cfg = get_config()
+        backend = SQLiteBackend(cfg.db_path)
+        await backend.connect()
+        await run_migrations(backend)
+
+        ctx = SylvanContext(backend=backend, config=cfg)
+        async with using_context(ctx):
+            repo_obj = await Repo.where(name=repo).first()
+            if not repo_obj:
+                typer.echo(f"Repository '{repo}' not found. Index it first with: sylvan index <path>")
+                raise typer.Exit(1)
+
+            ws_row = await backend.fetch_one("SELECT id FROM workspaces WHERE name = ?", [name])
+            if not ws_row:
+                typer.echo(f"Workspace '{name}' not found. Create it first with: sylvan workspace create {name}")
+                raise typer.Exit(1)
+
+            await async_add_repo_to_workspace(backend, ws_row["id"], repo_obj.id)
+            typer.echo(f"Added '{repo}' to workspace '{name}'")
+
+        await backend.disconnect()
+
+    asyncio.run(_run())
+
+
+@workspace_app.command("remove")
+def workspace_remove(
+    name: str = typer.Argument(..., help="Workspace name to delete."),
+) -> None:
+    """Delete a workspace (does not delete the indexed repos).
+
+    Args:
+        name: Workspace name to remove.
+    """
+    async def _run() -> None:
+        from sylvan.config import get_config
+        from sylvan.database.backends.sqlite.backend import SQLiteBackend
+        from sylvan.database.migrations.runner import run_migrations
+
+        cfg = get_config()
+        backend = SQLiteBackend(cfg.db_path)
+        await backend.connect()
+        await run_migrations(backend)
+
+        ws_row = await backend.fetch_one("SELECT id FROM workspaces WHERE name = ?", [name])
+        if not ws_row:
+            typer.echo(f"Workspace '{name}' not found.")
+            raise typer.Exit(1)
+
+        await backend.execute("DELETE FROM workspace_repos WHERE workspace_id = ?", [ws_row["id"]])
+        await backend.execute("DELETE FROM workspaces WHERE id = ?", [ws_row["id"]])
+        await backend.commit()
+        typer.echo(f"Workspace '{name}' removed")
+
+        await backend.disconnect()
+
+    asyncio.run(_run())
+
+
+@workspace_app.command("show")
+def workspace_show(
+    name: str = typer.Argument(..., help="Workspace name."),
+) -> None:
+    """Show workspace details and its repos.
+
+    Args:
+        name: Workspace name.
+    """
+    async def _run() -> dict | None:
+        from sylvan.config import get_config
+        from sylvan.database.backends.sqlite.backend import SQLiteBackend
+        from sylvan.database.migrations.runner import run_migrations
+        from sylvan.database.workspace import async_get_workspace
+
+        cfg = get_config()
+        backend = SQLiteBackend(cfg.db_path)
+        await backend.connect()
+        await run_migrations(backend)
+        result = await async_get_workspace(backend, name)
+        await backend.disconnect()
+        return result
+
+    ws = asyncio.run(_run())
+    if not ws:
+        typer.echo(f"Workspace '{name}' not found.")
+        raise typer.Exit(1)
+
+    typer.echo(f"Workspace: {ws['name']}")
+    if ws.get("description"):
+        typer.echo(f"  {ws['description']}")
+    typer.echo(f"  Created: {ws.get('created_at', '-')}")
+    repos = ws.get("repos", [])
+    if repos:
+        typer.echo(f"  Repos ({len(repos)}):")
+        for r in repos:
+            typer.echo(f"    {r['name']}")
+    else:
+        typer.echo("  No repos added yet.")
 
 
 @app.command()

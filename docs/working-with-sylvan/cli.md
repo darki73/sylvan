@@ -414,3 +414,86 @@ No options.
   pip/tiktoken -> https://github.com/openai/tiktoken
   pip/tree-sitter -> https://github.com/tree-sitter/py-tree-sitter
 ```
+
+
+## workspace create
+
+Create a workspace, optionally indexing and adding projects in one step.
+
+```
+sylvan workspace create <name> [options]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--description`, `-d` | `""` | Workspace description |
+| `--path`, `-p` | none | Paths to index and add (can repeat) |
+
+```bash
+# Empty workspace, add repos later
+sylvan workspace create myproject -d "Frontend + backend"
+
+# Create and index in one step
+sylvan workspace create myproject -p /path/to/frontend -p /path/to/backend
+```
+
+
+## workspace list
+
+List all workspaces with repo and symbol counts.
+
+```
+sylvan workspace list
+```
+
+No options.
+
+```
+  myproject: 2 repos, 4521 symbols
+    Frontend + backend
+  data-platform: 3 repos, 12044 symbols
+```
+
+
+## workspace add
+
+Add an already-indexed repo to a workspace.
+
+```
+sylvan workspace add <name> --repo <repo>
+```
+
+| Option | Description |
+|--------|-------------|
+| `--repo`, `-r` | Repository name (as shown in `sylvan status`) |
+
+```bash
+sylvan workspace add myproject --repo shared-types
+```
+
+
+## workspace show
+
+Show workspace details and its repos.
+
+```
+sylvan workspace show <name>
+```
+
+```
+Workspace: myproject
+  Frontend + backend
+  Created: 2026-03-23T12:00:00
+  Repos (2):
+    frontend
+    backend
+```
+
+
+## workspace remove
+
+Delete a workspace. Does not delete the indexed repos — they remain available individually.
+
+```
+sylvan workspace remove <name>
+```
