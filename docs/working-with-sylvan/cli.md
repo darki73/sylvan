@@ -111,6 +111,36 @@ sylvan init
 ```
 
 
+## remove
+
+Remove an indexed repository and all its data (symbols, sections, imports, references, quality metrics, files).
+
+```
+sylvan remove <name> [options]
+```
+
+| Argument / Option | Default | Description |
+|---|---|---|
+| `name` | required | Repository name (as shown in `sylvan status`) |
+| `--force`, `-f` | `false` | Skip confirmation prompt |
+
+```bash
+sylvan remove old-project
+# Remove 'old-project' and all its indexed data? [y/N]: y
+# Removed 'old-project':
+#   references: 142
+#   quality: 89
+#   symbols: 621
+#   files: 78
+#   repos: 1
+
+# Skip confirmation
+sylvan remove old-project --force
+```
+
+Does not remove the source files on disk — only the indexed data.
+
+
 ## status
 
 Show all indexed repositories with file and symbol counts.

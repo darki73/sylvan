@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.1
+
+- Fixed: CLI indexing now waits for background tasks (embeddings, summaries) before exiting — no more lost embeddings
+- Fixed: `sylvan library add` same issue
+- Added: `sylvan remove <name>` command to delete an indexed repo and all its data
+- Added: `drain_pending_tasks()` helper in context module
+
 ## 1.1.0
 
 - Workspace CLI commands: `workspace create`, `workspace list`, `workspace add`, `workspace show`, `workspace remove`
