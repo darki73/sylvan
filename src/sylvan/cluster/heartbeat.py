@@ -225,17 +225,86 @@ async def start_heartbeat(
     """
     global _heartbeat_task
 
+    current_role = role
+
     async def _loop():
+        nonlocal current_role
         while True:
             try:
-                await flush_instance_to_db(backend, session_tracker, cache, instance_id, coding_session_id, role)
-                if role == "follower":
+                await flush_instance_to_db(backend, session_tracker, cache, instance_id, coding_session_id, current_role)
+                if current_role == "follower":
                     await push_stats_to_leader(session_tracker, cache, instance_id)
+                    if await _should_promote():
+                        current_role = "leader"
+                        await _promote_to_leader(backend, instance_id, coding_session_id)
             except Exception as exc:
                 logger.debug("heartbeat_error", error=str(exc))
             await asyncio.sleep(interval)
 
     _heartbeat_task = asyncio.ensure_future(_loop())
+
+
+async def _should_promote() -> bool:
+    """Check if the leader is dead and this follower should promote.
+
+    Returns:
+        True if leader PID is no longer alive.
+    """
+    from sylvan.cluster.discovery import _LEADER_FILE, _is_pid_alive
+
+    if not _LEADER_FILE.exists():
+        return True
+    try:
+        data = json.loads(_LEADER_FILE.read_text())
+        leader_pid = data.get("pid")
+        return not (leader_pid and _is_pid_alive(leader_pid))
+    except (json.JSONDecodeError, OSError):
+        return True
+
+
+async def _promote_to_leader(backend: object, instance_id: str, coding_session_id: str) -> None:
+    """Promote this follower to leader.
+
+    Claims the leader file, starts the dashboard, and updates cluster state.
+
+    Args:
+        backend: The async storage backend.
+        instance_id: This instance's identifier.
+        coding_session_id: The coding session ID.
+    """
+    import os
+
+    from sylvan.cluster.discovery import _LEADER_FILE
+    from sylvan.cluster.state import ClusterState, set_cluster_state
+    from sylvan.config import get_config
+
+    cfg = get_config()
+    port = cfg.cluster.port
+
+    leader_data = {
+        "pid": os.getpid(),
+        "session_id": instance_id,
+        "coding_session_id": coding_session_id,
+        "started_at": datetime.now(UTC).isoformat(),
+        "http_port": port,
+    }
+    _LEADER_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _LEADER_FILE.write_text(json.dumps(leader_data, indent=2))
+
+    set_cluster_state(ClusterState(
+        role="leader",
+        session_id=instance_id,
+        coding_session_id=coding_session_id,
+        leader_url=None,
+    ))
+
+    try:
+        from sylvan.dashboard.server import start_dashboard
+        await start_dashboard()
+    except Exception as exc:
+        logger.debug("dashboard_start_on_promote_failed", error=str(exc))
+
+    logger.info("promoted_to_leader", instance_id=instance_id, port=port)
 
 
 async def stop_heartbeat() -> None:
