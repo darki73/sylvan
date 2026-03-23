@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.6
+
+- Vue SFC support: extracts symbols from `<script setup lang="ts">` blocks as TypeScript
+- Byte offsets adjusted to point into the original `.vue` file
+
 ## 1.1.5
 
 - Fixed: workflow gate now runs before write proxy — followers enforce `get_workflow_guide` before any tool call
