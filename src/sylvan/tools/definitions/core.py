@@ -120,6 +120,10 @@ TOOLS: list[Tool] = [
                     "type": "string",
                     "description": "Symbol identifier (from search results)",
                 },
+                "repo": {
+                    "type": "string",
+                    "description": "Repository name (optional, symbol_id is already unique)",
+                },
                 "verify": {
                     "type": "boolean",
                     "description": "Verify content hasn't drifted since indexing",

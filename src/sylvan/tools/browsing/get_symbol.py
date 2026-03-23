@@ -17,6 +17,7 @@ from sylvan.tools.support.response import (
 @log_tool_call
 async def get_symbol(
     symbol_id: str,
+    repo: str | None = None,
     verify: bool = False,
     context_lines: int = 0,
 ) -> dict:
@@ -39,10 +40,15 @@ async def get_symbol(
 
     ctx = get_context()
     cache = ctx.cache
-    cache_key = f"Symbol:{symbol_id}"
+    cache_key = f"Symbol:{symbol_id}:{repo or ''}"
     found, symbol = cache.get(cache_key)
     if not found:
-        symbol = await Symbol.where(symbol_id=symbol_id).with_("file").first()
+        query = Symbol.where(symbol_id=symbol_id).with_("file")
+        if repo:
+            query = query.join("files", "files.id = symbols.file_id").join(
+                "repos", "repos.id = files.repo_id"
+            ).where("repos.name", repo)
+        symbol = await query.first()
         if symbol is not None:
             cache.put(cache_key, symbol)
     if symbol is None:
