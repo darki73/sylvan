@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1
+
+- `get_symbol` now accepts optional `repo` param for disambiguation in multi-repo workspaces
+- Cache key includes repo for correct per-repo caching
+
 ## 1.2.0
 
 Major extraction improvements for Vue/Nuxt and TypeScript projects:
