@@ -32,6 +32,9 @@ async def handle_proxy(request: Request) -> JSONResponse:
 
     logger.info("proxy_call", tool=tool_name, from_session=follower_session)
 
+    from sylvan.session.tracker import get_session
+    get_session()._workflow_loaded = True
+
     from sylvan.server import _dispatch
 
     try:
