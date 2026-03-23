@@ -48,7 +48,7 @@ Sylvan indexes your codebase into a structured database of symbols, sections, an
 ## Quick start
 
 ```bash
-pip install sylvan
+uv tool install sylvan
 ```
 
 Add to your MCP client config:
@@ -57,8 +57,8 @@ Add to your MCP client config:
 {
   "mcpServers": {
     "sylvan": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/sylvan", "sylvan", "serve"]
+      "command": "sylvan",
+      "args": ["serve"]
     }
   }
 }
