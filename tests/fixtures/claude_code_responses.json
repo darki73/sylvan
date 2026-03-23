@@ -1,0 +1,31 @@
+{
+  "provider": "claude-agent-sdk",
+  "model": "claude-haiku-4-5-20251001",
+  "test_cases": [
+    {
+      "signature": "def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection",
+      "docstring": "Create a new SQLite connection with WAL mode and extensions loaded.",
+      "source": "def get_connection(db_path=None):\n    conn = sqlite3.connect(str(db_path))\n    conn.execute('PRAGMA journal_mode=WAL')\n    return conn"
+    },
+    {
+      "signature": "def parse_file(content: str, filename: str, language: str) -> list[Symbol]",
+      "docstring": null,
+      "source": "def parse_file(content, filename, language):\n    spec = get_spec(language)\n    parser = get_parser(spec.ts_language)\n    tree = parser.parse(content.encode())\n    symbols = []\n    _walk_tree(tree.root_node, spec, symbols)\n    return symbols"
+    },
+    {
+      "signature": "class SessionTracker",
+      "docstring": "Tracks agent activity within a single MCP session.",
+      "source": "class SessionTracker:\n    def __init__(self):\n        self._seen_symbols = {}\n        self._working_files = {}"
+    }
+  ],
+  "responses": [
+    "Creates SQLite connection with WAL mode enabled",
+    "Parse source code and extract symbols using language-specific tree-sitter parser",
+    "Tracks symbol and file activity within a single MCP session."
+  ],
+  "timings_ms": [
+    10576,
+    9083,
+    8127
+  ]
+}

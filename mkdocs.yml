@@ -1,0 +1,68 @@
+site_name: Sylvan
+site_description: Code intelligence engine for AI agents
+site_url: https://darki73.github.io/sylvan/
+repo_url: https://github.com/darki73/sylvan
+repo_name: darki73/sylvan
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: green
+      accent: teal
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: green
+      accent: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Your First Project: getting-started/your-first-project.md
+    - Configuration: getting-started/configuration.md
+  - Working With Sylvan:
+    - Searching Code: working-with-sylvan/searching-code.md
+    - Browsing and Reading: working-with-sylvan/browsing-and-reading.md
+    - Understanding Impact: working-with-sylvan/understanding-impact.md
+    - Working With Libraries: working-with-sylvan/working-with-libraries.md
+    - Multi-Repo Projects: working-with-sylvan/multi-repo-projects.md
+    - Quality and Security: working-with-sylvan/quality-and-security.md
+    - The Dashboard: working-with-sylvan/the-dashboard.md
+    - Token Efficiency: working-with-sylvan/token-efficiency.md
+  - For Your Agent:
+    - Teaching Your Agent: for-your-agent/teaching-your-agent.md
+    - Subagent Access: for-your-agent/subagent-access.md
+    - The Tool Reference: for-your-agent/the-tool-reference.md
+  - Extending Sylvan:
+    - Writing Providers: extending-sylvan/writing-providers.md
+    - Adding Languages: extending-sylvan/adding-languages.md
+    - Building Tools: extending-sylvan/building-tools.md
+    - The ORM: extending-sylvan/the-orm.md
+    - Schema and Migrations: extending-sylvan/schema-and-migrations.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true

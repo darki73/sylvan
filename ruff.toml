@@ -1,0 +1,54 @@
+target-version = "py312"
+line-length = 120
+
+[lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "TCH",    # flake8-type-checking
+    "RUF",    # ruff-specific rules
+    "PTH",    # flake8-use-pathlib
+    "PL",     # pylint
+    "PERF",   # perflint
+    "S",      # flake8-bandit (security)
+]
+ignore = [
+    "PLR0913",  # too many arguments — our tool handlers legitimately have many params
+    "PLR2004",  # magic value comparison — too noisy for SQL/config code
+    "PLR0911",  # too many return statements
+    "PLR0912",  # too many branches
+    "PLR0915",  # too many statements
+    "SIM108",   # ternary instead of if/else — readability preference
+    "B905",     # zip strict — not always needed
+    "E501",     # line length — handled by formatter
+    "PLC0415",  # import-outside-top-level — lazy imports avoid circular deps and heavy startup
+    "N805",     # invalid-first-argument — @scope decorated methods use 'query' not 'cls'
+    "PLW0603",  # global-statement — used in singleton patterns (get_config, etc.)
+    "RUF012",   # mutable-class-default — ORM Model class vars are intentionally mutable
+    "RUF006",   # asyncio-dangling-task — fire-and-forget background tasks are intentional
+    "PERF401",  # manual-list-comprehension — some loops have interleaved logic that can't be a comprehension
+    "E402",     # module-import-not-at-top — language registry must import after data is built
+    "PLW2901",  # redefined-loop-name — val = field.to_db(val) is clearer than a new variable
+    "PLW0602",  # global-variable-not-assigned — read-only global checks are valid
+    "S101",     # assert — used in tests and debug guards
+    "S603",     # subprocess-without-shell-equals-true — our git subprocess calls are safe
+    "S607",     # start-process-with-partial-path — git/tree-sitter binaries are expected in PATH
+    "S608",     # possible-sql-injection — ORM builds SQL from trusted column names, not user input
+]
+
+[lint.per-file-ignores]
+"src/sylvan/providers/*/[!_]*.py" = ["F401"]  # availability-check imports (try: import X; return True)
+"src/sylvan/indexing/post_processing/file_watcher.py" = ["F401"]  # watchfiles.Change used for type context
+
+[lint.isort]
+known-first-party = ["sylvan"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

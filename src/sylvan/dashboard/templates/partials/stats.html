@@ -1,0 +1,172 @@
+<!-- Header -->
+<div class="flex items-center justify-between mb-8 animate-in">
+    <div class="page-header" style="margin-bottom:0">
+        <div class="page-title">Mission Control</div>
+        <div class="page-subtitle">{{ total_repos }} repos &middot; {{ "{:,}".format(total_symbols) }} symbols &middot; {{ "{:,}".format(total_files) }} files indexed</div>
+    </div>
+    <div class="flex items-center gap-3">
+        <span class="htmx-indicator"><span class="spinner"></span></span>
+    </div>
+</div>
+
+{% set has_session = efficiency and efficiency.total_equivalent > 0 %}
+{% set has_alltime = alltime_efficiency and alltime_efficiency.total_equivalent > 0 %}
+{% if has_session or has_alltime %}
+<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:2rem">
+    {% if has_session %}
+    <div class="ring-container animate-in delay-1" style="--pct: {{ efficiency.reduction_percent }};flex:1;min-width:320px;margin-bottom:0">
+        <div class="ring-wrap">
+            <div class="ring">
+                <div class="ring-inner">
+                    <div class="ring-text">{{ efficiency.reduction_percent }}<small>%</small></div>
+                </div>
+            </div>
+        </div>
+        <div class="ring-stats">
+            <div style="margin-bottom: 4px">
+                <div class="mono text-xs text-faint" style="text-transform:uppercase;letter-spacing:0.1em">This Session</div>
+            </div>
+            <div class="ring-stat-row">
+                <span class="ring-stat-label">Returned</span>
+                <span class="ring-stat-value text-accent">{{ "{:,}".format(efficiency.total_returned) }}</span>
+            </div>
+            <div class="ring-stat-row">
+                <span class="ring-stat-label">Equivalent</span>
+                <span class="ring-stat-value">{{ "{:,}".format(efficiency.total_equivalent) }}</span>
+            </div>
+            <div class="ring-stat-row">
+                <span class="ring-stat-label">Avoided</span>
+                <span class="ring-stat-value" style="color:var(--accent)">{{ "{:,}".format(efficiency.total_equivalent - efficiency.total_returned) }}</span>
+            </div>
+            <div class="ring-stat-row">
+                <span class="ring-stat-label">Tool calls</span>
+                <span class="ring-stat-value">{{ tool_calls }}</span>
+            </div>
+            {% if efficiency.by_category %}
+            <div style="margin-top:6px">
+                {% set cats = efficiency.by_category %}
+                {% set total_eq = efficiency.total_equivalent or 1 %}
+                <div class="stacked-bar">
+                    {% if cats.search.equivalent > 0 %}<div style="width:{{ (cats.search.equivalent / total_eq * 100)|round(1) }}%;background:var(--info)" title="Search"></div>{% endif %}
+                    {% if cats.retrieval.equivalent > 0 %}<div style="width:{{ (cats.retrieval.equivalent / total_eq * 100)|round(1) }}%;background:var(--accent)" title="Retrieval"></div>{% endif %}
+                    {% if cats.analysis.equivalent > 0 %}<div style="width:{{ (cats.analysis.equivalent / total_eq * 100)|round(1) }}%;background:var(--purple)" title="Analysis"></div>{% endif %}
+                </div>
+                <div class="flex gap-4 mt-2" style="font:400 10px/1 'JetBrains Mono',monospace;color:var(--text-faint)">
+                    <span style="color:var(--info)">&#9679;</span> search
+                    <span style="color:var(--accent)">&#9679;</span> retrieval
+                    <span style="color:var(--purple)">&#9679;</span> analysis
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    {% if has_alltime %}
+    <div class="ring-container animate-in delay-2" style="--pct: {{ alltime_efficiency.reduction_percent }};flex:1;min-width:320px;margin-bottom:0">
+        <div class="ring-wrap">
+            <div class="ring">
+                <div class="ring-inner">
+                    <div class="ring-text">{{ alltime_efficiency.reduction_percent }}<small>%</small></div>
+                </div>
+            </div>
+        </div>
+        <div class="ring-stats">
+            <div style="margin-bottom: 4px">
+                <div class="mono text-xs text-faint" style="text-transform:uppercase;letter-spacing:0.1em">All Time</div>
+            </div>
+            <div class="ring-stat-row">
+                <span class="ring-stat-label">Returned</span>
+                <span class="ring-stat-value text-accent">{{ "{:,}".format(alltime_efficiency.total_returned) }}</span>
+            </div>
+            <div class="ring-stat-row">
+                <span class="ring-stat-label">Equivalent</span>
+                <span class="ring-stat-value">{{ "{:,}".format(alltime_efficiency.total_equivalent) }}</span>
+            </div>
+            <div class="ring-stat-row">
+                <span class="ring-stat-label">Avoided</span>
+                <span class="ring-stat-value" style="color:var(--accent)">{{ "{:,}".format(alltime_efficiency.total_equivalent - alltime_efficiency.total_returned) }}</span>
+            </div>
+            <div class="ring-stat-row">
+                <span class="ring-stat-label">Tool calls</span>
+                <span class="ring-stat-value">{{ "{:,}".format(alltime_efficiency.total_calls) }}</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Stat cards -->
+<div class="grid-5 mb-8">
+    <div class="card card-glow metric animate-in delay-1">
+        <div class="metric-value glow">{{ total_repos }}</div>
+        <div class="metric-label">Repositories</div>
+    </div>
+    <div class="card metric animate-in delay-2">
+        <div class="metric-value">{{ total_libraries }}</div>
+        <div class="metric-label">Libraries</div>
+    </div>
+    <div class="card card-glow metric animate-in delay-3">
+        <div class="metric-value glow">{{ "{:,}".format(total_symbols) }}</div>
+        <div class="metric-label">Symbols</div>
+    </div>
+    <div class="card metric animate-in delay-4">
+        <div class="metric-value">{{ "{:,}".format(total_files) }}</div>
+        <div class="metric-label">Files</div>
+    </div>
+    <div class="card metric animate-in delay-5">
+        <div class="metric-value">{{ total_sections }}</div>
+        <div class="metric-label">Sections</div>
+    </div>
+</div>
+
+<!-- Repos -->
+<div class="mb-8 animate-in delay-3">
+    <div class="section-title">Repositories</div>
+    <div class="grid-3">
+        {% for repo in repos %}
+        <a href="/quality?repo={{ repo.name|urlencode }}" style="text-decoration:none;color:inherit">
+        <div class="card card-glow repo-card" style="cursor:pointer">
+            <div class="repo-name">{{ repo.name }}</div>
+            <div class="repo-stats">
+                <div class="repo-stat"><b>{{ "{:,}".format(repo.symbols) }}</b> sym</div>
+                <div class="repo-stat"><b>{{ repo.files }}</b> files</div>
+                <div class="repo-stat"><b>{{ repo.sections }}</b> sec</div>
+            </div>
+            {% if repo.languages %}
+            <div class="lang-bars">
+                {% for lang, count in repo.languages.items() %}
+                <div class="lang-bar" style="flex:{{ count }};background:{% if lang == 'python' %}#3572a5{% elif lang == 'typescript' %}#3178c6{% elif lang == 'javascript' %}#f1e05a{% elif lang == 'tsx' %}#3178c6{% elif lang == 'go' %}#00add8{% elif lang == 'rust' %}#dea584{% elif lang == 'java' %}#b07219{% elif lang == 'kotlin' %}#a97bff{% elif lang == 'c' %}#555555{% elif lang == 'cpp' %}#f34b7d{% elif lang == 'c_sharp' %}#178600{% elif lang == 'ruby' %}#cc342d{% elif lang == 'php' %}#4f5d95{% elif lang == 'swift' %}#f05138{% elif lang == 'dart' %}#00b4ab{% elif lang == 'scala' %}#c22d40{% elif lang == 'elixir' %}#6e4a7e{% elif lang == 'lua' %}#000080{% elif lang == 'perl' %}#0298c3{% elif lang == 'bash' %}#89e051{% elif lang == 'sql' %}#e38c00{% elif lang == 'html' %}#e34c26{% elif lang == 'css' %}#563d7c{% elif lang == 'r' %}#198ce7{% elif lang == 'haskell' %}#5e5086{% else %}var(--text-faint){% endif %}" title="{{ lang }}: {{ count }}"></div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="flex items-center justify-between mt-2" style="font:400 10px/1 'JetBrains Mono',monospace;color:var(--text-faint)">
+                <span>{{ repo.git_head if repo.git_head else '-' }}</span>
+                <span>{{ repo.indexed_at[:16] if repo.indexed_at else '-' }}</span>
+            </div>
+        </div>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Libraries -->
+{% if libraries %}
+<div class="animate-in delay-4">
+    <div class="section-title">Libraries</div>
+    <div class="grid-4">
+        {% for lib in libraries %}
+        <div class="card" style="padding:14px 16px">
+            <div class="flex items-center justify-between mb-2">
+                <span class="mono text-sm text-white" style="font-weight:500">{{ lib.name }}</span>
+                <span class="badge badge-{{ lib.manager }}">{{ lib.manager }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="mono text-xs text-faint">v{{ lib.version }}</span>
+                <span class="mono text-xs text-accent">{{ "{:,}".format(lib.symbols) }} sym</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

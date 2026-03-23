@@ -1,0 +1,128 @@
+<!-- Quality gate -->
+<div class="flex items-center gap-4 mb-8">
+    {% set gate_passed = (smells_by_severity.high == 0 and security_by_severity.critical == 0 and security_by_severity.high == 0 and test_coverage >= 60 and doc_coverage >= 80) %}
+    <div class="gate {% if gate_passed %}gate-pass{% else %}gate-fail{% endif %}">
+        <span class="gate-icon">{% if gate_passed %}&#10003;{% else %}&#10007;{% endif %}</span>
+        {% if gate_passed %}QUALITY GATE PASSED{% else %}QUALITY GATE FAILED{% endif %}
+    </div>
+    {% if not gate_passed %}
+    <div class="mono text-xs text-dim">
+        {% if test_coverage < 60 %}Coverage {{ test_coverage }}% &lt; 60% &middot; {% endif %}
+        {% if doc_coverage < 80 %}Docs {{ doc_coverage }}% &lt; 80% &middot; {% endif %}
+        {% if security_by_severity.critical > 0 %}{{ security_by_severity.critical }} critical &middot; {% endif %}
+        {% if smells_by_severity.high > 0 %}{{ smells_by_severity.high }} high smells{% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Coverage rings -->
+<div class="grid-3 mb-8">
+    {% for metric in [
+        {'label': 'Test Coverage', 'value': test_coverage, 'detail': uncovered_count|string + ' uncovered'},
+        {'label': 'Documentation', 'value': doc_coverage, 'detail': ''},
+        {'label': 'Type Annotations', 'value': type_coverage, 'detail': ''}
+    ] %}
+    <div class="card flex items-center gap-4" style="padding:20px">
+        {% set color = 'var(--accent)' if metric.value >= 60 else ('var(--warning)' if metric.value >= 30 else 'var(--danger)') %}
+        <div class="ring-sm" style="--pct:{{ metric.value }};--ring-color:{{ color }}">
+            <div class="ring-sm-inner">
+                <div class="ring-sm-text" style="color:{{ color }}">{{ metric.value }}%</div>
+            </div>
+        </div>
+        <div>
+            <div class="mono text-xs text-faint" style="text-transform:uppercase;letter-spacing:0.06em">{{ metric.label }}</div>
+            {% if metric.detail %}
+            <div class="mono text-xs text-dim mt-1">{{ metric.detail }}</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Severity overview -->
+<div class="grid-4 mb-8">
+    {% for item in [
+        {'label': 'Critical', 'count': security_by_severity.critical, 'cls': 'critical'},
+        {'label': 'High', 'count': smells_by_severity.high + security_by_severity.high, 'cls': 'high'},
+        {'label': 'Medium', 'count': smells_by_severity.medium + security_by_severity.medium, 'cls': 'medium'},
+        {'label': 'Low', 'count': smells_by_severity.low + security_by_severity.get('low', 0), 'cls': 'low'}
+    ] %}
+    <div class="card metric">
+        <div class="metric-value" style="font-size:28px;{% if item.count > 0 %}color:var({% if item.cls == 'critical' %}--danger{% elif item.cls == 'high' %}--warning{% elif item.cls == 'medium' %}--info{% else %}--text-dim{% endif %}){% else %}color:var(--text-faint){% endif %}">{{ item.count }}</div>
+        <div class="metric-label">{{ item.label }}</div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Security findings -->
+{% if security %}
+<div class="mb-8">
+    <div class="section-title">Security Findings</div>
+    <div class="table-frame">
+        <table>
+            <thead><tr><th style="width:80px">Severity</th><th>Rule</th><th>File</th><th class="r" style="width:50px">Line</th><th>Message</th></tr></thead>
+            <tbody>
+                {% for f in security %}
+                <tr>
+                    <td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td>
+                    <td class="mono text-xs dim">{{ f.rule }}</td>
+                    <td class="mono text-xs faint truncate">{{ f.file }}</td>
+                    <td class="mono text-xs r dim">{{ f.line }}</td>
+                    <td class="text-sm">{{ f.message }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Code smells -->
+{% if smells %}
+<div class="mb-8">
+    <div class="section-title">Code Smells ({{ smells|length }})</div>
+    {% set severities = ['high', 'medium', 'low'] %}
+    {% for sev in severities %}
+    {% set sev_smells = smells|selectattr('severity', 'equalto', sev)|list %}
+    {% if sev_smells %}
+    <details {% if sev == 'high' %}open{% endif %}>
+        <summary>
+            <span class="flex items-center gap-2">
+                <span class="badge badge-{{ sev }}">{{ sev }}</span>
+                <span>{{ sev_smells|length }} {{ sev }} severity smell{{ 's' if sev_smells|length != 1 }}</span>
+            </span>
+            <span class="mono text-xs text-faint">&#9662;</span>
+        </summary>
+        <div class="detail-body" style="padding:0">
+            <table>
+                <tbody>
+                    {% for s in sev_smells %}
+                    <tr>
+                        <td class="mono text-xs dim" style="width:140px">{{ s.type }}</td>
+                        <td class="mono bright text-sm">{{ s.name }}</td>
+                        <td class="mono text-xs faint">{{ s.file }}:{{ s.line }}</td>
+                        <td class="text-xs dim">{{ s.message }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Untested symbols -->
+{% if uncovered_symbols %}
+<div>
+    <div class="section-title">Untested Symbols (top {{ uncovered_symbols|length }})</div>
+    <div class="card" style="padding:14px">
+        <div class="flex flex-wrap gap-1">
+            {% for sid in uncovered_symbols %}
+            <span class="tag">{{ sid.split("::")[-1].split("#")[0] if "::" in sid else sid }}</span>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}

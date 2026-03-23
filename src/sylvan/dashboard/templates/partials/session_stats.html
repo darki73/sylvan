@@ -1,0 +1,197 @@
+<!-- Session header -->
+<div class="flex items-center justify-between mb-8">
+    <div class="page-header" style="margin-bottom:0">
+        <div class="page-title">Session</div>
+        <div class="page-subtitle">Live MCP session metrics{% if cluster_role %} &mdash; {{ cluster_role }}{% if cluster_session_id %} ({{ cluster_session_id }}){% endif %}{% endif %}</div>
+    </div>
+    <div class="flex items-center gap-3">
+        {% if cluster_role %}
+        <span class="badge" style="background:{% if cluster_role == 'leader' %}var(--accent){% else %}var(--info){% endif %};color:var(--bg);font-size:11px;padding:2px 8px;border-radius:4px">{{ cluster_role }}</span>
+        {% endif %}
+        <span class="htmx-indicator"><span class="spinner"></span></span>
+    </div>
+</div>
+
+<!-- Hero stats -->
+<div class="grid-4 mb-8">
+    <div class="card card-glow metric">
+        {% set alive = cluster_sessions|selectattr('alive')|list if cluster_sessions else [] %}
+        {% set merged_calls = cs_totals.tool_calls if cs_totals is defined and cs_totals else 0 %}
+        {% set live_calls = alive|sum(attribute='tool_calls') if alive else session.tool_calls %}
+        {% set total_calls = merged_calls + live_calls %}
+        <div class="metric-value glow">{{ total_calls }}</div>
+        <div class="metric-label">Tool Calls{% if alive|length > 1 %} ({{ alive|length }} active){% endif %}</div>
+    </div>
+    <div class="card metric">
+        <div class="metric-value">{{ format_duration(session.duration_seconds) }}</div>
+        <div class="metric-label">Duration</div>
+    </div>
+    <div class="card metric">
+        <div class="metric-value" style="color:var(--accent)">{{ session.symbols_retrieved }}</div>
+        <div class="metric-label">Symbols Retrieved</div>
+    </div>
+    <div class="card metric">
+        <div class="metric-value">{{ session.queries }}</div>
+        <div class="metric-label">Search Queries</div>
+    </div>
+</div>
+
+<!-- Efficiency ring -->
+{% if efficiency.total_equivalent > 0 %}
+<div class="ring-container mb-8" style="--pct: {{ efficiency.reduction_percent }}">
+    <div class="ring-wrap">
+        <div class="ring" style="animation:none">
+            <div class="ring-inner">
+                <div class="ring-text">{{ efficiency.reduction_percent }}<small>%</small></div>
+            </div>
+        </div>
+    </div>
+    <div class="ring-stats">
+        <div style="margin-bottom:8px">
+            <div class="mono text-xs text-faint" style="text-transform:uppercase;letter-spacing:0.1em">Token Efficiency This Session</div>
+        </div>
+        <div class="ring-stat-row">
+            <span class="ring-stat-label">Returned to agent</span>
+            <span class="ring-stat-value text-accent">{{ "{:,}".format(efficiency.total_returned) }} tk</span>
+        </div>
+        <div class="ring-stat-row">
+            <span class="ring-stat-label">File read equivalent</span>
+            <span class="ring-stat-value">{{ "{:,}".format(efficiency.total_equivalent) }} tk</span>
+        </div>
+        <div class="ring-stat-row">
+            <span class="ring-stat-label">Tokens avoided</span>
+            <span class="ring-stat-value" style="color:var(--accent)">{{ "{:,}".format(efficiency.total_equivalent - efficiency.total_returned) }} tk</span>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card mb-8" style="padding:32px;text-align:center">
+    <div class="mono text-faint text-xs" style="text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Token Efficiency</div>
+    <div class="mono text-dim" style="font-size:13px">No tool calls with token data yet this session</div>
+</div>
+{% endif %}
+
+<!-- By-category breakdown -->
+{% if efficiency.by_category %}
+<div class="mb-8">
+    <div class="section-title">Efficiency by Category</div>
+    <div class="card" style="padding:20px">
+        {% set categories = [
+            ('search', 'Search', 'var(--info)'),
+            ('retrieval', 'Retrieval', 'var(--accent)'),
+            ('analysis', 'Analysis', 'var(--purple)'),
+            ('indexing', 'Indexing', 'var(--warning)'),
+            ('meta', 'Meta', 'var(--text-faint)')
+        ] %}
+        {% for key, label, color in categories %}
+        {% set cat = efficiency.by_category[key] %}
+        {% if cat.calls > 0 %}
+        <div class="flex items-center gap-4 {% if not loop.last %}mb-4{% endif %}">
+            <div style="width:80px;font:500 12px/1 'JetBrains Mono',monospace;color:{{ color }}">{{ label }}</div>
+            <div class="flex-1">
+                <div class="bar-track" style="height:8px">
+                    {% set pct = ((cat.equivalent - cat.returned) / (efficiency.total_equivalent or 1) * 100)|round(1) %}
+                    <div class="bar-fill" style="width:{{ pct }}%;background:{{ color }};border-radius:4px"></div>
+                </div>
+            </div>
+            <div style="min-width:140px;text-align:right">
+                <span class="mono text-xs text-dim">{{ cat.calls }} calls</span>
+                <span class="mono text-xs" style="margin-left:8px;color:{{ color }}">{{ "{:,}".format(cat.equivalent - cat.returned) }} saved</span>
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Cluster sessions -->
+{% set active_sessions = cluster_sessions|selectattr('alive')|list if cluster_sessions else [] %}
+{% set dead_sessions = cluster_sessions|rejectattr('alive')|list if cluster_sessions else [] %}
+
+{% if active_sessions or dead_sessions %}
+<div class="mb-8">
+    <div class="section-title">Cluster Instances ({{ active_sessions|length }} active)</div>
+    <div class="table-frame">
+        <table>
+            <thead><tr><th>Session</th><th>Role</th><th>Status</th><th class="r">Calls</th><th class="r">Efficiency</th><th class="r">Heartbeat</th></tr></thead>
+            <tbody>
+                {% for cs in active_sessions %}
+                <tr>
+                    <td class="mono text-xs bright">{{ cs.session_id }}</td>
+                    <td><span class="badge {% if cs.role == 'leader' %}badge-pass{% else %}badge-medium{% endif %}">{{ cs.role }}</span></td>
+                    <td><span class="badge badge-pass">active</span></td>
+                    <td class="mono text-xs r">{{ cs.tool_calls }}</td>
+                    <td class="mono text-xs r accent">{{ cs.reduction_percent }}%</td>
+                    <td class="mono text-xs r faint">{{ cs.last_heartbeat[:19] if cs.last_heartbeat else '--' }}</td>
+                </tr>
+                {% endfor %}
+                {% for cs in dead_sessions %}
+                <tr style="opacity:0.5">
+                    <td class="mono text-xs dim">{{ cs.session_id }}</td>
+                    <td><span class="badge badge-low">{{ cs.role }}</span></td>
+                    <td><span class="badge badge-fail">dead</span></td>
+                    <td class="mono text-xs r dim">{{ cs.tool_calls }}</td>
+                    <td class="mono text-xs r dim">{{ cs.reduction_percent }}%</td>
+                    <td class="mono text-xs r faint">{{ cs.last_heartbeat[:19] if cs.last_heartbeat else '--' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Coding session history -->
+{% if coding_history %}
+<div class="mb-8">
+    <div class="section-title">Coding Session History</div>
+    <div class="table-frame">
+        <table>
+            <thead><tr>
+                <th>Session</th>
+                <th>Date</th>
+                <th class="r">Duration</th>
+                <th class="r">Instances</th>
+                <th class="r">Calls</th>
+                <th class="r">Efficiency</th>
+            </tr></thead>
+            <tbody>
+                {% for cs in coding_history %}
+                <tr {% if not cs.ended_at %}style="color:var(--accent)"{% endif %}>
+                    <td class="mono text-xs bright">{{ cs.id[:16] }}</td>
+                    <td class="mono text-xs dim">{{ cs.started_at[:10] }}</td>
+                    <td class="mono text-xs r">{{ cs.duration }}</td>
+                    <td class="mono text-xs r">{{ cs.instances_spawned }}</td>
+                    <td class="mono text-xs r">{{ cs.total_tool_calls }}</td>
+                    <td class="mono text-xs r accent">{{ cs.reduction_percent }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Cache stats -->
+<div>
+    <div class="section-title">Query Cache</div>
+    <div class="grid-4">
+        <div class="card metric">
+            <div class="metric-value" style="font-size:24px">{{ cache.hits }}</div>
+            <div class="metric-label">Hits</div>
+        </div>
+        <div class="card metric">
+            <div class="metric-value" style="font-size:24px">{{ cache.misses }}</div>
+            <div class="metric-label">Misses</div>
+        </div>
+        <div class="card metric">
+            <div class="metric-value" style="font-size:24px">{{ cache.size }}</div>
+            <div class="metric-label">Entries</div>
+        </div>
+        <div class="card metric">
+            <div class="metric-value" style="font-size:24px;{% if cache.hit_rate > 50 %}color:var(--accent){% endif %}">{{ cache.hit_rate }}%</div>
+            <div class="metric-label">Hit Rate</div>
+        </div>
+    </div>
+</div>

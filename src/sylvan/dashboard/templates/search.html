@@ -1,0 +1,43 @@
+{% set active_page = "search" %}
+{% extends "base.html" %}
+{% block title %}Search{% endblock %}
+{% block content %}
+<div class="page-header animate-in">
+    <div class="page-title">Search</div>
+    <div class="page-subtitle">{{ repos|length }} repositories indexed</div>
+</div>
+
+<div class="flex gap-3 mb-8 animate-in delay-1">
+    <div class="search-box flex-1">
+        <span class="search-icon">&#8981;</span>
+        <input type="text" name="q" class="input has-icon" placeholder="Search symbols by name, signature, or keywords..." autocomplete="off"
+            hx-get="/htmx/search"
+            hx-trigger="keyup changed delay:250ms"
+            hx-target="#search-results"
+            hx-swap="innerHTML"
+            hx-include="[name='repo'],[name='kind']">
+        <span class="htmx-indicator"><span class="spinner"></span></span>
+    </div>
+    <select name="repo">
+        <option value="">All repos</option>
+        {% for r in repos %}
+        <option value="{{ r }}">{{ r }}</option>
+        {% endfor %}
+    </select>
+    <select name="kind">
+        <option value="">All kinds</option>
+        <option value="function">function</option>
+        <option value="class">class</option>
+        <option value="method">method</option>
+        <option value="constant">constant</option>
+        <option value="type">type</option>
+    </select>
+</div>
+
+<div id="search-results" class="animate-in delay-2">
+    <div class="empty-state">
+        <div style="font-size:28px;margin-bottom:12px;opacity:0.3">&#8981;</div>
+        Start typing to search across {{ repos|length }} repositories
+    </div>
+</div>
+{% endblock %}
