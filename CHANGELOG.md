@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.4
+
+- Fixed: leader auto-unlocks session for proxied tool calls from followers (workflow gate blocked write tools in cluster mode)
+
 ## 1.1.3
 
 - Fixed: follower now promotes to leader when leader process dies (checked every heartbeat)
