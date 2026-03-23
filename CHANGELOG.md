@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.3
+
+- Fixed: follower now promotes to leader when leader process dies (checked every heartbeat)
+- Fixed: query cache entries expire after 30s to prevent stale reads after CLI reindex
+- Promotion starts the dashboard and claims the leader file automatically
+
 ## 1.1.2
 
 - Fixed: `sylvan remove` now commits deletes (data wasn't persisting across runs)
