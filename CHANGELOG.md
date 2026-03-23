@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.5
+
+- Fixed: workflow gate now runs before write proxy — followers enforce `get_workflow_guide` before any tool call
+- Agents can no longer bypass the guide by calling write tools directly on followers
+
 ## 1.1.4
 
 - Fixed: leader auto-unlocks session for proxied tool calls from followers (workflow gate blocked write tools in cluster mode)
