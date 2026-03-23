@@ -114,6 +114,20 @@ def using_context_sync(ctx: SylvanContext) -> Generator[SylvanContext, None, Non
         reset_context(token)
 
 
+async def drain_pending_tasks() -> None:
+    """Await all background tasks spawned via ``create_task``.
+
+    Call this before disconnecting the backend in CLI commands to ensure
+    fire-and-forget tasks (embeddings, summaries) complete before the
+    event loop shuts down.  Safe to call when no tasks are pending.
+    """
+    import asyncio
+
+    pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+
 def _build_default_context() -> SylvanContext:
     """Build a context from existing global singletons.
 

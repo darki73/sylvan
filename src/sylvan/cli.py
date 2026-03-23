@@ -175,7 +175,7 @@ async def _async_index(path: str, name: str | None) -> dict:
         Dict representation of the indexing result.
     """
     from sylvan.config import get_config
-    from sylvan.context import SylvanContext, using_context
+    from sylvan.context import SylvanContext, drain_pending_tasks, using_context
     from sylvan.database.backends.sqlite.backend import SQLiteBackend
     from sylvan.database.migrations.runner import run_migrations
     from sylvan.indexing.pipeline.orchestrator import index_folder
@@ -188,9 +188,53 @@ async def _async_index(path: str, name: str | None) -> dict:
     ctx = SylvanContext(backend=backend, config=cfg)
     async with using_context(ctx):
         result = await index_folder(path, name=name)
+        await drain_pending_tasks()
 
     await backend.disconnect()
     return result.to_dict()
+
+
+@app.command()
+def remove(
+    name: str = typer.Argument(..., help="Repository name to remove."),
+    force: Annotated[bool, typer.Option("--force", "-f", help="Skip confirmation.")] = False,
+) -> None:
+    """Remove an indexed repository and all its data.
+
+    Args:
+        name: Repository name (as shown in `sylvan status`).
+        force: Skip the confirmation prompt.
+    """
+    if not force:
+        confirm = typer.confirm(f"Remove '{name}' and all its indexed data?")
+        if not confirm:
+            raise typer.Abort()
+
+    async def _run() -> None:
+        from sylvan.config import get_config
+        from sylvan.context import SylvanContext, using_context
+        from sylvan.database.backends.sqlite.backend import SQLiteBackend
+        from sylvan.database.migrations.runner import run_migrations
+        from sylvan.tools.meta.remove_repo import remove_repo
+
+        cfg = get_config()
+        backend = SQLiteBackend(cfg.db_path)
+        await backend.connect()
+        await run_migrations(backend)
+
+        ctx = SylvanContext(backend=backend, config=cfg)
+        async with using_context(ctx):
+            result = await remove_repo(repo=name)
+
+        await backend.disconnect()
+
+        counts = result.get("deleted", {})
+        typer.echo(f"Removed '{name}':")
+        for table, count in counts.items():
+            if count > 0:
+                typer.echo(f"  {table}: {count}")
+
+    asyncio.run(_run())
 
 
 @app.command()
@@ -689,7 +733,7 @@ def workspace_create(
     """
     async def _run() -> None:
         from sylvan.config import get_config
-        from sylvan.context import SylvanContext, using_context
+        from sylvan.context import SylvanContext, drain_pending_tasks, using_context
         from sylvan.database.backends.sqlite.backend import SQLiteBackend
         from sylvan.database.migrations.runner import run_migrations
         from sylvan.database.workspace import async_add_repo_to_workspace, async_create_workspace
@@ -719,6 +763,8 @@ def workspace_create(
                     if repo:
                         await async_add_repo_to_workspace(backend, ws_id, repo.id)
                         typer.echo(f"    Added '{repo_name}' to workspace")
+
+                await drain_pending_tasks()
 
         await backend.disconnect()
 

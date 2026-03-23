@@ -42,7 +42,7 @@ async def _async_add_library_with_backend(
         Dictionary with indexing results and library metadata.
     """
     from sylvan.config import get_config
-    from sylvan.context import SylvanContext, using_context
+    from sylvan.context import SylvanContext, drain_pending_tasks, using_context
     from sylvan.database.backends.sqlite.backend import SQLiteBackend
     from sylvan.database.migrations.runner import run_migrations
 
@@ -54,6 +54,7 @@ async def _async_add_library_with_backend(
     ctx = SylvanContext(backend=backend, config=cfg)
     async with using_context(ctx):
         result = await async_add_library(spec, timeout=timeout)
+        await drain_pending_tasks()
 
     await backend.disconnect()
     return result
