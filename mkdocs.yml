@@ -46,6 +46,7 @@ nav:
     - Quality and Security: working-with-sylvan/quality-and-security.md
     - The Dashboard: working-with-sylvan/the-dashboard.md
     - Token Efficiency: working-with-sylvan/token-efficiency.md
+    - CLI Reference: working-with-sylvan/cli.md
   - For Your Agent:
     - Teaching Your Agent: for-your-agent/teaching-your-agent.md
     - Subagent Access: for-your-agent/subagent-access.md
