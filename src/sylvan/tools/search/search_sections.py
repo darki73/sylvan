@@ -2,6 +2,7 @@
 
 import json
 
+from sylvan.context import get_context
 from sylvan.database.orm import Section
 from sylvan.error_codes import EmptyQueryError
 from sylvan.tools.support.response import MetaBuilder, clamp, ensure_orm, log_tool_call, wrap_response
@@ -29,6 +30,9 @@ async def search_sections(
     meta = MetaBuilder()
     max_results = clamp(max_results, 1, 1000)
     ensure_orm()
+
+    ctx = get_context()
+    ctx.session.record_query(query, "search_sections")
 
     if not query or not query.strip():
         raise EmptyQueryError(_meta=meta.build())

@@ -1,5 +1,6 @@
 """MCP tool: search_similar_symbols -- vector similarity search from a source symbol."""
 
+from sylvan.context import get_context
 from sylvan.database.orm import Repo, Symbol
 from sylvan.error_codes import RepoNotFoundError, SymbolNotFoundError
 from sylvan.tools.support.response import MetaBuilder, clamp, ensure_orm, log_tool_call, wrap_response
@@ -31,6 +32,9 @@ async def search_similar_symbols(
     """
     meta = MetaBuilder()
     ensure_orm()
+
+    ctx = get_context()
+    ctx.session.record_query(symbol_id, "search_similar_symbols")
 
     max_results = clamp(max_results, 1, 100)
 

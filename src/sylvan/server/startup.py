@@ -80,6 +80,16 @@ def _register_signal_handlers() -> None:
         except Exception as exc:
             logger.warning("flush_all_failed_on_signal", error=str(exc))
         try:
+            from sylvan.cluster.heartbeat import stop_heartbeat_sync
+            stop_heartbeat_sync()
+        except Exception as exc:
+            logger.warning("stop_heartbeat_failed_on_signal", error=str(exc))
+        try:
+            from sylvan.dashboard.server import stop_dashboard_sync
+            stop_dashboard_sync()
+        except Exception as exc:
+            logger.warning("stop_dashboard_failed_on_signal", error=str(exc))
+        try:
             from sylvan.cluster.discovery import cleanup_leader
             cleanup_leader()
         except Exception as exc:
@@ -161,6 +171,21 @@ def main(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8420) ->
         logger.error("mcp_server_crashed", error=str(e), transport=transport)
         raise
     finally:
+        try:
+            from sylvan.session.usage_stats import flush_all
+            flush_all()
+        except Exception:
+            pass
+        try:
+            from sylvan.cluster.heartbeat import stop_heartbeat_sync
+            stop_heartbeat_sync()
+        except Exception:
+            pass
+        try:
+            from sylvan.dashboard.server import stop_dashboard_sync
+            stop_dashboard_sync()
+        except Exception:
+            pass
         from sylvan.cluster.discovery import cleanup_leader
         cleanup_leader()
         from sylvan.server import _shutdown_backend_sync

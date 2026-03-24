@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.3.0
+
+Database foundation, integrity fixes, and audit-driven improvements.
+
+- Fixed double counting of token efficiency in get_symbol/get_section (session stats were ~2x inflated)
+- Fixed double counting of tool calls in search_symbols
+- Fixed OR precedence bug in quality tools (cross-repo data contamination in duplicate detection, test coverage)
+- Fixed remove_library leaving all associated data orphaned (now does full cascade delete)
+- Fixed remove_repo missing usage_stats and workspace_repos cleanup, wrapped in transaction
+- Fixed find_dead_code flagging all symbols as dead when references table is empty
+- Fixed get_references returning silent empty results when reference graph not built
+- Fixed shell command being unusable (no database backend)
+- Fixed record_section_access missing thread lock
+- Fixed index_file missing transaction wrapping, import resolution, and background tasks (now matches index_folder)
+- Fixed vec table entries (symbols_vec, sections_vec) not cleaned up on re-index
+- Fixed repo upsert running outside transaction in index_folder
+- Fixed shutdown not stopping heartbeat and dashboard tasks (instances stuck with ended_at IS NULL)
+- Fixed normal exit path missing flush_all (usage stats lost on graceful shutdown)
+- Fixed batch tools (get_symbols, get_sections, batch_search_symbols) not recording session activity
+- Fixed search_text, search_sections, search_similar_symbols missing query recording
+- Changed dead instance cleanup to retain ended instances for 7 days (dashboard visibility)
+
 ## 1.2.1
 
 - `get_symbol` now accepts optional `repo` param for disambiguation in multi-repo workspaces

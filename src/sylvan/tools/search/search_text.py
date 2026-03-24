@@ -2,6 +2,7 @@
 
 import json
 
+from sylvan.context import get_context
 from sylvan.database.orm import FileRecord
 from sylvan.database.orm.models.blob import Blob
 from sylvan.tools.support.response import MetaBuilder, clamp, ensure_orm, log_tool_call, wrap_response
@@ -79,6 +80,9 @@ async def search_text(
     max_results = clamp(max_results, 1, 1000)
     context_lines = clamp(context_lines, 0, 50)
     ensure_orm()
+
+    ctx = get_context()
+    ctx.session.record_query(query, "search_text")
 
     query_builder = FileRecord.query().join("repos", "repos.id = files.repo_id")
 

@@ -95,11 +95,13 @@ async def get_sections(section_ids: list[str]) -> dict:
             not_found.append(sid)
             continue
 
+        file_path = await section._resolve_file_path()
+        ctx.session.record_section_access(sid, file_path)
         results.append({
             "section_id": section.section_id,
             "title": section.title,
             "level": section.level,
-            "file": await section._resolve_file_path(),
+            "file": file_path,
             "content": section_text,
         })
 

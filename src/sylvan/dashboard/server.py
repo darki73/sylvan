@@ -62,6 +62,15 @@ async def stop_dashboard() -> None:
         logger.info("dashboard_stopped")
 
 
+def stop_dashboard_sync() -> None:
+    """Cancel the dashboard task (sync, for signal handlers and finally blocks)."""
+    global _dashboard_task
+    if _dashboard_task is not None:
+        _dashboard_task.cancel()
+        _dashboard_task = None
+        logger.info("dashboard_stopped")
+
+
 def get_dashboard_url() -> str | None:
     """Return the dashboard URL if the server is running.
 

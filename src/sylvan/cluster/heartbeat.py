@@ -3,7 +3,7 @@
 import asyncio
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sylvan.cluster.discovery import _is_pid_alive
 from sylvan.cluster.state import get_cluster_state
@@ -99,11 +99,6 @@ async def cleanup_dead_instances(backend) -> int:
             ],
         )
 
-        await backend.execute(
-            "DELETE FROM instances WHERE instance_id = ?",
-            [instance_id],
-        )
-
         affected_sessions.add(cs_id)
         dead_count += 1
 
@@ -119,8 +114,18 @@ async def cleanup_dead_instances(backend) -> int:
                 [now, cs_id],
             )
 
-    if dead_count:
+    # Purge instances that ended more than 7 days ago
+    cutoff = (datetime.now(UTC) - timedelta(days=7)).isoformat()
+    purged = await backend.execute(
+        "DELETE FROM instances WHERE ended_at IS NOT NULL AND ended_at < ?",
+        [cutoff],
+    )
+    if purged:
+        logger.debug("old_instances_purged", cutoff=cutoff)
+
+    if dead_count or purged:
         await backend.commit()
+    if dead_count:
         logger.info("dead_instances_cleaned", count=dead_count)
 
     return dead_count
@@ -309,6 +314,14 @@ async def _promote_to_leader(backend: object, instance_id: str, coding_session_i
 
 async def stop_heartbeat() -> None:
     """Cancel the heartbeat task."""
+    global _heartbeat_task
+    if _heartbeat_task is not None:
+        _heartbeat_task.cancel()
+        _heartbeat_task = None
+
+
+def stop_heartbeat_sync() -> None:
+    """Cancel the heartbeat task (sync, for signal handlers and finally blocks)."""
     global _heartbeat_task
     if _heartbeat_task is not None:
         _heartbeat_task.cancel()

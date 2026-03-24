@@ -111,12 +111,14 @@ async def get_symbols(symbol_ids: list[str]) -> dict:
             continue
 
         source = await symbol.get_source()
+        file_path = await symbol._resolve_file_path()
+        ctx.session.record_symbol_access(sid, file_path)
         entry = {
             "symbol_id": symbol.symbol_id,
             "name": symbol.name,
             "kind": symbol.kind,
             "language": symbol.language,
-            "file": await symbol._resolve_file_path(),
+            "file": file_path,
             "signature": symbol.signature or "",
             "source": source or "",
         }

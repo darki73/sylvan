@@ -205,6 +205,7 @@ async def batch_search_symbols(
     meta = MetaBuilder()
     ensure_orm()
 
+    session = get_session()
     all_results = []
     equivalent = 0
 
@@ -213,6 +214,8 @@ async def batch_search_symbols(
         if not query_text or not query_text.strip():
             all_results.append({"query": query_text, "symbols": [], "error": "empty_query"})
             continue
+
+        session.record_query(query_text, "batch_search_symbols")
 
         q_repo = q.get("repo", repo)
         q_kind = q.get("kind")
