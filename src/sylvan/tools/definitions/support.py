@@ -325,6 +325,82 @@ TOOLS: list[Tool] = [
         },
     ),
     Tool(
+        name="configure_claude_code",
+        description=(
+            "Configure Claude Code to use sylvan tools. Creates or updates "
+            ".claude/settings.local.json with mcp__sylvan__* permission and "
+            "SubagentStart hook. Call this instead of get_workflow_guide if "
+            "you are running inside Claude Code."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "project_path": {
+                    "type": "string",
+                    "description": "Absolute path to the user's project directory.",
+                },
+            },
+            "required": ["project_path"],
+        },
+    ),
+    Tool(
+        name="configure_cursor",
+        description=(
+            "Configure Cursor to use sylvan tools. Creates "
+            ".cursor/rules/sylvan.md with tool usage instructions. "
+            "Call this instead of get_workflow_guide if you are running "
+            "inside Cursor."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "project_path": {
+                    "type": "string",
+                    "description": "Absolute path to the user's project directory.",
+                },
+            },
+            "required": ["project_path"],
+        },
+    ),
+    Tool(
+        name="configure_windsurf",
+        description=(
+            "Configure Windsurf to use sylvan tools. Creates "
+            ".windsurf/rules/sylvan.md with tool usage instructions. "
+            "Call this instead of get_workflow_guide if you are running "
+            "inside Windsurf."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "project_path": {
+                    "type": "string",
+                    "description": "Absolute path to the user's project directory.",
+                },
+            },
+            "required": ["project_path"],
+        },
+    ),
+    Tool(
+        name="configure_copilot",
+        description=(
+            "Configure GitHub Copilot to use sylvan tools. Creates "
+            ".github/copilot-instructions.md with tool routing rules. "
+            "Call this instead of get_workflow_guide if you are running "
+            "inside GitHub Copilot."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "project_path": {
+                    "type": "string",
+                    "description": "Absolute path to the user's project directory.",
+                },
+            },
+            "required": ["project_path"],
+        },
+    ),
+    Tool(
         name="get_logs",
         description=(
             "Retrieve sylvan server log entries for debugging. Returns the "

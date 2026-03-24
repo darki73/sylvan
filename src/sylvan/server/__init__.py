@@ -259,15 +259,19 @@ async def _dispatch(name: str, arguments: dict) -> dict:
     _ungated = {
         "get_workflow_guide", "list_repos", "list_libraries",
         "get_session_stats", "get_dashboard_url", "get_server_config",
-        "get_logs", "suggest_queries",
+        "get_logs", "suggest_queries", "index_folder",
+        "configure_claude_code", "configure_cursor",
+        "configure_windsurf", "configure_copilot",
     }
     _gate_enabled = _get_gate_config().server.workflow_gate
     if _gate_enabled and not _early_session()._workflow_loaded and name not in _ungated:
         return {
             "setup_required": True,
             "message": (
-                "Sylvan session is not configured. Call get_workflow_guide "
-                "first to load the tool usage rules, then retry your request."
+                "Sylvan session is not configured. Call your editor's configure tool "
+                "(configure_claude_code, configure_cursor, configure_windsurf, or "
+                "configure_copilot) to set up and unlock all tools. Alternatively, "
+                "call get_workflow_guide for manual setup."
             ),
             "blocked_tool": name,
             "blocked_args": arguments,
@@ -402,6 +406,12 @@ def _get_handlers() -> dict[str, Callable[..., dict]]:
     from sylvan.tools.library.compare import compare_library_versions
     from sylvan.tools.library.list import list_libraries as list_libraries_tool
     from sylvan.tools.library.remove import remove_library as remove_library_tool
+    from sylvan.tools.meta.configure_editor import (
+        configure_claude_code,
+        configure_copilot,
+        configure_cursor,
+        configure_windsurf,
+    )
     from sylvan.tools.meta.get_logs import get_logs
     from sylvan.tools.meta.get_server_config import get_server_config
     from sylvan.tools.meta.get_workflow_guide import get_workflow_guide
@@ -499,6 +509,10 @@ def _get_handlers() -> dict[str, Callable[..., dict]]:
         "get_logs": get_logs,
         "get_workflow_guide": get_workflow_guide,
         "get_server_config": get_server_config,
+        "configure_claude_code": configure_claude_code,
+        "configure_cursor": configure_cursor,
+        "configure_windsurf": configure_windsurf,
+        "configure_copilot": configure_copilot,
         "search_similar_symbols": search_similar_symbols,
         "remove_repo": remove_repo,
     }
@@ -550,6 +564,10 @@ _TOOL_CATEGORIES: dict[str, str] = {
     "get_logs": "meta",
     "get_server_config": "meta",
     "get_workflow_guide": "meta",
+    "configure_claude_code": "meta",
+    "configure_cursor": "meta",
+    "configure_windsurf": "meta",
+    "configure_copilot": "meta",
     "scaffold": "meta",
     "get_dashboard_url": "meta",
     "add_library": "meta",

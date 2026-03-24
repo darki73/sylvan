@@ -27,6 +27,15 @@ Database foundation, integrity fixes, and audit-driven improvements.
 - Fixed edit hints not generated for get_section and get_context_bundle
 - Added server.workflow_gate config option to disable the workflow guide requirement
 
+### Editor configuration tools
+
+- Added `configure_claude_code` - creates .claude/settings.local.json with permissions + SubagentStart hook
+- Added `configure_cursor` - creates .cursor/rules/sylvan.md with tool usage instructions
+- Added `configure_windsurf` - creates .windsurf/rules/sylvan.md with tool usage instructions
+- Added `configure_copilot` - creates .github/copilot-instructions.md with tool routing rules
+- All configure_* tools are ungated (can be called without get_workflow_guide first)
+- `index_folder` is now ungated (always the first action, shouldn't require setup)
+
 ### Cluster, search, and cleanup
 
 - Added per-repo efficiency tracking for all search tools (repo_id in meta)
