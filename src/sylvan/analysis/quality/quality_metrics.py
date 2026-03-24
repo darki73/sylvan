@@ -40,8 +40,7 @@ async def compute_quality_metrics(
 
     test_files = await (
         FileRecord.where(repo_id=repo_id)
-        .where_like("path", "%test%")
-        .or_where_like("path", "%spec%")
+        .where_group(lambda q: q.where_like("path", "%test%").or_where_like("path", "%spec%"))
         .select("id", "content_hash")
         .get()
     )

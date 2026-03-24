@@ -415,11 +415,15 @@ def shell() -> None:
     """Start an interactive Python shell with the ORM preloaded.
 
     Opens a Python REPL with all ORM models, the database connection,
-    and query builder already imported and ready to use. Useful for
-    debugging, data exploration, and ad-hoc queries.
+    and query builder already imported and ready to use. Sets up a
+    proper async backend so ORM queries work via asyncio.run().
     """
+    import asyncio
+
     from sylvan.config import get_config
     from sylvan.context import SylvanContext, using_context_sync
+    from sylvan.database.backends.sqlite.backend import SQLiteBackend
+    from sylvan.database.migrations.runner import run_migrations
     from sylvan.database.orm import (
         Blob,
         FileImport,
@@ -434,7 +438,11 @@ def shell() -> None:
     from sylvan.database.orm.query.builder import QueryBuilder
 
     cfg = get_config()
-    ctx = SylvanContext(config=cfg)
+    backend = SQLiteBackend(cfg.db_path)
+    asyncio.run(backend.connect())
+    asyncio.run(run_migrations(backend))
+
+    ctx = SylvanContext(backend=backend, config=cfg)
 
     namespace = {
         "Symbol": Symbol,
@@ -452,12 +460,15 @@ def shell() -> None:
     banner = (
         "Sylvan Shell (async ORM -- use asyncio.run() for queries)\n"
         "Available: Symbol, Section, FileRecord, Repo, Blob\n"
-        "Example: import asyncio; asyncio.run(Symbol.search('parse').where(kind='function').get())\n"
+        "Example: asyncio.run(Symbol.search('parse').where(kind='function').get())\n"
     )
 
     with using_context_sync(ctx):
         import code
+        namespace["asyncio"] = asyncio
         code.interact(banner=banner, local=namespace)
+
+    asyncio.run(backend.disconnect())
 
 
 @app.command()

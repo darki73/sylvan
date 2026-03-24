@@ -299,22 +299,21 @@ async def record_savings(
     meta: MetaBuilder,
     returned_text: str,
     file_record: object,
-    session: object,
     *,
     symbols_retrieved: int = 0,
     sections_retrieved: int = 0,
 ) -> None:
     """Record token savings for a tool response.
 
-    Encapsulates the repeated pattern of: estimate savings from returned
-    text vs full file, record to session tracker, record to persistent
-    usage stats.
+    Builds the savings data and attaches it to the response meta.
+    Session-level counters are handled centrally by ``_dispatch`` in
+    ``server/__init__.py`` via ``record_efficiency()``, so this
+    function only computes the numbers and persists per-repo stats.
 
     Args:
         meta: The response meta builder to annotate with savings data.
         returned_text: The text actually returned to the agent.
         file_record: The ORM file record (needs ``content`` and ``repo_id``).
-        session: The session tracker instance.
         symbols_retrieved: Number of symbols included in the response.
         sections_retrieved: Number of sections included in the response.
     """
@@ -337,7 +336,6 @@ async def record_savings(
     tokens_returned = savings.get("returned_tokens", 0)
     tokens_avoided = savings.get("tokens_avoided", 0)
     total_file_tokens = savings.get("total_file_tokens", 0)
-    session.record_savings(tokens_returned, tokens_avoided)
 
     if tokens_returned > 0 and total_file_tokens > 0:
         meta.record_token_efficiency(tokens_returned, total_file_tokens)

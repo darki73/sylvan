@@ -70,10 +70,11 @@ class SessionTracker:
             section_id: Unique identifier of the retrieved section.
             file_path: Optional file path associated with the section.
         """
-        now = time.monotonic()
-        self._seen_sections[section_id] = now
-        if file_path:
-            self._working_files[file_path] = now
+        with self._lock:
+            now = time.monotonic()
+            self._seen_sections[section_id] = now
+            if file_path:
+                self._working_files[file_path] = now
 
     def record_query(self, query: str, tool: str) -> None:
         """Record a search query.
@@ -88,7 +89,6 @@ class SessionTracker:
                 "tool": tool,
                 "timestamp": time.monotonic(),
             })
-            self._tool_calls += 1
 
     def record_tool_call(self, tool_name: str) -> None:
         """Record any tool call.

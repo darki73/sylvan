@@ -54,7 +54,7 @@ async def get_section(
 
     session = ctx.session
     session.record_section_access(section_id, await section._resolve_file_path())
-    await record_savings(meta, section_text, file_rec, session, sections_retrieved=1)
+    await record_savings(meta, section_text, file_rec, sections_retrieved=1)
 
     return wrap_response(result, meta.build(), include_hints=True)
 

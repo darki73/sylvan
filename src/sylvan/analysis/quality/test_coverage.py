@@ -54,8 +54,7 @@ async def analyze_test_coverage(repo_id: int) -> dict:
 
     test_files = await (
         FileRecord.where(repo_id=repo_id)
-        .where_like("path", "%test%")
-        .or_where_like("path", "%spec%")
+        .where_group(lambda q: q.where_like("path", "%test%").or_where_like("path", "%spec%"))
         .get()
     )
 

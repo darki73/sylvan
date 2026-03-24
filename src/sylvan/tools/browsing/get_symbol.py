@@ -70,7 +70,7 @@ async def get_symbol(
         if not result["hash_verified"]:
             result["drift_warning"] = "Content has changed since last indexing"
 
-    await record_savings(meta, source, file_rec, session, symbols_retrieved=1)
+    await record_savings(meta, source, file_rec, symbols_retrieved=1)
 
     response = wrap_response(result, meta.build(), include_hints=True)
 

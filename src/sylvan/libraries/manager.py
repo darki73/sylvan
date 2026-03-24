@@ -170,15 +170,27 @@ async def _async_remove_library_with_backend(spec: str) -> dict:
 async def async_remove_library(spec: str) -> dict:
     """Remove a library's index and source files (async).
 
+    Performs a full cascade delete of all associated data (references,
+    quality, imports, sections, symbols, files) before removing the
+    repo record itself, matching the pattern used by ``remove_repo``.
+
     Assumes a SylvanContext with backend is already set.
 
     Args:
         spec: Library name like ``"django@4.2"`` or full spec.
 
     Returns:
-        Dictionary with removal status.
+        Dictionary with removal status and per-table deletion counts.
     """
-    from sylvan.database.orm import Repo
+    from sylvan.database.orm import (
+        FileImport,
+        FileRecord,
+        Quality,
+        Reference,
+        Repo,
+        Section,
+        Symbol,
+    )
     from sylvan.database.orm.runtime.connection_manager import get_backend
 
     backend = get_backend()
@@ -194,10 +206,48 @@ async def async_remove_library(spec: str) -> dict:
         remove_library_source(repo.package_manager, repo.package_name, repo.version)
 
     repo_name = repo.name
-    await backend.execute("DELETE FROM repos WHERE id = ?", [repo.id])
-    await backend.commit()
+    repo_id = repo.id
 
-    return {"status": "removed", "name": repo_name}
+    files_q = FileRecord.where(repo_id=repo_id).to_subquery("id")
+    symbols_q = (
+        Symbol.query()
+        .where_in_subquery("file_id", files_q)
+        .to_subquery("symbol_id")
+    )
+
+    counts: dict[str, int] = {}
+
+    async with backend.transaction():
+        counts["references"] = await (
+            Reference.query()
+            .where_in_subquery("source_symbol_id", symbols_q)
+            .delete()
+        )
+        counts["quality"] = await (
+            Quality.query()
+            .where_in_subquery("symbol_id", symbols_q)
+            .delete()
+        )
+        counts["file_imports"] = await (
+            FileImport.query()
+            .where_in_subquery("file_id", files_q)
+            .delete()
+        )
+        counts["sections"] = await (
+            Section.query()
+            .where_in_subquery("file_id", files_q)
+            .delete()
+        )
+        counts["symbols"] = await (
+            Symbol.query()
+            .where_in_subquery("file_id", files_q)
+            .delete()
+        )
+        counts["files"] = await FileRecord.where(repo_id=repo_id).delete()
+        await repo.delete()
+        counts["repos"] = 1
+
+    return {"status": "removed", "name": repo_name, "deleted": counts}
 
 
 def list_libraries() -> list[dict]:

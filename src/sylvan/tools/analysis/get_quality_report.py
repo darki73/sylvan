@@ -50,8 +50,10 @@ async def get_quality_report(repo: str) -> dict:
 
     from sylvan.analysis.quality.dead_code import find_dead_code
     from sylvan.analysis.quality.duplication import detect_duplicates
+    from sylvan.database.orm import Reference
 
     dead_code = await find_dead_code(repo)
+    refs_empty = await Reference.query().count() == 0
     duplicates = await detect_duplicates(repo_id, min_lines=quality_config.duplication_min_lines)
 
     total = await (
@@ -178,6 +180,8 @@ async def get_quality_report(repo: str) -> dict:
         },
         "dead_code": {
             "total": len(dead_code),
+            **({"warning": "Reference graph is empty. Run index_folder to populate it."}
+               if refs_empty else {}),
             "items": [
                 {
                     "name": d["name"],

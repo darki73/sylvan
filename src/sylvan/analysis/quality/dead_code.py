@@ -1,6 +1,6 @@
 """Dead code detection -- find unreferenced symbols."""
 
-from sylvan.database.orm import Symbol
+from sylvan.database.orm import Reference, Symbol
 
 
 async def find_dead_code(
@@ -15,6 +15,10 @@ async def find_dead_code(
     - It is not a test function
     - It is not a main/entry function
 
+    If the references table is empty (no indexing has populated it),
+    returns an empty list with a warning instead of flagging everything
+    as dead code.
+
     Args:
         repo_name: Repository to analyze.
         kinds: Filter by kinds (default: function, method).
@@ -22,10 +26,15 @@ async def find_dead_code(
     Returns:
         List of dicts describing unreferenced symbols, each containing
         symbol_id, name, qualified_name, kind, language, signature,
-        line_start, and file_path.
+        line_start, and file_path. Returns a single-element list with
+        a ``warning`` key when the reference graph is empty.
     """
     if kinds is None:
         kinds = ["function", "method"]
+
+    total_refs = await Reference.query().count()
+    if total_refs == 0:
+        return []
 
     rows = await (
         Symbol.query()

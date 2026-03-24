@@ -92,7 +92,7 @@ class TestGetSessionStats:
         assert stats["sections_retrieved"] == 1
         assert stats["files_touched"] == 2
         assert stats["queries"] == 1
-        assert stats["tool_calls"] == 1  # record_query increments tool_calls
+        assert stats["tool_calls"] == 0  # record_query no longer increments; _dispatch handles it
 
     def test_duration_positive(self):
         tracker = SessionTracker()
