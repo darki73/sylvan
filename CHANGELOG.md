@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+
+- Configure tools now return instructions by default instead of writing files directly
+- Added `server.auto_configure` option (default false) to opt into direct file writes
+
 ## 1.3.0
 
 Database foundation, integrity fixes, and audit-driven improvements.
