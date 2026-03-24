@@ -62,6 +62,8 @@ Database foundation, integrity fixes, and audit-driven improvements.
 - Removed dead _registered_sessions dict and unused register/deregister endpoints (memory leak)
 - Fixed get_file_outlines reporting wrong token efficiency method
 
+Migrated from internal development tracked at gitlab (da1bcbd).
+
 ## 1.2.1
 
 - `get_symbol` now accepts optional `repo` param for disambiguation in multi-repo workspaces
