@@ -187,11 +187,14 @@ def wrap_response(data: dict, meta: dict, include_hints: bool = False) -> dict:
         except Exception:  # noqa: S110 -- best-effort hint
             pass
 
-        # Add contextual next-action hints based on response data
-        file_path = data.get("file") or ""
-        line_start = data.get("line_start")
-        line_end = data.get("line_end")
-        symbol_id = data.get("symbol_id") or ""
+        # Add contextual next-action hints based on response data.
+        # Check top-level keys first, then nested "symbol" for context_bundle.
+        nested = data.get("symbol", {}) if isinstance(data.get("symbol"), dict) else {}
+        file_path = data.get("file") or nested.get("file") or ""
+        line_start = data.get("line_start") or nested.get("line_start")
+        line_end = data.get("line_end") or nested.get("line_end")
+        symbol_id = data.get("symbol_id") or nested.get("symbol_id") or ""
+        section_id = data.get("section_id") or ""
 
         if file_path and line_start is not None and line_end is not None:
             ctx_lines = 5
@@ -207,7 +210,12 @@ def wrap_response(data: dict, meta: dict, include_hints: bool = False) -> dict:
                 "blast_radius": f"get_blast_radius('{symbol_id}')",
                 "dependency_graph": f"get_dependency_graph(repo, '{file_path}')",
             }
-        elif file_path and not symbol_id:
+        elif section_id and file_path:
+            hints["next"] = {
+                "toc": f"get_toc(repo, doc_path='{file_path}')",
+                "find_callers": f"find_importers(repo, '{file_path}')",
+            }
+        elif file_path:
             hints["next"] = {
                 "file_outline": f"get_file_outline(repo, '{file_path}')",
                 "find_callers": f"find_importers(repo, '{file_path}')",

@@ -254,13 +254,15 @@ async def _dispatch(name: str, arguments: dict) -> dict:
 
     # Gate: require workflow guide before real tools (checked early so
     # followers don't proxy write tools before the agent sees the rules)
+    from sylvan.config import get_config as _get_gate_config
     from sylvan.session.tracker import get_session as _early_session
     _ungated = {
         "get_workflow_guide", "list_repos", "list_libraries",
         "get_session_stats", "get_dashboard_url", "get_server_config",
         "get_logs", "suggest_queries",
     }
-    if not _early_session()._workflow_loaded and name not in _ungated:
+    _gate_enabled = _get_gate_config().server.workflow_gate
+    if _gate_enabled and not _early_session()._workflow_loaded and name not in _ungated:
         return {
             "setup_required": True,
             "message": (

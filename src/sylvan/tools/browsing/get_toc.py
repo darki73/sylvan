@@ -1,7 +1,7 @@
 """MCP tool: get_toc -- table of contents for indexed documentation."""
 
-from sylvan.database.orm import Section
-from sylvan.tools.support.response import MetaBuilder, ensure_orm, log_tool_call, wrap_response
+from sylvan.database.orm import Repo, Section
+from sylvan.tools.support.response import MetaBuilder, check_staleness, ensure_orm, log_tool_call, wrap_response
 
 
 @log_tool_call
@@ -21,7 +21,7 @@ async def get_toc(
     meta = MetaBuilder()
     ensure_orm()
 
-    query_builder = Section.in_repo(repo)
+    query_builder = Section.in_repo(repo).with_("file")
 
     if doc_path:
         query_builder = (query_builder.join("files", "files.id = sections.file_id")
@@ -37,7 +37,11 @@ async def get_toc(
         toc.append(entry)
 
     meta.set("section_count", len(toc))
-    return wrap_response({"toc": toc}, meta.build())
+    response = wrap_response({"toc": toc}, meta.build())
+    repo_obj = await Repo.where(name=repo).first()
+    if repo_obj:
+        await check_staleness(repo_obj.id, response)
+    return response
 
 
 @log_tool_call
@@ -97,4 +101,8 @@ async def get_toc_tree(repo: str, max_depth: int = 3) -> dict:
     if truncated:
         meta.set("truncated_sections", truncated)
         meta.set("max_depth", max_depth)
-    return wrap_response({"tree": tree}, meta.build())
+    response = wrap_response({"tree": tree}, meta.build())
+    repo_obj = await Repo.where(name=repo).first()
+    if repo_obj:
+        await check_staleness(repo_obj.id, response)
+    return response

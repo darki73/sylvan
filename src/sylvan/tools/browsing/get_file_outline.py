@@ -5,7 +5,7 @@ import json
 from sylvan.database.orm import FileRecord, Repo, Symbol
 from sylvan.error_codes import IndexFileNotFoundError, RepoNotFoundError
 from sylvan.logging import get_logger
-from sylvan.tools.support.response import MetaBuilder, ensure_orm, log_tool_call, wrap_response
+from sylvan.tools.support.response import MetaBuilder, check_staleness, ensure_orm, log_tool_call, wrap_response
 from sylvan.tools.support.token_counting import count_tokens
 
 logger = get_logger(__name__)
@@ -98,7 +98,9 @@ async def get_file_outline(repo: str, file_path: str) -> dict:
             method = "tiktoken_cl100k" if token_count is not None else "byte_estimate"
             meta.record_token_efficiency(returned_tokens, equivalent_tokens, method=method)
 
-    return wrap_response({"file": file_path, "outline": root_symbols}, meta.build())
+    response = wrap_response({"file": file_path, "outline": root_symbols}, meta.build())
+    await check_staleness(repo_obj.id, response)
+    return response
 
 
 @log_tool_call
@@ -173,4 +175,6 @@ async def get_file_outlines(repo: str, file_paths: list[str]) -> dict:
 
     meta.set("found", len(outlines))
     meta.set("not_found", len(not_found))
-    return wrap_response({"outlines": outlines, "not_found": not_found}, meta.build())
+    response = wrap_response({"outlines": outlines, "not_found": not_found}, meta.build())
+    await check_staleness(repo_obj.id, response)
+    return response

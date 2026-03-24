@@ -132,6 +132,7 @@ class ServerConfig:
     request_timeout: int = 30
     dashboard_port: int = 32400
     dashboard_random_port: bool = False
+    workflow_gate: bool = True
 
 
 @dataclass(slots=True)

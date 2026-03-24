@@ -21,6 +21,11 @@ Database foundation, integrity fixes, and audit-driven improvements.
 - Fixed batch tools (get_symbols, get_sections, batch_search_symbols) not recording session activity
 - Fixed search_text, search_sections, search_similar_symbols missing query recording
 - Changed dead instance cleanup to retain ended instances for 7 days (dashboard visibility)
+- Added staleness checks to all retrieval tools (previously only get_symbol had it)
+- Added context_lines support to get_symbol (was accepted but ignored)
+- Fixed get_toc N+1 query problem (up to 5000 extra DB queries per call)
+- Fixed edit hints not generated for get_section and get_context_bundle
+- Added server.workflow_gate config option to disable the workflow guide requirement
 
 ## 1.2.1
 

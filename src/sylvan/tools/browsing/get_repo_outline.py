@@ -2,7 +2,7 @@
 
 from sylvan.database.orm import FileRecord, Repo, Section, Symbol
 from sylvan.error_codes import RepoNotFoundError
-from sylvan.tools.support.response import MetaBuilder, ensure_orm, log_tool_call, wrap_response
+from sylvan.tools.support.response import MetaBuilder, check_staleness, ensure_orm, log_tool_call, wrap_response
 
 
 @log_tool_call
@@ -70,4 +70,6 @@ async def get_repo_outline(repo: str) -> dict:
     }
 
     meta.set("repo", repo)
-    return wrap_response(result, meta.build())
+    response = wrap_response(result, meta.build())
+    await check_staleness(repo_id, response)
+    return response

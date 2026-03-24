@@ -3,7 +3,7 @@
 from sylvan.context import get_context
 from sylvan.database.orm import Section
 from sylvan.error_codes import ContentNotAvailableError, SectionNotFoundError
-from sylvan.tools.support.response import MetaBuilder, ensure_orm, log_tool_call, record_savings, wrap_response
+from sylvan.tools.support.response import MetaBuilder, check_staleness, ensure_orm, log_tool_call, record_savings, wrap_response
 
 
 @log_tool_call
@@ -56,7 +56,10 @@ async def get_section(
     session.record_section_access(section_id, await section._resolve_file_path())
     await record_savings(meta, section_text, file_rec, sections_retrieved=1)
 
-    return wrap_response(result, meta.build(), include_hints=True)
+    response = wrap_response(result, meta.build(), include_hints=True)
+    if file_rec:
+        await check_staleness(file_rec.repo_id, response)
+    return response
 
 
 @log_tool_call
@@ -77,6 +80,7 @@ async def get_sections(section_ids: list[str]) -> dict:
     cache = ctx.cache
     results = []
     not_found = []
+    repo_ids: set[int] = set()
 
     for sid in section_ids:
         cache_key = f"Section:{sid}"
@@ -97,6 +101,8 @@ async def get_sections(section_ids: list[str]) -> dict:
 
         file_path = await section._resolve_file_path()
         ctx.session.record_section_access(sid, file_path)
+        if section.file:
+            repo_ids.add(section.file.repo_id)
         results.append({
             "section_id": section.section_id,
             "title": section.title,
@@ -107,4 +113,7 @@ async def get_sections(section_ids: list[str]) -> dict:
 
     meta.set("found", len(results))
     meta.set("not_found", len(not_found))
-    return wrap_response({"sections": results, "not_found": not_found}, meta.build())
+    response = wrap_response({"sections": results, "not_found": not_found}, meta.build())
+    for rid in repo_ids:
+        await check_staleness(rid, response)
+    return response

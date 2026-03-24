@@ -5,7 +5,7 @@ import json
 from sylvan.context import get_context
 from sylvan.database.orm import FileImport, FileRecord, Symbol
 from sylvan.error_codes import SymbolNotFoundError
-from sylvan.tools.support.response import MetaBuilder, ensure_orm, log_tool_call, wrap_response
+from sylvan.tools.support.response import MetaBuilder, check_staleness, ensure_orm, log_tool_call, wrap_response
 from sylvan.tools.support.token_counting import count_tokens
 
 
@@ -111,4 +111,7 @@ async def get_context_bundle(
             method = "tiktoken_cl100k" if token_count is not None else "byte_estimate"
             meta.record_token_efficiency(returned_tokens, equivalent_tokens, method=method)
 
-    return wrap_response(bundle, meta.build(), include_hints=True)
+    response = wrap_response(bundle, meta.build(), include_hints=True)
+    if file_rec:
+        await check_staleness(file_rec.repo_id, response)
+    return response

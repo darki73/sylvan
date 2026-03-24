@@ -59,10 +59,22 @@ async def get_symbol(
         raise SourceNotAvailableError(symbol_id=symbol_id, _meta=meta.build())
 
     file_rec = symbol.file
+    context_lines = min(max(context_lines, 0), 50)
+    if context_lines > 0 and file_rec and symbol.line_start:
+        content = await file_rec.get_content()
+        if content:
+            all_lines = content.decode("utf-8", errors="replace").splitlines()
+            start = max(0, symbol.line_start - 1 - context_lines)
+            end = min(len(all_lines), (symbol.line_end or symbol.line_start) + context_lines)
+            source = "\n".join(all_lines[start:end])
+
     session = ctx.session
     session.record_symbol_access(symbol_id, await symbol._resolve_file_path())
 
     result = await symbol.to_detail_dict()
+    if context_lines > 0:
+        result["source"] = source
+        result["context_lines"] = context_lines
 
     if verify and symbol.content_hash:
         actual_hash = compute_content_hash(source.encode("utf-8"))
@@ -98,6 +110,7 @@ async def get_symbols(symbol_ids: list[str]) -> dict:
     cache = ctx.cache
     results = []
     not_found = []
+    repo_ids: set[int] = set()
 
     for sid in symbol_ids:
         cache_key = f"Symbol:{sid}"
@@ -113,6 +126,8 @@ async def get_symbols(symbol_ids: list[str]) -> dict:
         source = await symbol.get_source()
         file_path = await symbol._resolve_file_path()
         ctx.session.record_symbol_access(sid, file_path)
+        if symbol.file:
+            repo_ids.add(symbol.file.repo_id)
         entry = {
             "symbol_id": symbol.symbol_id,
             "name": symbol.name,
@@ -127,7 +142,10 @@ async def get_symbols(symbol_ids: list[str]) -> dict:
     meta.set("found", len(results))
     meta.set("not_found", len(not_found))
 
-    return wrap_response(
+    response = wrap_response(
         {"symbols": results, "not_found": not_found},
         meta.build(),
     )
+    for rid in repo_ids:
+        await check_staleness(rid, response)
+    return response

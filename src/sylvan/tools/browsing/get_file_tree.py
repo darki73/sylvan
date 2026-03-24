@@ -2,7 +2,7 @@
 
 from sylvan.database.orm import FileRecord, Repo
 from sylvan.error_codes import RepoNotFoundError
-from sylvan.tools.support.response import MetaBuilder, ensure_orm, log_tool_call, wrap_response
+from sylvan.tools.support.response import MetaBuilder, check_staleness, ensure_orm, log_tool_call, wrap_response
 
 
 def _build_tree_structure(files: list) -> dict:
@@ -68,7 +68,9 @@ async def get_file_tree(repo: str, max_depth: int = 3) -> dict:
     if truncated:
         meta.set("truncated", True)
 
-    return wrap_response({"tree": "\n".join(lines)}, meta.build())
+    response = wrap_response({"tree": "\n".join(lines)}, meta.build())
+    await check_staleness(repo_obj.id, response)
+    return response
 
 
 def _render_tree(
