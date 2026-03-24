@@ -3,7 +3,7 @@
 import json
 
 from sylvan.context import get_context
-from sylvan.database.orm import FileRecord
+from sylvan.database.orm import FileRecord, Repo
 from sylvan.database.orm.models.blob import Blob
 from sylvan.tools.support.response import MetaBuilder, clamp, ensure_orm, log_tool_call, wrap_response
 from sylvan.tools.support.token_counting import count_tokens
@@ -127,5 +127,10 @@ async def search_text(
     equivalent_tokens = sum(unique_files.values())
     if returned_tokens > 0 and equivalent_tokens > 0:
         meta.record_token_efficiency(returned_tokens, equivalent_tokens, method="byte_estimate")
+
+    if repo:
+        repo_obj = await Repo.where(name=repo).first()
+        if repo_obj:
+            meta.set("repo_id", repo_obj.id)
 
     return wrap_response({"matches": results}, meta.build())

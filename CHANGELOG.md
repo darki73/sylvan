@@ -27,6 +27,14 @@ Database foundation, integrity fixes, and audit-driven improvements.
 - Fixed edit hints not generated for get_section and get_context_bundle
 - Added server.workflow_gate config option to disable the workflow guide requirement
 
+### Cluster, search, and cleanup
+
+- Added per-repo efficiency tracking for all search tools (repo_id in meta)
+- Added get_quality and get_quality_report to WRITE_TOOLS (followers now proxy to leader)
+- Fixed quality metrics not invalidated on reindex (stale rows persisted)
+- Removed dead _registered_sessions dict and unused register/deregister endpoints (memory leak)
+- Fixed get_file_outlines reporting wrong token efficiency method
+
 ## 1.2.1
 
 - `get_symbol` now accepts optional `repo` param for disambiguation in multi-repo workspaces

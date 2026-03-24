@@ -1,6 +1,4 @@
-"""Cluster API -- HTTP endpoints on the leader for write proxying and session management."""
-
-from datetime import UTC, datetime
+"""Cluster API -- HTTP endpoints on the leader for write proxying and heartbeats."""
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -8,9 +6,6 @@ from starlette.responses import JSONResponse
 from sylvan.logging import get_logger
 
 logger = get_logger(__name__)
-
-# In-memory session registry (supplemented by DB persistence)
-_registered_sessions: dict[str, dict] = {}
 
 
 async def handle_proxy(request: Request) -> JSONResponse:
@@ -56,62 +51,5 @@ async def handle_heartbeat(request: Request) -> JSONResponse:
     """
     body = await request.json()
     session_id = body.get("session_id", "")
-
-    _registered_sessions[session_id] = {
-        "session_id": session_id,
-        "stats": body.get("stats", {}),
-        "efficiency": body.get("efficiency", {}),
-        "cache": body.get("cache", {}),
-        "last_heartbeat": datetime.now(UTC).isoformat(),
-    }
-
+    logger.debug("heartbeat_received", session_id=session_id)
     return JSONResponse({"status": "ok"})
-
-
-async def handle_session_register(request: Request) -> JSONResponse:
-    """Register a new follower session.
-
-    Args:
-        request: The incoming HTTP request with session metadata.
-
-    Returns:
-        JSON acknowledgement.
-    """
-    body = await request.json()
-    session_id = body.get("session_id", "")
-    _registered_sessions[session_id] = {
-        "session_id": session_id,
-        "pid": body.get("pid"),
-        "role": "follower",
-        "started_at": body.get("started_at"),
-        "last_heartbeat": datetime.now(UTC).isoformat(),
-        "stats": {},
-        "efficiency": {},
-        "cache": {},
-    }
-    logger.info("session_registered", session_id=session_id)
-    return JSONResponse({"status": "registered"})
-
-
-async def handle_session_deregister(request: Request) -> JSONResponse:
-    """Deregister a follower session on shutdown.
-
-    Args:
-        request: The incoming HTTP request with session_id path param.
-
-    Returns:
-        JSON acknowledgement.
-    """
-    session_id = request.path_params.get("session_id", "")
-    _registered_sessions.pop(session_id, None)
-    logger.info("session_deregistered", session_id=session_id)
-    return JSONResponse({"status": "deregistered"})
-
-
-def get_all_sessions() -> list[dict]:
-    """Get all registered follower sessions.
-
-    Returns:
-        List of session info dicts from the in-memory registry.
-    """
-    return list(_registered_sessions.values())

@@ -94,6 +94,12 @@ async def search_similar_symbols(
     if returned_tokens > 0 and equivalent_tokens > 0:
         meta.record_token_efficiency(returned_tokens, equivalent_tokens, method="byte_estimate")
 
+    if repo:
+        # repo_obj already looked up above for RepoNotFoundError check
+        robj = await Repo.where(name=repo).first()
+        if robj:
+            meta.set("repo_id", robj.id)
+
     return wrap_response(
         {"source": source_summary, "similar": similar},
         meta.build(),

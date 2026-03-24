@@ -171,12 +171,16 @@ async def search_symbols(
     if returned_tokens > 0 and equivalent_tokens > 0:
         meta.record_token_efficiency(returned_tokens, equivalent_tokens, method="byte_estimate")
 
-    result = wrap_response({"symbols": formatted}, meta.build())
-
+    repo_obj = None
     if repo:
         repo_obj = await Repo.where(name=repo).first()
         if repo_obj:
-            await check_staleness(repo_obj.id, result)
+            meta.set("repo_id", repo_obj.id)
+
+    result = wrap_response({"symbols": formatted}, meta.build())
+
+    if repo_obj:
+        await check_staleness(repo_obj.id, result)
 
     return result
 

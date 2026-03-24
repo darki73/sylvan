@@ -140,6 +140,9 @@ async def _clear_stale_data(file_id: int) -> None:
     with contextlib.suppress(Exception):
         for sid in section_ids:
             await backend.execute("DELETE FROM sections_vec WHERE section_id = ?", [sid])
+    with contextlib.suppress(Exception):
+        for sid in symbol_ids:
+            await backend.execute("DELETE FROM quality WHERE symbol_id = ?", [sid])
 
     await Symbol.where(file_id=file_id).delete()
     await FileImport.where(file_id=file_id).delete()

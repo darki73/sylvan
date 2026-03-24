@@ -833,12 +833,7 @@ def create_dashboard_app() -> Starlette:
     from starlette.middleware import Middleware
     from starlette.middleware.base import BaseHTTPMiddleware
 
-    from sylvan.cluster.api import (
-        handle_heartbeat,
-        handle_proxy,
-        handle_session_deregister,
-        handle_session_register,
-    )
+    from sylvan.cluster.api import handle_heartbeat, handle_proxy
 
     routes = [
         Route("/", overview),
@@ -849,8 +844,6 @@ def create_dashboard_app() -> Starlette:
         Route("/api/stats", api_stats),
         Route("/api/proxy", handle_proxy, methods=["POST"]),
         Route("/api/session/heartbeat", handle_heartbeat, methods=["POST"]),
-        Route("/api/session/register", handle_session_register, methods=["POST"]),
-        Route("/api/session/{session_id}", handle_session_deregister, methods=["DELETE"]),
         Route("/htmx/stats", overview_partial),
         Route("/htmx/quality", quality_partial),
         Route("/htmx/search", search_results),

@@ -129,6 +129,7 @@ async def get_file_outlines(repo: str, file_paths: list[str]) -> dict:
     not_found = []
     returned_tokens = 0
     equivalent_tokens = 0
+    used_tiktoken = False
 
     for fp in file_paths:
         file_rec = await (FileRecord.query()
@@ -160,6 +161,8 @@ async def get_file_outlines(repo: str, file_paths: list[str]) -> dict:
         tree = _build_symbol_tree(items)
         outline_text = json.dumps(tree, default=str)
         token_count = count_tokens(outline_text)
+        if token_count is not None:
+            used_tiktoken = True
         returned_tokens += token_count if token_count is not None else max(1, len(outline_text) // 4)
         if file_rec.byte_size:
             equivalent_tokens += file_rec.byte_size // 4
@@ -171,7 +174,8 @@ async def get_file_outlines(repo: str, file_paths: list[str]) -> dict:
         })
 
     if returned_tokens > 0 and equivalent_tokens > 0:
-        meta.record_token_efficiency(returned_tokens, equivalent_tokens, method="byte_estimate")
+        method = "tiktoken_cl100k" if used_tiktoken else "byte_estimate"
+        meta.record_token_efficiency(returned_tokens, equivalent_tokens, method=method)
 
     meta.set("found", len(outlines))
     meta.set("not_found", len(not_found))

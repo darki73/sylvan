@@ -17,6 +17,8 @@ WRITE_TOOLS = frozenset({
     "add_to_workspace",
     "pin_library",
     "remove_repo",
+    "get_quality",
+    "get_quality_report",
 })
 
 
