@@ -67,6 +67,21 @@ async def process_file(
     file_id = file_obj.id
 
     if existing:
+        import contextlib
+
+        from sylvan.database.orm.runtime.connection_manager import get_backend as _get_backend
+
+        symbol_ids = await Symbol.where(file_id=file_id).pluck("symbol_id")
+        section_ids = await Section.where(file_id=file_id).pluck("section_id")
+
+        _backend = _get_backend()
+        with contextlib.suppress(Exception):
+            for sid in symbol_ids:
+                await _backend.execute("DELETE FROM symbols_vec WHERE symbol_id = ?", [sid])
+        with contextlib.suppress(Exception):
+            for sid in section_ids:
+                await _backend.execute("DELETE FROM sections_vec WHERE section_id = ?", [sid])
+
         await Symbol.where(file_id=file_id).delete()
         await FileImport.where(file_id=file_id).delete()
         await Section.where(file_id=file_id).delete()

@@ -120,14 +120,27 @@ async def _upsert_file_record(repo_id: int, rel_path: str, language: str | None,
 
 
 async def _clear_stale_data(file_id: int) -> None:
-    """Delete symbols, imports, and sections from a previous index of this file.
+    """Delete symbols, imports, sections, and vec entries from a previous index.
+
+    Vec entries are cleaned up first (before the parent rows disappear) since
+    the virtual tables have no CASCADE support.
 
     Args:
         file_id: Database ID of the file record to clear.
-
-    Returns:
-        None.
     """
+    import contextlib
+
+    symbol_ids = await Symbol.where(file_id=file_id).pluck("symbol_id")
+    section_ids = await Section.where(file_id=file_id).pluck("section_id")
+
+    backend = get_backend()
+    with contextlib.suppress(Exception):
+        for sid in symbol_ids:
+            await backend.execute("DELETE FROM symbols_vec WHERE symbol_id = ?", [sid])
+    with contextlib.suppress(Exception):
+        for sid in section_ids:
+            await backend.execute("DELETE FROM sections_vec WHERE section_id = ?", [sid])
+
     await Symbol.where(file_id=file_id).delete()
     await FileImport.where(file_id=file_id).delete()
     await Section.where(file_id=file_id).delete()
@@ -250,39 +263,49 @@ async def index_file(
 
     had_existing = await FileRecord.where(repo_id=repo_id, path=rel_path).first() is not None
 
-    await Blob.store(content_hash, content_bytes)
+    backend = get_backend()
 
-    language = detect_language(rel_path)
-    file_obj = await _upsert_file_record(repo_id, rel_path, language, content_hash, abs_path)
-    file_id = file_obj.id
+    async with backend.transaction():
+        await Blob.store(content_hash, content_bytes)
 
-    if had_existing:
-        await _clear_stale_data(file_id)
+        language = detect_language(rel_path)
+        file_obj = await _upsert_file_record(repo_id, rel_path, language, content_hash, abs_path)
+        file_id = file_obj.id
 
-    try:
-        content_str = content_bytes.decode("utf-8", errors="replace")
-    except Exception:
-        content_str = ""
+        if had_existing:
+            await _clear_stale_data(file_id)
 
-    symbols_extracted = 0
-    imports_extracted = 0
-    sections_extracted = 0
+        try:
+            content_str = content_bytes.decode("utf-8", errors="replace")
+        except Exception:
+            content_str = ""
 
-    if content_str:
-        if language:
-            symbols_extracted, imports_extracted = await _extract_symbols_and_imports(
-                file_id, rel_path, content_str, language,
-            )
+        symbols_extracted = 0
+        imports_extracted = 0
+        sections_extracted = 0
 
-        idx_result = IndexResult()
-        await store_doc_sections(file_id, rel_path, content_str, repo, idx_result)
-        sections_extracted = idx_result.sections_extracted
+        if content_str:
+            if language:
+                symbols_extracted, imports_extracted = await _extract_symbols_and_imports(
+                    file_id, rel_path, content_str, language,
+                )
 
-        backend = get_backend()
-        await backend.commit()
+            idx_result = IndexResult()
+            await store_doc_sections(file_id, rel_path, content_str, repo, idx_result)
+            sections_extracted = idx_result.sections_extracted
+
+    # Resolve import specifiers to file IDs after the transaction commits.
+    from sylvan.indexing.pipeline.import_resolver import resolve_imports
+
+    await resolve_imports(repo_id)
 
     _staleness_cache.pop(repo_id, None)
     get_context().cache.clear()
+
+    # Schedule background tasks (embeddings, summaries) outside the transaction.
+    from sylvan.indexing.pipeline.orchestrator import _maybe_start_background
+
+    await _maybe_start_background(repo_id)
 
     meta.set("status", "updated")
     meta.set("symbols_extracted", symbols_extracted)

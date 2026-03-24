@@ -111,13 +111,13 @@ async def index_folder(
         result.duration_ms = (time.monotonic() - start) * 1000
         return result
 
-    repo_id = await _upsert_repo(name, root, discovery)
-    result.repo_id = repo_id
-
     discovered_paths = {df.relative_path for df in discovery.files}
 
     backend = get_backend()
     async with backend.transaction():
+        repo_id = await _upsert_repo(name, root, discovery)
+        result.repo_id = repo_id
+
         for discovered_file in discovery.files:
             await process_file(discovered_file, repo_id, name, cfg.max_file_size, result)
         await _purge_deleted_files(repo_id, discovered_paths)
