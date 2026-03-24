@@ -27,6 +27,14 @@ Database foundation, integrity fixes, and audit-driven improvements.
 - Fixed edit hints not generated for get_section and get_context_bundle
 - Added server.workflow_gate config option to disable the workflow guide requirement
 
+### Extension system
+
+- Added `~/.sylvan/extensions/` for user-defined extensions (languages, parsers, providers, tools)
+- Extensions are Python files using existing decorators (`@register_language`, `@register_parser`, etc.)
+- New `@register_tool` decorator for custom MCP tools from extensions
+- Extensions validated at startup (syntax check), import errors logged but don't crash the server
+- Configurable via `extensions.enabled` and `extensions.exclude` in config.yaml
+
 ### Editor configuration tools
 
 - Added `configure_claude_code` - creates .claude/settings.local.json with permissions + SubagentStart hook

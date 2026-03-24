@@ -1,5 +1,74 @@
 # Building Tools
 
+There are two ways to add tools to sylvan: **extensions** (recommended for users) and **core tools** (for contributing to sylvan itself).
+
+## Extension tools (recommended)
+
+Drop a Python file in `~/.sylvan/extensions/tools/` and restart the server. No need to modify sylvan's source code.
+
+```python
+# ~/.sylvan/extensions/tools/search_jira.py
+
+from sylvan.extensions import register_tool
+
+@register_tool(
+    name="search_jira",
+    description="Search JIRA tickets linked to code symbols",
+    schema={
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Search query for JIRA tickets",
+            },
+            "project": {
+                "type": "string",
+                "description": "JIRA project key (default: ENG)",
+            },
+        },
+        "required": ["query"],
+    },
+)
+async def search_jira(query: str, project: str = "ENG") -> dict:
+    """Search JIRA for tickets matching the query."""
+    import httpx
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"https://jira.company.com/rest/api/2/search",
+            params={"jql": f"project={project} AND text ~ '{query}'"},
+            headers={"Authorization": "Bearer ..."},
+        )
+        data = resp.json()
+
+    return {
+        "tickets": [
+            {"key": i["key"], "summary": i["fields"]["summary"]}
+            for i in data.get("issues", [])
+        ],
+    }
+```
+
+Extension tools:
+
+- Are automatically registered as MCP tools on startup
+- Can use any Python package installed in sylvan's environment
+- Cannot overwrite built-in tools (conflicts are logged and skipped)
+- Are categorized as "extension" for usage tracking
+- Are ungated (no workflow guide needed)
+- Can use the ORM, context, and all internal sylvan APIs
+
+To disable a specific extension without deleting it:
+
+```yaml
+# ~/.sylvan/config.yaml
+extensions:
+  exclude:
+    - tools/search_jira.py
+```
+
+## Core tools (for contributors)
+
 MCP tools are async Python functions that query the database, format results,
 and return a response envelope. Adding one takes four steps: write the handler,
 define the schema, register the handler, and categorize it for tracking.

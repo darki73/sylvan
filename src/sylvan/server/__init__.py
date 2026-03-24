@@ -188,7 +188,18 @@ async def list_tools() -> list[Tool]:
         Combined list of core, analysis, and support tool definitions.
     """
     asyncio.ensure_future(_get_or_create_backend())
-    return [*CORE_TOOLS, *ANALYSIS_TOOLS, *SUPPORT_TOOLS]
+
+    core_tools = [*CORE_TOOLS, *ANALYSIS_TOOLS, *SUPPORT_TOOLS]
+    core_names = {t.name for t in core_tools}
+
+    from sylvan.extensions import get_registered_tools
+    ext_tools = [
+        Tool(name=info["name"], description=info["description"], inputSchema=info["schema"])
+        for info in get_registered_tools().values()
+        if info["name"] not in core_names
+    ]
+
+    return [*core_tools, *ext_tools]
 
 
 @server.call_tool(validate_input=False)
@@ -458,7 +469,7 @@ def _get_handlers() -> dict[str, Callable[..., dict]]:
         """
         return await _get_usage_stats(kwargs)
 
-    return {
+    handlers = {
         "index_folder": index_folder,
         "index_file": index_file,
         "search_symbols": search_symbols,
@@ -516,6 +527,16 @@ def _get_handlers() -> dict[str, Callable[..., dict]]:
         "search_similar_symbols": search_similar_symbols,
         "remove_repo": remove_repo,
     }
+
+    # Merge extension tool handlers (cannot overwrite core tools)
+    from sylvan.extensions import get_registered_tools
+    for name, info in get_registered_tools().items():
+        if name in handlers:
+            logger.warning("extension_tool_conflicts_with_core", tool=name)
+            continue
+        handlers[name] = info["handler"]
+
+    return handlers
 
 
 _TOOL_CATEGORIES: dict[str, str] = {

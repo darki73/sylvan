@@ -43,6 +43,14 @@ def warm_up() -> None:
     logger.info("warmup_tools_imported")
 
     try:
+        from sylvan.extensions.loader import load_extensions
+        count = load_extensions()
+        if count:
+            logger.info("warmup_extensions_loaded", count=count)
+    except Exception as e:
+        logger.debug("warmup_extensions_skipped", error=str(e))
+
+    try:
         from sylvan.search.embeddings import get_embedding_provider
         provider = get_embedding_provider()
         if provider and provider.available():

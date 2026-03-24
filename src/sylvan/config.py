@@ -313,6 +313,19 @@ class SecurityConfig:
 
 
 @dataclass(slots=True)
+class ExtensionConfig:
+    """User extension settings.
+
+    Attributes:
+        enabled: Whether to load extensions from ~/.sylvan/extensions/.
+        exclude: List of extension files to skip (e.g. "tools/broken.py").
+    """
+
+    enabled: bool = True
+    exclude: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class Config:
     """Global sylvan configuration — the single source of truth.
 
@@ -332,6 +345,7 @@ class Config:
         libraries: Third-party library management settings.
         quality: Quality gate thresholds for the quality report.
         security: Security settings.
+        extensions: User extension settings.
     """
 
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
@@ -346,6 +360,7 @@ class Config:
     libraries: LibraryConfig = field(default_factory=LibraryConfig)
     quality: QualityConfig = field(default_factory=QualityConfig)
     security: SecurityConfig = field(default_factory=SecurityConfig)
+    extensions: ExtensionConfig = field(default_factory=ExtensionConfig)
 
     @property
     def db_path(self) -> Path:
@@ -553,6 +568,7 @@ _SECTION_MAP: dict[str, type] = {
     "libraries": LibraryConfig,
     "quality": QualityConfig,
     "security": SecurityConfig,
+    "extensions": ExtensionConfig,
 }
 """Maps YAML section names to their dataclass types."""
 

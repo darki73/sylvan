@@ -6,6 +6,8 @@ generates vector embeddings for semantic search. Both live in
 `src/sylvan/providers/` and follow the same pattern: subclass, override,
 register, import.
 
+**Quick start:** To add a provider without modifying sylvan's source, create a Python file in `~/.sylvan/extensions/providers/` that uses `@register_summary_provider`. See the extension system in [Configuration](../getting-started/configuration.md#extensions).
+
 ## Summary providers
 
 ### The base class

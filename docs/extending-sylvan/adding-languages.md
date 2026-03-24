@@ -5,6 +5,8 @@ the tree-sitter extractor which AST node types map to symbols, where to find
 names and parameters, and how to extract docstrings. All specs live in a single
 registry dict.
 
+**Quick start:** To add a language without modifying sylvan's source, create a Python file in `~/.sylvan/extensions/languages/` that uses `@register_language`. See the extension example below, then restart the server.
+
 ## The LanguageSpec dataclass
 
 ```python

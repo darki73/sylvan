@@ -29,6 +29,7 @@ server:
   request_timeout: 30       # Seconds before returning server_busy
   dashboard_port: 32400     # Port for the web dashboard
   dashboard_random_port: false  # Use a random available port for the dashboard
+  workflow_gate: true           # Require setup before tools work
 ```
 
 | Option | Default | Description |
@@ -40,6 +41,7 @@ server:
 | `request_timeout` | `30` | Seconds to wait for a tool slot before returning a `server_busy` error. |
 | `dashboard_port` | `32400` | Port for the built-in web dashboard. |
 | `dashboard_random_port` | `false` | When true, picks a random available port for the dashboard instead of using `dashboard_port`. |
+| `workflow_gate` | `true` | When true, tools are blocked until the agent calls a configure tool or `get_workflow_guide`. Set to `false` for SDK/pipeline usage. |
 
 ## Database
 
@@ -246,6 +248,24 @@ security:
 | `validate_paths` | `true` | Enable path traversal validation during indexing. |
 | `detect_secrets` | `true` | Detect and exclude files that look like secrets (`.env`, credentials, private keys). |
 | `reject_symlinks` | `true` | Reject symlinks that escape the project root directory. |
+
+## Extensions
+
+Controls the user extension system. Extensions are Python files in `~/.sylvan/extensions/` that add custom languages, parsers, providers, or tools.
+
+```yaml
+extensions:
+  enabled: true
+  exclude:
+    - tools/broken_experiment.py
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | `true` | Whether to load extensions from `~/.sylvan/extensions/` at startup. |
+| `exclude` | `[]` | List of extension files to skip, relative to the extensions directory (e.g. `tools/my_tool.py`). |
+
+See [Building Tools](../extending-sylvan/building-tools.md) for how to create extension tools.
 
 ## Complete example
 
