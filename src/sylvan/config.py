@@ -133,6 +133,7 @@ class ServerConfig:
     dashboard_port: int = 32400
     dashboard_random_port: bool = False
     workflow_gate: bool = True
+    auto_configure: bool = False
 
 
 @dataclass(slots=True)
