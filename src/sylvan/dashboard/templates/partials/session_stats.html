@@ -16,8 +16,8 @@
 <div class="grid-4 mb-8">
     <div class="card card-glow metric">
         {% set alive = cluster_sessions|selectattr('alive')|list if cluster_sessions else [] %}
-        {% set merged_calls = cs_totals.tool_calls if cs_totals is defined and cs_totals else 0 %}
-        {% set live_calls = alive|sum(attribute='tool_calls') if alive else session.tool_calls %}
+        {% set merged_calls = cs_totals.get("tool_calls", 0) if cs_totals else 0 %}
+        {% set live_calls = alive|sum(attribute='tool_calls') if alive else 0 %}
         {% set total_calls = merged_calls + live_calls %}
         <div class="metric-value glow">{{ total_calls }}</div>
         <div class="metric-label">Tool Calls{% if alive|length > 1 %} ({{ alive|length }} active){% endif %}</div>

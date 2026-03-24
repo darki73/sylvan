@@ -250,7 +250,8 @@ async def _get_overview_data() -> dict:
             lang_counts = await (FileRecord.where(repo_id=repo_obj.id)
                 .where_not_null("language").where_not(language="")
                 .group_by("language").count())
-            rd["languages"] = dict(sorted(lang_counts.items(), key=lambda x: x[1], reverse=True))
+            if lang_counts:
+                rd["languages"] = dict(sorted(lang_counts.items(), key=lambda x: x[1], reverse=True))
 
     cs = await CodingSession.all().aggregates(
         eff_ret=Sum("total_efficiency_returned"),
@@ -390,21 +391,25 @@ async def _search_symbols(query: str, repo_name: str | None = None) -> list[dict
     if not query or len(query) < 2:
         return []
 
-    qb = Symbol.search(query)
+    qb = Symbol.search(query).with_("file")
     if repo_name:
         qb = qb.in_repo(repo_name)
     qb = qb.limit(30)
 
     results = await qb.get()
+
+    # Build repo cache to avoid N+1 on repo lookups
+    from sylvan.database.orm import Repo
+    repo_ids = {sym.file.repo_id for sym in results if sym.file}
+    repo_map: dict[int, str] = {}
+    for rid in repo_ids:
+        repo_obj = await Repo.find(rid)
+        if repo_obj:
+            repo_map[rid] = repo_obj.name
+
     symbols = []
     for sym in results:
-        await sym.load("file")
         file_rec = sym.file
-        repo_name_resolved = ""
-        if file_rec:
-            from sylvan.database.orm import Repo
-            repo_obj = await Repo.find(file_rec.repo_id)
-            repo_name_resolved = repo_obj.name if repo_obj else ""
         symbols.append({
             "symbol_id": sym.symbol_id,
             "name": sym.name,
@@ -414,7 +419,7 @@ async def _search_symbols(query: str, repo_name: str | None = None) -> list[dict
             "file": file_rec.path if file_rec else "",
             "signature": sym.signature or "",
             "line": sym.line_start,
-            "repo": repo_name_resolved,
+            "repo": repo_map.get(file_rec.repo_id, "") if file_rec else "",
         })
     return symbols
 
@@ -505,6 +510,166 @@ async def libraries(request: Request) -> HTMLResponse:
     return HTMLResponse(template.render(**data))
 
 
+async def workspaces_page(request: Request) -> HTMLResponse:
+    """Render the workspaces page."""
+    from sylvan.database.orm import FileRecord, Symbol, Workspace
+
+    ws_list = await Workspace.all().get()
+    workspaces = []
+
+    for ws in ws_list:
+        await ws.load("repos")
+        repos_data = []
+        total_files = 0
+        total_symbols = 0
+
+        for repo in (ws.repos or []):
+            files = await FileRecord.where(repo_id=repo.id).count()
+            symbols = await (Symbol.query()
+                .join("files", "files.id = symbols.file_id")
+                .where("files.repo_id", repo.id).count())
+            repos_data.append({"name": repo.name, "files": files, "symbols": symbols})
+            total_files += files
+            total_symbols += symbols
+
+        workspaces.append({
+            "name": ws.name,
+            "description": ws.description or "",
+            "created_at": ws.created_at or "",
+            "repo_count": len(repos_data),
+            "repos": repos_data,
+            "total_files": total_files,
+            "total_symbols": total_symbols,
+        })
+
+    template = _jinja.get_template("workspaces.html")
+    return HTMLResponse(template.render(workspaces=workspaces))
+
+
+async def extensions_page(request: Request) -> HTMLResponse:
+    """Render the extensions page."""
+    from pathlib import Path
+
+    from sylvan.config import get_config
+    from sylvan.extensions import get_registered_tools
+
+    config = get_config()
+    enabled = config.extensions.enabled
+    extensions_path = str(Path.home() / ".sylvan" / "extensions")
+
+    tools = [
+        {"name": info["name"], "description": info["description"]}
+        for info in get_registered_tools().values()
+    ]
+
+    # Collect registered extension languages/parsers/providers
+    languages = []
+    parsers = []
+    providers = []
+    try:
+        from sylvan.indexing.source_code.language_registry import _REGISTRY
+        # Extension languages would be in the registry but not in the core specs
+        pass
+    except Exception:
+        pass
+
+    template = _jinja.get_template("extensions.html")
+    return HTMLResponse(template.render(
+        enabled=enabled,
+        extensions_path=extensions_path,
+        loaded_count=len(tools) + len(languages) + len(parsers) + len(providers),
+        tools=tools,
+        languages=languages,
+        parsers=parsers,
+        providers=providers,
+    ))
+
+
+async def history_page(request: Request) -> HTMLResponse:
+    """Render the session history page."""
+    from sylvan.database.orm.models.coding_session import CodingSession
+    from sylvan.database.orm.models.usage_stats import UsageStats
+    from sylvan.database.orm import Repo
+
+    # Coding sessions (most recent first)
+    cs_list = await CodingSession.all().order_by("started_at", "DESC").limit(50).get()
+    sessions = []
+    for cs in cs_list:
+        duration_str = ""
+        if cs.started_at and cs.ended_at:
+            try:
+                from datetime import datetime
+                start = datetime.fromisoformat(cs.started_at)
+                end = datetime.fromisoformat(cs.ended_at)
+                delta = end - start
+                minutes = int(delta.total_seconds() // 60)
+                if minutes >= 60:
+                    duration_str = f"{minutes // 60}h {minutes % 60}m"
+                else:
+                    duration_str = f"{minutes}m"
+            except Exception:
+                duration_str = "?"
+        elif cs.started_at and not cs.ended_at:
+            duration_str = "active"
+
+        eq = cs.total_efficiency_equivalent or 0
+        ret = cs.total_efficiency_returned or 0
+        reduction = round((1 - ret / eq) * 100, 1) if eq > 0 else 0
+
+        sessions.append({
+            "id": cs.id,
+            "started_at": cs.started_at or "",
+            "duration": duration_str,
+            "instances_spawned": cs.instances_spawned or 0,
+            "total_tool_calls": cs.total_tool_calls or 0,
+            "total_tokens_avoided": cs.total_tokens_avoided or 0,
+            "reduction_pct": reduction,
+        })
+
+    # Daily usage stats
+    daily_stats = []
+    try:
+        from sylvan.database.orm.runtime.connection_manager import get_backend
+        backend = get_backend()
+        rows = await backend.fetch_all(
+            "SELECT us.date, r.name as repo, us.sessions, us.tool_calls, "
+            "us.symbols_retrieved, us.sections_retrieved, us.tokens_avoided "
+            "FROM usage_stats us JOIN repos r ON r.id = us.repo_id "
+            "ORDER BY us.date DESC, us.tool_calls DESC LIMIT 100"
+        )
+        for row in rows:
+            daily_stats.append({
+                "date": row["date"],
+                "repo": row["repo"],
+                "sessions": row["sessions"] or 0,
+                "tool_calls": row["tool_calls"] or 0,
+                "symbols_retrieved": row["symbols_retrieved"] or 0,
+                "sections_retrieved": row["sections_retrieved"] or 0,
+                "tokens_avoided": row["tokens_avoided"] or 0,
+            })
+    except Exception:
+        pass
+
+    # Totals
+    totals = None
+    if sessions:
+        totals = {
+            "tool_calls": sum(s["total_tool_calls"] for s in sessions),
+            "tokens_avoided": sum(s["total_tokens_avoided"] for s in sessions),
+            "symbols": sum(
+                (cs_list[i].total_symbols_retrieved or 0) for i in range(len(cs_list))
+            ),
+            "sessions": len(sessions),
+        }
+
+    template = _jinja.get_template("history.html")
+    return HTMLResponse(template.render(
+        sessions=sessions,
+        daily_stats=daily_stats,
+        totals=totals,
+    ))
+
+
 async def search(request: Request) -> HTMLResponse:
     """Render the search page.
 
@@ -515,7 +680,7 @@ async def search(request: Request) -> HTMLResponse:
         Rendered HTML response.
     """
     from sylvan.database.orm import Repo
-    repos = await Repo.all().get()
+    repos = await Repo.where_not(repo_type="library").get()
     repo_names = [r.name for r in repos]
     template = _jinja.get_template("search.html")
     return HTMLResponse(template.render(repos=repo_names))
@@ -841,6 +1006,9 @@ def create_dashboard_app() -> Starlette:
         Route("/libraries", libraries),
         Route("/search", search),
         Route("/session", session_page),
+        Route("/workspaces", workspaces_page),
+        Route("/extensions", extensions_page),
+        Route("/history", history_page),
         Route("/api/stats", api_stats),
         Route("/api/proxy", handle_proxy, methods=["POST"]),
         Route("/api/session/heartbeat", handle_heartbeat, methods=["POST"]),

@@ -44,6 +44,16 @@ Database foundation, integrity fixes, and audit-driven improvements.
 - All configure_* tools are ungated (can be called without get_workflow_guide first)
 - `index_folder` is now ungated (always the first action, shouldn't require setup)
 
+### Dashboard
+
+- Added workspaces page (list workspaces, member repos, file/symbol counts)
+- Added extensions page (loaded extension tools, languages, parsers, providers)
+- Added history page (past coding sessions with duration, tool calls, efficiency, daily usage stats)
+- Fixed null crash on empty language counts in overview
+- Fixed N+1 queries in dashboard search (60 queries down to ~5)
+- Fixed search page showing library repos in dropdown
+- Fixed double-counting tool calls in session stats fallback
+
 ### Cluster, search, and cleanup
 
 - Added per-repo efficiency tracking for all search tools (repo_id in meta)
