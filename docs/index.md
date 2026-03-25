@@ -1,6 +1,6 @@
 # Sylvan
 
-Sylvan is a code intelligence engine that gives AI agents fast, precise access to your codebase. Instead of reading entire files to find a single function or grepping across directories to trace a dependency, agents query sylvan's structured index and get back exactly the symbols, signatures, and relationships they need. The server parses your code with tree-sitter, stores it in a SQLite database with full-text and vector search, and exposes everything through 52 MCP tools. Typical token savings exceed 80%.
+Sylvan is a code intelligence engine that gives AI agents fast, precise access to your codebase. Instead of reading entire files to find a single function or grepping across directories to trace a dependency, agents query sylvan's structured index and get back exactly the symbols, signatures, and relationships they need. The server parses your code with tree-sitter, stores it in a SQLite database with full-text and vector search, and exposes everything through 56 MCP tools. Typical token savings exceed 80%.
 
 ```
 Agent: search_symbols("authentication middleware")
@@ -15,7 +15,7 @@ vs. Read("src/auth/middleware.py")
 
 ## Key features
 
-- **52 MCP tools** -- search, browse, analyze, and index code through a single server. Your agent never needs to fall back to Read/Grep/Glob.
+- **56 MCP tools** -- search, browse, analyze, and index code through a single server. Your agent never needs to fall back to Read/Grep/Glob.
 - **34 programming languages** -- tree-sitter parsing for Python, TypeScript, Go, Rust, Java, C#, and 28 more, plus 10 document formats (Markdown, RST, HTML, etc.).
 - **Hybrid search** -- combines full-text search (FTS5) with vector similarity (sqlite-vec) and reciprocal rank fusion for ranked results.
 - **Blast radius analysis** -- before renaming or deleting a function, see every file that would be affected, with confirmed vs. potential impact.
