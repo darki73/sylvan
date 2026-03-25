@@ -62,7 +62,68 @@ def warm_up() -> None:
     except Exception as e:
         logger.debug("warmup_embeddings_skipped", error=str(e))
 
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        _check_for_updates()
+
     logger.info("warmup_complete")
+
+
+_update_info: dict[str, str] = {}
+
+
+def get_update_info() -> dict[str, str]:
+    """Return cached update info. Empty dict if up to date or check failed."""
+    return _update_info
+
+
+def _check_for_updates() -> None:
+    """Check PyPI for a newer version and cache the result."""
+    import json
+    import urllib.request
+    from importlib.metadata import distribution
+
+    dist = distribution("sylvan")
+    current = dist.metadata["Version"]
+
+    # Detect install method for correct upgrade command
+    installer = "pip"
+    is_editable = False
+    is_uv_tool = False
+    installer_file = dist._path / "INSTALLER"
+    if installer_file.exists():
+        installer = installer_file.read_text().strip()
+    direct_url_file = dist._path / "direct_url.json"
+    if direct_url_file.exists():
+        direct = json.loads(direct_url_file.read_text())
+        is_editable = direct.get("dir_info", {}).get("editable", False)
+    site_path = str(dist._path.parent).replace("\\", "/")
+    if "/uv/tools/" in site_path:
+        is_uv_tool = True
+
+    req = urllib.request.Request(
+        "https://pypi.org/pypi/sylvan/json",
+        headers={"Accept": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=3) as resp:  # noqa: S310
+        data = json.loads(resp.read())
+
+    latest = data["info"]["version"]
+    if latest != current:
+        _update_info["current"] = current
+        _update_info["latest"] = latest
+        if is_editable:
+            _update_info["upgrade"] = "git pull && uv sync"
+        elif is_uv_tool:
+            _update_info["upgrade"] = "uv tool upgrade sylvan"
+        elif installer == "uv":
+            _update_info["upgrade"] = "uv pip install --upgrade sylvan"
+        else:
+            _update_info["upgrade"] = "pip install --upgrade sylvan"
+        logger.info("update_available", current=current, latest=latest)
+    else:
+        logger.debug("version_up_to_date", version=current)
 
 
 def _register_signal_handlers() -> None:

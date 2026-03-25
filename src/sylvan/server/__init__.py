@@ -295,7 +295,9 @@ async def _dispatch(name: str, arguments: dict) -> dict:
     }
     _gate_enabled = _get_gate_config().server.workflow_gate
     if _gate_enabled and not _early_session()._workflow_loaded and name not in _ungated:
-        return {
+        from sylvan.server.startup import get_update_info
+
+        gate_response = {
             "setup_required": True,
             "message": (
                 "Sylvan session is not configured. Call your editor's configure tool "
@@ -306,6 +308,10 @@ async def _dispatch(name: str, arguments: dict) -> dict:
             "blocked_tool": name,
             "blocked_args": arguments,
         }
+        update = get_update_info()
+        if update:
+            gate_response["update_available"] = update
+        return gate_response
 
     # If we're a follower and this is a write tool, proxy to leader
     from sylvan.cluster.proxy import is_write_tool, proxy_to_leader

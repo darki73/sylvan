@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+from sylvan.tools.meta.configure_editor import _with_update_check
 from sylvan.tools.support.response import MetaBuilder, log_tool_call, wrap_response
 
 _REQUIRED_PERMISSION = "mcp__sylvan__*"
@@ -122,6 +123,7 @@ def _check_setup(cwd: Path) -> list[dict]:
     return actions
 
 
+@_with_update_check
 @log_tool_call
 async def get_workflow_guide(project_path: str | None = None) -> dict:
     """Return a structured guide for using sylvan tools effectively.

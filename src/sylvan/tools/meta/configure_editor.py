@@ -13,6 +13,24 @@ def _unlock_gate() -> None:
     get_session()._workflow_loaded = True
 
 
+def _with_update_check(func):
+    """Decorator that injects update_available into tool responses."""
+    import functools
+
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        result = await func(*args, **kwargs)
+        if isinstance(result, dict):
+            from sylvan.server.startup import get_update_info
+
+            update = get_update_info()
+            if update:
+                result["update_available"] = update
+        return result
+
+    return wrapper
+
+
 def _auto_configure_enabled() -> bool:
     """Check if auto_configure is enabled in server config."""
     from sylvan.config import get_config
@@ -117,6 +135,7 @@ def _claude_code_settings_content() -> dict:
     }
 
 
+@_with_update_check
 @log_tool_call
 async def configure_claude_code(project_path: str) -> dict:
     """Configure Claude Code to use sylvan tools.
@@ -193,6 +212,7 @@ async def configure_claude_code(project_path: str) -> dict:
     )
 
 
+@_with_update_check
 @log_tool_call
 async def configure_cursor(project_path: str) -> dict:
     """Configure Cursor to use sylvan tools.
@@ -243,6 +263,7 @@ async def configure_cursor(project_path: str) -> dict:
     )
 
 
+@_with_update_check
 @log_tool_call
 async def configure_windsurf(project_path: str) -> dict:
     """Configure Windsurf to use sylvan tools.
@@ -293,6 +314,7 @@ async def configure_windsurf(project_path: str) -> dict:
     )
 
 
+@_with_update_check
 @log_tool_call
 async def configure_copilot(project_path: str) -> dict:
     """Configure GitHub Copilot to use sylvan tools.
