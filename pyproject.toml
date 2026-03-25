@@ -28,7 +28,7 @@ dependencies = [
     "fastembed>=0.4.0,<1.0.0",
     "ollama>=0.6.1,<1.0.0",
     "structlog>=25.5.0,<27.0.0",
-    "claude-agent-sdk==0.1.48",
+    "claude-agent-sdk==0.1.50",
     "aiosqlite>=0.21.0,<1.0.0",
     "jinja2>=3.1,<4.0",
     "uvicorn>=0.30.0,<1.0.0",
