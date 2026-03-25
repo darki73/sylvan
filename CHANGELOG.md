@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.4
+
+- Added CI lint for tests/ directory
+- Added issue templates (YAML form-based with dropdowns)
+- Added PR template with checklist
+- Added contributing guide
+- Added dependabot config (pip + github-actions, weekly)
+- Added release drafter workflow
+- Added security policy (GitHub private vulnerability reporting)
+- Added docs deployment badge to README
+- Ruff formatted all test files
+- Version check now only triggers when PyPI has a newer version
+
 ## 1.3.3
 
 - Version check on startup, notifies agent when a newer version is available
