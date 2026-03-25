@@ -43,13 +43,15 @@ async def _search_file_content(
             end = min(len(lines), i + context_lines + 1)
             context = "\n".join(lines[start:end])
 
-            matches.append({
-                "file_path": file_record.path,
-                "repo_name": repo_name,
-                "line": i + 1,
-                "match": line.strip(),
-                "context": context,
-            })
+            matches.append(
+                {
+                    "file_path": file_record.path,
+                    "repo_name": repo_name,
+                    "line": i + 1,
+                    "match": line.strip(),
+                    "context": context,
+                }
+            )
 
     return matches
 

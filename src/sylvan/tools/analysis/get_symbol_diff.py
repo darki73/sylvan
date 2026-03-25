@@ -44,13 +44,15 @@ async def _current_symbols_for_repo(
     by_file: dict[str, list[dict]] = {}
     for row in rows:
         fp = row.file_path
-        by_file.setdefault(fp, []).append({
-            "name": row.name,
-            "kind": row.kind,
-            "qualified_name": row.qualified_name,
-            "signature": row.signature or "",
-            "content_hash": row.content_hash or "",
-        })
+        by_file.setdefault(fp, []).append(
+            {
+                "name": row.name,
+                "kind": row.kind,
+                "qualified_name": row.qualified_name,
+                "signature": row.signature or "",
+                "content_hash": row.content_hash or "",
+            }
+        )
     return by_file
 
 
@@ -183,7 +185,13 @@ async def get_symbol_diff(
         if not file_paths_to_diff:
             file_paths_to_diff = [file_path]
     else:
-        files = await FileRecord.where(repo_id=repo_obj.id).where_not_null("language").order_by("path").limit(max_files).get()
+        files = (
+            await FileRecord.where(repo_id=repo_obj.id)
+            .where_not_null("language")
+            .order_by("path")
+            .limit(max_files)
+            .get()
+        )
         file_paths_to_diff = [f.path for f in files]
 
     from sylvan.git import run_git

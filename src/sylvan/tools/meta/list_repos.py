@@ -18,19 +18,20 @@ async def list_repos() -> dict:
     result = []
     for r in repos:
         file_count = await FileRecord.where(repo_id=r.id).count()
-        symbol_count = await (Symbol.query()
-                       .join("files", "files.id = symbols.file_id")
-                       .where("files.repo_id", r.id)
-                       .count())
-        result.append({
-            "id": r.id,
-            "name": r.name,
-            "source_path": r.source_path,
-            "github_url": r.github_url,
-            "indexed_at": r.indexed_at,
-            "git_head": r.git_head,
-            "file_count": file_count,
-            "symbol_count": symbol_count,
-        })
+        symbol_count = await (
+            Symbol.query().join("files", "files.id = symbols.file_id").where("files.repo_id", r.id).count()
+        )
+        result.append(
+            {
+                "id": r.id,
+                "name": r.name,
+                "source_path": r.source_path,
+                "github_url": r.github_url,
+                "indexed_at": r.indexed_at,
+                "git_head": r.git_head,
+                "file_count": file_count,
+                "symbol_count": symbol_count,
+            }
+        )
     meta.set("count", len(result))
     return wrap_response({"repos": result}, meta.build())

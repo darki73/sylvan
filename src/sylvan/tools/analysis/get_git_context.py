@@ -63,9 +63,11 @@ async def _symbol_git_context(root: Path, symbol_id: str, meta: MetaBuilder) -> 
     file_path = file_rec.path if file_rec else ""
 
     from sylvan.git.blame import blame_symbol
+
     blame = blame_symbol(root, file_path, symbol.line_start, symbol.line_end or symbol.line_start)
 
     from sylvan.git.blame import get_change_frequency
+
     freq = get_change_frequency(root, file_path)
 
     result = {

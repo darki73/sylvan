@@ -67,23 +67,25 @@ async def _get_cluster_sessions() -> list[dict]:
         alive = not ended and _is_pid_alive(pid)
         eq = inst.efficiency_equivalent or 0
         ret = inst.efficiency_returned or 0
-        sessions.append({
-            "session_id": inst.instance_id or "",
-            "coding_session_id": inst.coding_session_id or "",
-            "pid": pid,
-            "role": inst.role or "unknown",
-            "alive": alive,
-            "tool_calls": inst.tool_calls or 0,
-            "tokens_returned": inst.tokens_returned or 0,
-            "tokens_avoided": inst.tokens_avoided or 0,
-            "efficiency_returned": ret,
-            "efficiency_equivalent": eq,
-            "reduction_percent": round((1 - ret / eq) * 100, 1) if eq > 0 else 0,
-            "symbols_retrieved": inst.symbols_retrieved or 0,
-            "queries": inst.queries or 0,
-            "category_data": inst.category_data or {},
-            "last_heartbeat": inst.last_heartbeat or "",
-        })
+        sessions.append(
+            {
+                "session_id": inst.instance_id or "",
+                "coding_session_id": inst.coding_session_id or "",
+                "pid": pid,
+                "role": inst.role or "unknown",
+                "alive": alive,
+                "tool_calls": inst.tool_calls or 0,
+                "tokens_returned": inst.tokens_returned or 0,
+                "tokens_avoided": inst.tokens_avoided or 0,
+                "efficiency_returned": ret,
+                "efficiency_equivalent": eq,
+                "reduction_percent": round((1 - ret / eq) * 100, 1) if eq > 0 else 0,
+                "symbols_retrieved": inst.symbols_retrieved or 0,
+                "queries": inst.queries or 0,
+                "category_data": inst.category_data or {},
+                "last_heartbeat": inst.last_heartbeat or "",
+            }
+        )
     return sessions
 
 
@@ -174,6 +176,7 @@ async def _get_coding_session_history(limit: int = 10) -> list[dict]:
                     secs = (end_dt - start_dt).total_seconds()
                 else:
                     from datetime import UTC
+
                     secs = (datetime.now(UTC) - start_dt).total_seconds()
                 duration = _format_duration(secs)
             except (ValueError, TypeError):
@@ -182,15 +185,17 @@ async def _get_coding_session_history(limit: int = 10) -> list[dict]:
         eq = cs.total_efficiency_equivalent or 0
         ret = cs.total_efficiency_returned or 0
 
-        history.append({
-            "id": cs.id or "",
-            "started_at": started,
-            "ended_at": ended,
-            "duration": duration,
-            "total_tool_calls": cs.total_tool_calls or 0,
-            "instances_spawned": cs.instances_spawned or 0,
-            "reduction_percent": round((1 - ret / eq) * 100, 1) if eq > 0 else 0,
-        })
+        history.append(
+            {
+                "id": cs.id or "",
+                "started_at": started,
+                "ended_at": ended,
+                "duration": duration,
+                "total_tool_calls": cs.total_tool_calls or 0,
+                "instances_spawned": cs.instances_spawned or 0,
+                "reduction_percent": round((1 - ret / eq) * 100, 1) if eq > 0 else 0,
+            }
+        )
     return history
 
 
@@ -208,48 +213,57 @@ async def _get_overview_data() -> dict:
     repo_data = []
     for repo in repos:
         file_count = await FileRecord.where(repo_id=repo.id).count()
-        symbol_count = await Symbol.query().join(
-            "files", "files.id = symbols.file_id"
-        ).where("files.repo_id", repo.id).count()
-        section_count = await Section.query().join(
-            "files", "files.id = sections.file_id"
-        ).where("files.repo_id", repo.id).count()
-        repo_data.append({
-            "name": repo.name,
-            "files": file_count,
-            "symbols": symbol_count,
-            "sections": section_count,
-            "indexed_at": repo.indexed_at or "",
-            "git_head": (repo.git_head or "")[:8],
-        })
+        symbol_count = (
+            await Symbol.query().join("files", "files.id = symbols.file_id").where("files.repo_id", repo.id).count()
+        )
+        section_count = (
+            await Section.query().join("files", "files.id = sections.file_id").where("files.repo_id", repo.id).count()
+        )
+        repo_data.append(
+            {
+                "name": repo.name,
+                "files": file_count,
+                "symbols": symbol_count,
+                "sections": section_count,
+                "indexed_at": repo.indexed_at or "",
+                "git_head": (repo.git_head or "")[:8],
+            }
+        )
 
     lib_data = []
     for lib in libraries:
-        symbol_count = await Symbol.query().join(
-            "files", "files.id = symbols.file_id"
-        ).where("files.repo_id", lib.id).count()
-        lib_data.append({
-            "name": lib.name,
-            "manager": lib.package_manager or "",
-            "version": lib.version or "",
-            "symbols": symbol_count,
-            "repo_url": lib.github_url or "",
-        })
+        symbol_count = (
+            await Symbol.query().join("files", "files.id = symbols.file_id").where("files.repo_id", lib.id).count()
+        )
+        lib_data.append(
+            {
+                "name": lib.name,
+                "manager": lib.package_manager or "",
+                "version": lib.version or "",
+                "symbols": symbol_count,
+                "repo_url": lib.github_url or "",
+            }
+        )
 
     total_symbols = await Symbol.all().count()
     total_files = await FileRecord.all().count()
     total_sections = await Section.all().count()
 
     from sylvan.session.tracker import get_session
+
     session = get_session()
     efficiency = session.get_efficiency_stats()
 
     for rd in repo_data:
         repo_obj = next((r for r in repos if r.name == rd["name"]), None)
         if repo_obj:
-            lang_counts = await (FileRecord.where(repo_id=repo_obj.id)
-                .where_not_null("language").where_not(language="")
-                .group_by("language").count())
+            lang_counts = await (
+                FileRecord.where(repo_id=repo_obj.id)
+                .where_not_null("language")
+                .where_not(language="")
+                .group_by("language")
+                .count()
+            )
             if lang_counts:
                 rd["languages"] = dict(sorted(lang_counts.items(), key=lambda x: x[1], reverse=True))
 
@@ -271,7 +285,9 @@ async def _get_overview_data() -> dict:
     alltime_efficiency = {
         "total_returned": alltime_eff_returned,
         "total_equivalent": alltime_eff_equivalent,
-        "reduction_percent": round((1 - alltime_eff_returned / alltime_eff_equivalent) * 100, 1) if alltime_eff_equivalent > 0 else 0,
+        "reduction_percent": round((1 - alltime_eff_returned / alltime_eff_equivalent) * 100, 1)
+        if alltime_eff_equivalent > 0
+        else 0,
         "total_calls": alltime_calls,
     }
 
@@ -318,23 +334,30 @@ async def _get_quality_data(repo_name: str) -> dict:
     security = await scan_security(repo_id)
     duplicates = await detect_duplicates(repo_id)
 
-    _repo_join = Quality.query().join(
-        "symbols", "symbols.symbol_id = quality.symbol_id"
-    ).join(
-        "files", "files.id = symbols.file_id"
-    ).where("files.repo_id", repo_id)
+    _repo_join = (
+        Quality.query()
+        .join("symbols", "symbols.symbol_id = quality.symbol_id")
+        .join("files", "files.id = symbols.file_id")
+        .where("files.repo_id", repo_id)
+    )
 
     total = await _repo_join.count()
-    documented = await Quality.query().join(
-        "symbols", "symbols.symbol_id = quality.symbol_id"
-    ).join(
-        "files", "files.id = symbols.file_id"
-    ).where("files.repo_id", repo_id).where(has_docs=True).count()
-    typed = await Quality.query().join(
-        "symbols", "symbols.symbol_id = quality.symbol_id"
-    ).join(
-        "files", "files.id = symbols.file_id"
-    ).where("files.repo_id", repo_id).where(has_types=True).count()
+    documented = (
+        await Quality.query()
+        .join("symbols", "symbols.symbol_id = quality.symbol_id")
+        .join("files", "files.id = symbols.file_id")
+        .where("files.repo_id", repo_id)
+        .where(has_docs=True)
+        .count()
+    )
+    typed = (
+        await Quality.query()
+        .join("symbols", "symbols.symbol_id = quality.symbol_id")
+        .join("files", "files.id = symbols.file_id")
+        .where("files.repo_id", repo_id)
+        .where(has_types=True)
+        .count()
+    )
 
     total = total or 0
     doc_pct = round((documented or 0) / total * 100, 1) if total > 0 else 0.0
@@ -348,8 +371,14 @@ async def _get_quality_data(repo_name: str) -> dict:
         "doc_coverage": doc_pct,
         "type_coverage": type_pct,
         "smells": [
-            {"name": s.name, "file": s.file, "line": s.line,
-             "type": s.smell_type, "severity": s.severity, "message": s.message}
+            {
+                "name": s.name,
+                "file": s.file,
+                "line": s.line,
+                "type": s.smell_type,
+                "severity": s.severity,
+                "message": s.message,
+            }
             for s in smells[:50]
         ],
         "smells_by_severity": {
@@ -358,8 +387,14 @@ async def _get_quality_data(repo_name: str) -> dict:
             "low": len([s for s in smells if s.severity == "low"]),
         },
         "security": [
-            {"file": f.file, "line": f.line, "rule": f.rule,
-             "severity": f.severity, "message": f.message, "snippet": f.snippet}
+            {
+                "file": f.file,
+                "line": f.line,
+                "rule": f.rule,
+                "severity": f.severity,
+                "message": f.message,
+                "snippet": f.snippet,
+            }
             for f in security[:30]
         ],
         "security_by_severity": {
@@ -369,8 +404,11 @@ async def _get_quality_data(repo_name: str) -> dict:
             "low": len([f for f in security if f.severity == "low"]),
         },
         "duplicates": [
-            {"hash": g.hash, "line_count": g.line_count,
-             "instances": [{"name": s["name"], "file": s["file"], "line": s["line_start"]} for s in g.symbols]}
+            {
+                "hash": g.hash,
+                "line_count": g.line_count,
+                "instances": [{"name": s["name"], "file": s["file"], "line": s["line_start"]} for s in g.symbols],
+            }
             for g in duplicates[:10]
         ],
     }
@@ -400,6 +438,7 @@ async def _search_symbols(query: str, repo_name: str | None = None) -> list[dict
 
     # Build repo cache to avoid N+1 on repo lookups
     from sylvan.database.orm import Repo
+
     repo_ids = {sym.file.repo_id for sym in results if sym.file}
     repo_map: dict[int, str] = {}
     for rid in repo_ids:
@@ -410,17 +449,19 @@ async def _search_symbols(query: str, repo_name: str | None = None) -> list[dict
     symbols = []
     for sym in results:
         file_rec = sym.file
-        symbols.append({
-            "symbol_id": sym.symbol_id,
-            "name": sym.name,
-            "qualified_name": sym.qualified_name,
-            "kind": sym.kind,
-            "language": sym.language,
-            "file": file_rec.path if file_rec else "",
-            "signature": sym.signature or "",
-            "line": sym.line_start,
-            "repo": repo_map.get(file_rec.repo_id, "") if file_rec else "",
-        })
+        symbols.append(
+            {
+                "symbol_id": sym.symbol_id,
+                "name": sym.name,
+                "qualified_name": sym.qualified_name,
+                "kind": sym.kind,
+                "language": sym.language,
+                "file": file_rec.path if file_rec else "",
+                "signature": sym.signature or "",
+                "line": sym.line_start,
+                "repo": repo_map.get(file_rec.repo_id, "") if file_rec else "",
+            }
+        )
     return symbols
 
 
@@ -463,6 +504,7 @@ async def quality(request: Request) -> HTMLResponse:
     """
     repo_name = request.query_params.get("repo", "")
     from sylvan.database.orm import Repo
+
     repos = await Repo.where_not(repo_type="library").get()
     repo_names = [r.name for r in repos]
 
@@ -489,7 +531,9 @@ async def quality_partial(request: Request) -> HTMLResponse:
     try:
         data = await _get_quality_data(repo_name)
         if "error" in data:
-            return HTMLResponse(f"<p class='text-muted font-mono text-sm' style='color:var(--danger)'>{data['error']}</p>")
+            return HTMLResponse(
+                f"<p class='text-muted font-mono text-sm' style='color:var(--danger)'>{data['error']}</p>"
+            )
         template = _jinja.get_template("partials/quality_report.html")
         return HTMLResponse(template.render(**data))
     except Exception as error:
@@ -523,24 +567,26 @@ async def workspaces_page(request: Request) -> HTMLResponse:
         total_files = 0
         total_symbols = 0
 
-        for repo in (ws.repos or []):
+        for repo in ws.repos or []:
             files = await FileRecord.where(repo_id=repo.id).count()
-            symbols = await (Symbol.query()
-                .join("files", "files.id = symbols.file_id")
-                .where("files.repo_id", repo.id).count())
+            symbols = await (
+                Symbol.query().join("files", "files.id = symbols.file_id").where("files.repo_id", repo.id).count()
+            )
             repos_data.append({"name": repo.name, "files": files, "symbols": symbols})
             total_files += files
             total_symbols += symbols
 
-        workspaces.append({
-            "name": ws.name,
-            "description": ws.description or "",
-            "created_at": ws.created_at or "",
-            "repo_count": len(repos_data),
-            "repos": repos_data,
-            "total_files": total_files,
-            "total_symbols": total_symbols,
-        })
+        workspaces.append(
+            {
+                "name": ws.name,
+                "description": ws.description or "",
+                "created_at": ws.created_at or "",
+                "repo_count": len(repos_data),
+                "repos": repos_data,
+                "total_files": total_files,
+                "total_symbols": total_symbols,
+            }
+        )
 
     template = _jinja.get_template("workspaces.html")
     return HTMLResponse(template.render(workspaces=workspaces))
@@ -557,39 +603,30 @@ async def extensions_page(request: Request) -> HTMLResponse:
     enabled = config.extensions.enabled
     extensions_path = str(Path.home() / ".sylvan" / "extensions")
 
-    tools = [
-        {"name": info["name"], "description": info["description"]}
-        for info in get_registered_tools().values()
-    ]
+    tools = [{"name": info["name"], "description": info["description"]} for info in get_registered_tools().values()]
 
     # Collect registered extension languages/parsers/providers
     languages = []
     parsers = []
     providers = []
-    try:
-        from sylvan.indexing.source_code.language_registry import _REGISTRY
-        # Extension languages would be in the registry but not in the core specs
-        pass
-    except Exception:
-        pass
 
     template = _jinja.get_template("extensions.html")
-    return HTMLResponse(template.render(
-        enabled=enabled,
-        extensions_path=extensions_path,
-        loaded_count=len(tools) + len(languages) + len(parsers) + len(providers),
-        tools=tools,
-        languages=languages,
-        parsers=parsers,
-        providers=providers,
-    ))
+    return HTMLResponse(
+        template.render(
+            enabled=enabled,
+            extensions_path=extensions_path,
+            loaded_count=len(tools) + len(languages) + len(parsers) + len(providers),
+            tools=tools,
+            languages=languages,
+            parsers=parsers,
+            providers=providers,
+        )
+    )
 
 
 async def history_page(request: Request) -> HTMLResponse:
     """Render the session history page."""
     from sylvan.database.orm.models.coding_session import CodingSession
-    from sylvan.database.orm.models.usage_stats import UsageStats
-    from sylvan.database.orm import Repo
 
     # Coding sessions (most recent first)
     cs_list = await CodingSession.all().order_by("started_at", "DESC").limit(50).get()
@@ -599,6 +636,7 @@ async def history_page(request: Request) -> HTMLResponse:
         if cs.started_at and cs.ended_at:
             try:
                 from datetime import datetime
+
                 start = datetime.fromisoformat(cs.started_at)
                 end = datetime.fromisoformat(cs.ended_at)
                 delta = end - start
@@ -616,20 +654,23 @@ async def history_page(request: Request) -> HTMLResponse:
         ret = cs.total_efficiency_returned or 0
         reduction = round((1 - ret / eq) * 100, 1) if eq > 0 else 0
 
-        sessions.append({
-            "id": cs.id,
-            "started_at": cs.started_at or "",
-            "duration": duration_str,
-            "instances_spawned": cs.instances_spawned or 0,
-            "total_tool_calls": cs.total_tool_calls or 0,
-            "total_tokens_avoided": cs.total_tokens_avoided or 0,
-            "reduction_pct": reduction,
-        })
+        sessions.append(
+            {
+                "id": cs.id,
+                "started_at": cs.started_at or "",
+                "duration": duration_str,
+                "instances_spawned": cs.instances_spawned or 0,
+                "total_tool_calls": cs.total_tool_calls or 0,
+                "total_tokens_avoided": cs.total_tokens_avoided or 0,
+                "reduction_pct": reduction,
+            }
+        )
 
     # Daily usage stats
     daily_stats = []
     try:
         from sylvan.database.orm.runtime.connection_manager import get_backend
+
         backend = get_backend()
         rows = await backend.fetch_all(
             "SELECT us.date, r.name as repo, us.sessions, us.tool_calls, "
@@ -638,16 +679,18 @@ async def history_page(request: Request) -> HTMLResponse:
             "ORDER BY us.date DESC, us.tool_calls DESC LIMIT 100"
         )
         for row in rows:
-            daily_stats.append({
-                "date": row["date"],
-                "repo": row["repo"],
-                "sessions": row["sessions"] or 0,
-                "tool_calls": row["tool_calls"] or 0,
-                "symbols_retrieved": row["symbols_retrieved"] or 0,
-                "sections_retrieved": row["sections_retrieved"] or 0,
-                "tokens_avoided": row["tokens_avoided"] or 0,
-            })
-    except Exception:
+            daily_stats.append(
+                {
+                    "date": row["date"],
+                    "repo": row["repo"],
+                    "sessions": row["sessions"] or 0,
+                    "tool_calls": row["tool_calls"] or 0,
+                    "symbols_retrieved": row["symbols_retrieved"] or 0,
+                    "sections_retrieved": row["sections_retrieved"] or 0,
+                    "tokens_avoided": row["tokens_avoided"] or 0,
+                }
+            )
+    except Exception:  # noqa: S110 -- usage_stats table may not exist yet
         pass
 
     # Totals
@@ -656,18 +699,18 @@ async def history_page(request: Request) -> HTMLResponse:
         totals = {
             "tool_calls": sum(s["total_tool_calls"] for s in sessions),
             "tokens_avoided": sum(s["total_tokens_avoided"] for s in sessions),
-            "symbols": sum(
-                (cs_list[i].total_symbols_retrieved or 0) for i in range(len(cs_list))
-            ),
+            "symbols": sum((cs_list[i].total_symbols_retrieved or 0) for i in range(len(cs_list))),
             "sessions": len(sessions),
         }
 
     template = _jinja.get_template("history.html")
-    return HTMLResponse(template.render(
-        sessions=sessions,
-        daily_stats=daily_stats,
-        totals=totals,
-    ))
+    return HTMLResponse(
+        template.render(
+            sessions=sessions,
+            daily_stats=daily_stats,
+            totals=totals,
+        )
+    )
 
 
 async def search(request: Request) -> HTMLResponse:
@@ -680,6 +723,7 @@ async def search(request: Request) -> HTMLResponse:
         Rendered HTML response.
     """
     from sylvan.database.orm import Repo
+
     repos = await Repo.where_not(repo_type="library").get()
     repo_names = [r.name for r in repos]
     template = _jinja.get_template("search.html")
@@ -733,12 +777,18 @@ async def session_page(request: Request) -> HTMLResponse:
     cs_totals = await _get_current_coding_session_totals(cluster.coding_session_id)
 
     template = _jinja.get_template("session.html")
-    return HTMLResponse(template.render(
-        session=stats, efficiency=combined or efficiency, cache=cache,
-        cluster_role=cluster.role, cluster_session_id=cluster.session_id,
-        cluster_sessions=cluster_sessions, coding_history=coding_history,
-        cs_totals=cs_totals,
-    ))
+    return HTMLResponse(
+        template.render(
+            session=stats,
+            efficiency=combined or efficiency,
+            cache=cache,
+            cluster_role=cluster.role,
+            cluster_session_id=cluster.session_id,
+            cluster_sessions=cluster_sessions,
+            coding_history=coding_history,
+            cs_totals=cs_totals,
+        )
+    )
 
 
 async def session_partial(request: Request) -> HTMLResponse:
@@ -766,12 +816,18 @@ async def session_partial(request: Request) -> HTMLResponse:
     cs_totals = await _get_current_coding_session_totals(cluster.coding_session_id)
 
     template = _jinja.get_template("partials/session_stats.html")
-    return HTMLResponse(template.render(
-        session=stats, efficiency=combined or efficiency, cache=cache,
-        cluster_role=cluster.role, cluster_session_id=cluster.session_id,
-        cluster_sessions=cluster_sessions, coding_history=coding_history,
-        cs_totals=cs_totals,
-    ))
+    return HTMLResponse(
+        template.render(
+            session=stats,
+            efficiency=combined or efficiency,
+            cache=cache,
+            cluster_role=cluster.role,
+            cluster_session_id=cluster.session_id,
+            cluster_sessions=cluster_sessions,
+            coding_history=coding_history,
+            cs_totals=cs_totals,
+        )
+    )
 
 
 async def uptime_partial(request: Request) -> HTMLResponse:
@@ -811,7 +867,7 @@ async def symbol_source(request: Request) -> HTMLResponse:
     if sym.file and sym.file.content_hash:
         content = await Blob.get(sym.file.content_hash)
         if content and sym.byte_offset is not None and sym.byte_length:
-            raw = content[sym.byte_offset:sym.byte_offset + sym.byte_length]
+            raw = content[sym.byte_offset : sym.byte_offset + sym.byte_length]
             source = raw.decode("utf-8", errors="replace")
 
     if not source:
@@ -819,19 +875,31 @@ async def symbol_source(request: Request) -> HTMLResponse:
 
     lang = sym.language or ""
     prism_lang = {
-        "python": "python", "javascript": "javascript", "typescript": "typescript",
-        "tsx": "typescript", "go": "go", "rust": "rust", "java": "java",
-        "c": "c", "cpp": "cpp", "c_sharp": "csharp", "ruby": "ruby",
-        "php": "php", "swift": "swift", "kotlin": "kotlin", "dart": "dart",
-        "scala": "scala", "bash": "bash", "sql": "sql",
+        "python": "python",
+        "javascript": "javascript",
+        "typescript": "typescript",
+        "tsx": "typescript",
+        "go": "go",
+        "rust": "rust",
+        "java": "java",
+        "c": "c",
+        "cpp": "cpp",
+        "c_sharp": "csharp",
+        "ruby": "ruby",
+        "php": "php",
+        "swift": "swift",
+        "kotlin": "kotlin",
+        "dart": "dart",
+        "scala": "scala",
+        "bash": "bash",
+        "sql": "sql",
     }.get(lang, "")
 
     import html as html_mod
+
     escaped = html_mod.escape(source)
     lang_class = f" language-{prism_lang}" if prism_lang else ""
-    return HTMLResponse(
-        f'<pre class="code-block"><code class="{lang_class}">{escaped}</code></pre>'
-    )
+    return HTMLResponse(f'<pre class="code-block"><code class="{lang_class}">{escaped}</code></pre>')
 
 
 async def blast_radius_page(request: Request) -> HTMLResponse:
@@ -844,6 +912,7 @@ async def blast_radius_page(request: Request) -> HTMLResponse:
         Rendered HTML response.
     """
     from sylvan.database.orm import Repo
+
     repos = await Repo.where_not(repo_type="library").get()
     repo_names = [r.name for r in repos]
     template = _jinja.get_template("blast_radius.html")
@@ -866,6 +935,7 @@ async def blast_radius_partial(request: Request) -> HTMLResponse:
         return HTMLResponse("<div class='empty-state'>Enter a symbol ID above</div>")
 
     from sylvan.analysis.impact.blast_radius import get_blast_radius as _blast
+
     result = await _blast(symbol_id, max_depth=depth)
 
     if "error" in result:
@@ -904,13 +974,15 @@ async def blast_radius_partial(request: Request) -> HTMLResponse:
     mermaid_code = "\n".join(mermaid_lines)
 
     template = _jinja.get_template("partials/blast_radius_result.html")
-    return HTMLResponse(template.render(
-        result=result,
-        confirmed=confirmed,
-        potential=potential,
-        mermaid_code=mermaid_code,
-        total=len(confirmed) + len(potential),
-    ))
+    return HTMLResponse(
+        template.render(
+            result=result,
+            confirmed=confirmed,
+            potential=potential,
+            mermaid_code=mermaid_code,
+            total=len(confirmed) + len(potential),
+        )
+    )
 
 
 async def symbol_search_partial(request: Request) -> HTMLResponse:
@@ -937,7 +1009,7 @@ async def symbol_search_partial(request: Request) -> HTMLResponse:
             f'<span class="badge badge-{sym["kind"]}">{sym["kind"]}</span> '
             f'<span class="mono text-white" style="font-size:12px">{sym["name"]}</span> '
             f'<span class="mono text-xs text-faint">{sym["file"]}</span>'
-            f'</div>'
+            f"</div>"
         )
     return HTMLResponse("".join(options))
 
@@ -1027,6 +1099,7 @@ def create_dashboard_app() -> Starlette:
     ]
     app = Starlette(routes=routes, middleware=middleware)
     from starlette.middleware.cors import CORSMiddleware
+
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",

@@ -53,9 +53,7 @@ class Blob(Model):
         from sylvan.database.orm.runtime.connection_manager import get_backend
 
         backend = get_backend()
-        row = await backend.fetch_one(
-            "SELECT content FROM blobs WHERE content_hash = ?", [content_hash]
-        )
+        row = await backend.fetch_one("SELECT content FROM blobs WHERE content_hash = ?", [content_hash])
         if row is None:
             return None
         return zlib.decompress(row["content"])

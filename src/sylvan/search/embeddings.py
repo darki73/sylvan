@@ -73,10 +73,10 @@ def get_embedding_provider() -> EmbeddingProvider | None:
     fallback_cls = get_embedding_provider_class("sentence-transformers")
     if fallback_cls is None:
         from sylvan.providers.builtin.sentence_transformers import SentenceTransformerEmbeddingProvider
+
         fallback_cls = SentenceTransformerEmbeddingProvider
     return fallback_cls(
-        model=cfg.embedding.model if cfg.embedding.provider == "sentence-transformers"
-        else "all-MiniLM-L6-v2",
+        model=cfg.embedding.model if cfg.embedding.provider == "sentence-transformers" else "all-MiniLM-L6-v2",
     )
 
 
@@ -103,8 +103,8 @@ async def embed_and_store_symbols(
     stored = 0
 
     for i in range(0, len(texts), batch_size):
-        batch_ids = symbol_ids[i:i + batch_size]
-        batch_texts = texts[i:i + batch_size]
+        batch_ids = symbol_ids[i : i + batch_size]
+        batch_texts = texts[i : i + batch_size]
 
         try:
             vectors = provider.embed(batch_texts)
@@ -148,8 +148,8 @@ async def embed_and_store_sections(
     stored = 0
 
     for i in range(0, len(texts), batch_size):
-        batch_ids = section_ids[i:i + batch_size]
-        batch_texts = texts[i:i + batch_size]
+        batch_ids = section_ids[i : i + batch_size]
+        batch_texts = texts[i : i + batch_size]
 
         try:
             vectors = provider.embed(batch_texts)

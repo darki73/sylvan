@@ -9,9 +9,13 @@ wheels/
 # Virtual environments
 .venv/
 
-# IDE
+# IDE and AI assistants
 .idea/
 .vscode/
+.claude/
+.cursor/
+.windsurf/
+.github/copilot-instructions.md
 *.swp
 *.swo
 

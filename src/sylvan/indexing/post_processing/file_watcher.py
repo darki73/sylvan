@@ -34,7 +34,6 @@ async def watch_folder(
 
     logger.info("watching_folder", path=str(root), debounce_ms=debounce_ms)
 
-
     async for changes in awatch(root, debounce=debounce_ms):
         changed_files = _collect_changed_files(changes, root)
 
@@ -86,10 +85,12 @@ async def _reindex(root: Path, repo_name: str) -> None:
     """
     try:
         from sylvan.indexing.pipeline.orchestrator import index_folder
+
         result = await index_folder(str(root), name=repo_name)
         logger.info(
             "reindex_complete",
-            files=result.files_indexed, symbols=result.symbols_extracted,
+            files=result.files_indexed,
+            symbols=result.symbols_extracted,
         )
     except Exception as e:
         logger.error("reindex_failed", error=str(e))
@@ -105,8 +106,7 @@ def start_watcher_background(folder_path: str, repo_name: str | None = None) -> 
     import threading
 
     def _run() -> None:
-        """Run the async watcher in a new event loop.
-        """
+        """Run the async watcher in a new event loop."""
         asyncio.run(watch_folder(folder_path, repo_name))
 
     thread = threading.Thread(target=_run, daemon=True, name="sylvan-watcher")

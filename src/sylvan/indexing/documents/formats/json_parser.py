@@ -126,8 +126,16 @@ def _walk(
     if isinstance(value, dict) and depth < max_depth:
         for child_key, child_val in value.items():
             _walk(
-                child_key, child_val, depth + 1, max_depth,
-                doc_path, repo, sections, slug_stack, used_slugs, byte_cursor,
+                child_key,
+                child_val,
+                depth + 1,
+                max_depth,
+                doc_path,
+                repo,
+                sections,
+                slug_stack,
+                used_slugs,
+                byte_cursor,
             )
 
 

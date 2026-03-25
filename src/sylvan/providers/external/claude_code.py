@@ -34,6 +34,7 @@ class ClaudeCodeSummaryProvider(SummaryProvider):
         """
         try:
             from claude_agent_sdk import ClaudeAgentOptions, query
+
             return True
         except ImportError:
             return False
@@ -52,6 +53,7 @@ class ClaudeCodeSummaryProvider(SummaryProvider):
             return asyncio.run(self._async_generate(prompt))
         except RuntimeError:
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 return pool.submit(asyncio.run, self._async_generate(prompt)).result(timeout=30)
 

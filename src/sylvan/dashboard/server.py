@@ -53,8 +53,7 @@ async def start_dashboard() -> int | None:
 
 
 async def stop_dashboard() -> None:
-    """Cancel the dashboard background task if running.
-    """
+    """Cancel the dashboard background task if running."""
     global _dashboard_task
     if _dashboard_task is not None:
         _dashboard_task.cancel()

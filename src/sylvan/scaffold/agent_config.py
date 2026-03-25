@@ -39,6 +39,7 @@ def generate_agent_config(
         The generated instruction content as a string.
     """
     import asyncio
+
     return asyncio.run(async_generate_agent_config(repo_name, agent=agent, project_root=project_root))
 
 

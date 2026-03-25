@@ -13,6 +13,7 @@ async def list_libraries() -> dict:
     meta = MetaBuilder()
 
     from sylvan.libraries.manager import async_list_libraries
+
     libs = await async_list_libraries()
     meta.set("count", len(libs))
     return wrap_response({"libraries": libs}, meta.build())

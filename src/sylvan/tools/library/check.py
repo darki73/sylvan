@@ -34,12 +34,17 @@ async def check_library_versions(repo: str) -> dict:
         )
 
     from sylvan.git.dependency_files import parse_dependencies
+
     installed_deps = parse_dependencies(Path(repo_obj.source_path))
 
     if not installed_deps:
         return wrap_response(
-            {"message": "No dependency files found in project root.",
-             "outdated": [], "up_to_date": [], "not_indexed": []},
+            {
+                "message": "No dependency files found in project root.",
+                "outdated": [],
+                "up_to_date": [],
+                "not_indexed": [],
+            },
             meta.build(),
         )
 
@@ -49,11 +54,13 @@ async def check_library_versions(repo: str) -> dict:
     for lib in indexed_libraries:
         if lib.package_manager and lib.package_name:
             key = f"{lib.package_manager}/{lib.package_name}"
-            indexed_by_package.setdefault(key, []).append({
-                "name": lib.name,
-                "version": lib.version,
-                "repo_id": lib.id,
-            })
+            indexed_by_package.setdefault(key, []).append(
+                {
+                    "name": lib.name,
+                    "version": lib.version,
+                    "repo_id": lib.id,
+                }
+            )
 
     outdated: list[dict] = []
     up_to_date: list[dict] = []
@@ -66,37 +73,46 @@ async def check_library_versions(repo: str) -> dict:
         key = f"{manager}/{name}"
 
         if key not in indexed_by_package:
-            not_indexed.append({
-                "manager": manager,
-                "name": name,
-                "installed_version": installed_version,
-            })
+            not_indexed.append(
+                {
+                    "manager": manager,
+                    "name": name,
+                    "installed_version": installed_version,
+                }
+            )
             continue
 
         versions = indexed_by_package[key]
         indexed_versions = [v["version"] for v in versions]
 
         if installed_version in indexed_versions:
-            up_to_date.append({
-                "manager": manager,
-                "name": name,
-                "version": installed_version,
-            })
+            up_to_date.append(
+                {
+                    "manager": manager,
+                    "name": name,
+                    "version": installed_version,
+                }
+            )
         else:
-            outdated.append({
-                "manager": manager,
-                "name": name,
-                "installed_version": installed_version,
-                "indexed_versions": indexed_versions,
-            })
+            outdated.append(
+                {
+                    "manager": manager,
+                    "name": name,
+                    "installed_version": installed_version,
+                    "indexed_versions": indexed_versions,
+                }
+            )
 
     meta.set("total_deps", len(installed_deps))
     meta.set("outdated_count", len(outdated))
     meta.set("up_to_date_count", len(up_to_date))
     meta.set("not_indexed_count", len(not_indexed))
 
-    return wrap_response({
-        "outdated": outdated,
-        "up_to_date": up_to_date,
-        "not_indexed": not_indexed,
-    }, meta.build())
+    return wrap_response(
+        {
+            "outdated": outdated,
+            "up_to_date": up_to_date,
+            "not_indexed": not_indexed,
+        },
+        meta.build(),
+    )

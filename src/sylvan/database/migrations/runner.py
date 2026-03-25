@@ -205,7 +205,8 @@ def create_migration(description: str) -> Path:
     filename = f"{next_version:03d}_{safe_desc}.py"
     filepath = MIGRATIONS_DIR / filename
 
-    filepath.write_text(f'''"""Migration {next_version:03d}: {description}."""
+    filepath.write_text(
+        f'''"""Migration {next_version:03d}: {description}."""
 
 from sylvan.database.backends.base import Dialect, StorageBackend
 from sylvan.database.builder import Schema
@@ -229,6 +230,8 @@ async def down(backend: StorageBackend, dialect: Dialect) -> None:
         dialect: The SQL dialect for database-specific SQL generation.
     """
     schema = Schema(backend)
-''', encoding="utf-8")
+''',
+        encoding="utf-8",
+    )
 
     return filepath

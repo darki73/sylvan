@@ -62,6 +62,7 @@ async def _get_or_create_backend():
             _tool_semaphore = asyncio.Semaphore(config.server.max_concurrent_tools)
 
         import atexit
+
         atexit.register(_shutdown_backend_sync)
 
         # Cluster discovery -- determine leader/follower role
@@ -73,6 +74,7 @@ async def _get_or_create_backend():
             role, session_id, coding_session_id, leader_info = discover_role(cluster_cfg.port)
         else:
             from datetime import UTC, datetime
+
             coding_session_id = f"cs-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
             role, session_id, leader_info = "leader", "standalone", None
 
@@ -80,19 +82,23 @@ async def _get_or_create_backend():
         if role == "follower" and leader_info:
             leader_url = f"http://127.0.0.1:{leader_info.get('http_port', cluster_cfg.port)}"
 
-        set_cluster_state(ClusterState(
-            role=role,
-            session_id=session_id,
-            coding_session_id=coding_session_id,
-            leader_url=leader_url,
-        ))
+        set_cluster_state(
+            ClusterState(
+                role=role,
+                session_id=session_id,
+                coding_session_id=coding_session_id,
+                leader_url=leader_url,
+            )
+        )
         logger.info("cluster_role_set", role=role, session_id=session_id, coding_session_id=coding_session_id)
 
         # Start dashboard only if we're the leader
         from sylvan.cluster.state import get_cluster_state
+
         if get_cluster_state().is_leader:
             try:
                 from sylvan.dashboard.server import start_dashboard
+
                 await start_dashboard()
             except Exception as exc:
                 logger.debug("dashboard_start_skipped", error=str(exc))
@@ -102,6 +108,7 @@ async def _get_or_create_backend():
         # Clean up dead instances from previous runs
         try:
             from sylvan.cluster.heartbeat import cleanup_dead_instances
+
             await cleanup_dead_instances(backend)
         except Exception as exc:
             logger.debug("instance_cleanup_failed", error=str(exc))
@@ -109,6 +116,7 @@ async def _get_or_create_backend():
         # Create/update coding session row
         try:
             from sylvan.cluster.heartbeat import ensure_coding_session
+
             await ensure_coding_session(backend, coding_session_id)
         except Exception as exc:
             logger.debug("coding_session_init_failed", error=str(exc))
@@ -151,6 +159,7 @@ def _shutdown_backend_sync() -> None:
     if _backend is None:
         return
     import contextlib
+
     aio_conn = _backend._connection
     if aio_conn is None:
         _backend = None
@@ -193,6 +202,7 @@ async def list_tools() -> list[Tool]:
     core_names = {t.name for t in core_tools}
 
     from sylvan.extensions import get_registered_tools
+
     ext_tools = [
         Tool(name=info["name"], description=info["description"], inputSchema=info["schema"])
         for info in get_registered_tools().values()
@@ -267,12 +277,21 @@ async def _dispatch(name: str, arguments: dict) -> dict:
     # followers don't proxy write tools before the agent sees the rules)
     from sylvan.config import get_config as _get_gate_config
     from sylvan.session.tracker import get_session as _early_session
+
     _ungated = {
-        "get_workflow_guide", "list_repos", "list_libraries",
-        "get_session_stats", "get_dashboard_url", "get_server_config",
-        "get_logs", "suggest_queries", "index_folder",
-        "configure_claude_code", "configure_cursor",
-        "configure_windsurf", "configure_copilot",
+        "get_workflow_guide",
+        "list_repos",
+        "list_libraries",
+        "get_session_stats",
+        "get_dashboard_url",
+        "get_server_config",
+        "get_logs",
+        "suggest_queries",
+        "index_folder",
+        "configure_claude_code",
+        "configure_cursor",
+        "configure_windsurf",
+        "configure_copilot",
     }
     _gate_enabled = _get_gate_config().server.workflow_gate
     if _gate_enabled and not _early_session()._workflow_loaded and name not in _ungated:
@@ -323,6 +342,7 @@ async def _dispatch(name: str, arguments: dict) -> dict:
 
         try:
             from sylvan.session.tracker import get_session as _get_session
+
             session = _get_session()
             session.record_tool_call(name)
 
@@ -353,6 +373,7 @@ async def _dispatch(name: str, arguments: dict) -> dict:
                         repo_id = meta.get("repo_id")
                         if repo_id:
                             from sylvan.session.usage_stats import record_usage
+
                             eff_kwargs: dict[str, int] = {}
                             if category == "search":
                                 eff_kwargs["tokens_returned_search"] = returned
@@ -369,9 +390,11 @@ async def _dispatch(name: str, arguments: dict) -> dict:
             finally:
                 try:
                     from sylvan.session.usage_stats import get_accumulator
+
                     acc = get_accumulator()
                     if acc._call_count >= acc._FLUSH_INTERVAL:
                         from sylvan.session.usage_stats import async_flush_usage
+
                         await async_flush_usage()
                 except Exception as flush_exc:
                     logger.debug("usage_flush_failed", error=str(flush_exc))
@@ -530,6 +553,7 @@ def _get_handlers() -> dict[str, Callable[..., dict]]:
 
     # Merge extension tool handlers (cannot overwrite core tools)
     from sylvan.extensions import get_registered_tools
+
     for name, info in get_registered_tools().items():
         if name in handlers:
             logger.warning("extension_tool_conflicts_with_core", tool=name)
@@ -624,6 +648,7 @@ async def _get_dashboard_url(**_kwargs: object) -> dict:
         Dict with 'url' key, or 'message' if dashboard is not available.
     """
     from sylvan.dashboard.server import get_dashboard_url
+
     url = get_dashboard_url()
     if url:
         return {"url": url, "status": "running"}
@@ -648,6 +673,7 @@ async def _get_usage_stats(args: dict) -> dict:
         async_get_overall_usage,
         async_get_project_usage,
     )
+
     session = get_session()
     session_stats = session.get_session_stats()
     session_stats["token_efficiency"] = session.get_efficiency_stats()
@@ -666,10 +692,7 @@ async def _get_usage_stats(args: dict) -> dict:
             retrieval_eq = project_stats.get("total_tokens_equivalent_retrieval", 0)
             total_eq = search_eq + retrieval_eq
             total_ret = search_ret + retrieval_ret
-            reduction = (
-                round((1 - total_ret / total_eq) * 100, 1)
-                if total_eq > 0 else 0.0
-            )
+            reduction = round((1 - total_ret / total_eq) * 100, 1) if total_eq > 0 else 0.0
             project_stats["efficiency"] = {
                 "search": {"returned": search_ret, "equivalent": search_eq},
                 "retrieval": {"returned": retrieval_ret, "equivalent": retrieval_eq},
@@ -703,54 +726,49 @@ async def _get_usage_stats(args: dict) -> dict:
             "instances_spawned": cs.instances_spawned,
         }
 
-    active_instances = await (
-        Instance.where_null("ended_at")
-        .order_by("role")
-        .order_by("last_heartbeat", "DESC")
-        .get()
-    )
+    active_instances = await Instance.where_null("ended_at").order_by("role").order_by("last_heartbeat", "DESC").get()
     instances_list = []
     for inst in active_instances:
         alive = _is_pid_alive(inst.pid)
         eq = inst.efficiency_equivalent or 0
         ret = inst.efficiency_returned or 0
-        instances_list.append({
-            "instance_id": inst.instance_id,
-            "coding_session_id": inst.coding_session_id,
-            "pid": inst.pid,
-            "role": inst.role or "unknown",
-            "alive": alive,
-            "tool_calls": inst.tool_calls or 0,
-            "efficiency_returned": ret,
-            "efficiency_equivalent": eq,
-            "reduction_percent": round((1 - ret / eq) * 100, 1) if eq > 0 else 0,
-            "last_heartbeat": inst.last_heartbeat or "",
-        })
+        instances_list.append(
+            {
+                "instance_id": inst.instance_id,
+                "coding_session_id": inst.coding_session_id,
+                "pid": inst.pid,
+                "role": inst.role or "unknown",
+                "alive": alive,
+                "tool_calls": inst.tool_calls or 0,
+                "efficiency_returned": ret,
+                "efficiency_equivalent": eq,
+                "reduction_percent": round((1 - ret / eq) * 100, 1) if eq > 0 else 0,
+                "last_heartbeat": inst.last_heartbeat or "",
+            }
+        )
     result["cluster"]["instances"] = instances_list
     result["cluster"]["active_count"] = sum(1 for s in instances_list if s["alive"])
     result["cluster"]["total_tool_calls"] = sum(s["tool_calls"] for s in instances_list if s["alive"])
 
-    history_sessions = await (
-        CodingSession.query()
-        .order_by("started_at", "DESC")
-        .limit(10)
-        .get()
-    )
+    history_sessions = await CodingSession.query().order_by("started_at", "DESC").limit(10).get()
     history = []
     for h in history_sessions:
         eq = h.total_efficiency_equivalent or 0
         ret = h.total_efficiency_returned or 0
-        history.append({
-            "id": h.id,
-            "started_at": h.started_at,
-            "ended_at": h.ended_at,
-            "total_tool_calls": h.total_tool_calls or 0,
-            "instances_spawned": h.instances_spawned or 0,
-            "reduction_percent": round((1 - ret / eq) * 100, 1) if eq > 0 else 0,
-        })
+        history.append(
+            {
+                "id": h.id,
+                "started_at": h.started_at,
+                "ended_at": h.ended_at,
+                "total_tool_calls": h.total_tool_calls or 0,
+                "instances_spawned": h.instances_spawned or 0,
+                "reduction_percent": round((1 - ret / eq) * 100, 1) if eq > 0 else 0,
+            }
+        )
     result["cluster"]["coding_session_history"] = history
 
     from sylvan.database.orm.runtime.query_cache import get_query_cache
+
     result["cache"] = get_query_cache().stats()
 
     return result

@@ -16,6 +16,7 @@ async def remove_library(name: str) -> dict:
     meta = MetaBuilder()
 
     from sylvan.libraries.manager import async_remove_library
+
     result = await async_remove_library(name)
     meta.set("status", result.get("status", ""))
     return wrap_response(result, meta.build())

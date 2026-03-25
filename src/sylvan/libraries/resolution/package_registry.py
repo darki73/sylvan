@@ -110,7 +110,7 @@ def parse_package_spec(spec: str) -> tuple[str, str, str]:
             # Go modules can have slashes -- split on LAST @
             idx = rest.rfind("@")
             name = rest[:idx]
-            version = rest[idx + 1:]
+            version = rest[idx + 1 :]
         else:
             name, version = rest.rsplit("@", 1)
     else:
@@ -177,7 +177,9 @@ def _resolve_version_only(manager: str, name: str) -> str:
                 r.raise_for_status()
                 return r.json()["info"]["version"]
             case "npm":
-                r = httpx.get(f"https://registry.npmjs.org/{name}/latest", timeout=REGISTRY_TIMEOUT, follow_redirects=True)
+                r = httpx.get(
+                    f"https://registry.npmjs.org/{name}/latest", timeout=REGISTRY_TIMEOUT, follow_redirects=True
+                )
                 r.raise_for_status()
                 return r.json().get("version", "latest")
     except Exception as exc:

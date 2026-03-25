@@ -29,10 +29,17 @@ async def compute_quality_metrics(
 
     symbols = await (
         Symbol.query()
-        .select("symbols.symbol_id", "symbols.name", "symbols.kind",
-                "symbols.signature", "symbols.docstring",
-                "symbols.byte_offset", "symbols.byte_length",
-                "f.content_hash", "f.path")
+        .select(
+            "symbols.symbol_id",
+            "symbols.name",
+            "symbols.kind",
+            "symbols.signature",
+            "symbols.docstring",
+            "symbols.byte_offset",
+            "symbols.byte_length",
+            "f.content_hash",
+            "f.path",
+        )
         .join("files f", "f.id = symbols.file_id")
         .where("f.repo_id", repo_id)
         .get()
@@ -50,7 +57,7 @@ async def compute_quality_metrics(
         content = await Blob.get(tf.content_hash)
         if content:
             text = content.decode("utf-8", errors="replace")
-            for match in re.finditer(r'\b([a-zA-Z_]\w{2,})\b', text):
+            for match in re.finditer(r"\b([a-zA-Z_]\w{2,})\b", text):
                 tested_names.add(match.group(1))
 
     scored = 0
@@ -68,7 +75,7 @@ async def compute_quality_metrics(
         if content_hash:
             content = await Blob.get(content_hash)
             if content:
-                source = content[sym.byte_offset:sym.byte_offset + sym.byte_length]
+                source = content[sym.byte_offset : sym.byte_offset + sym.byte_length]
                 source_text = source.decode("utf-8", errors="replace")
                 complexity = _estimate_complexity(source_text)
 
@@ -129,8 +136,7 @@ async def get_low_quality_symbols(
     """
     query = (
         Quality.query()
-        .select("quality.*", "s.name", "s.qualified_name", "s.kind",
-                "s.language", "s.signature", "f.path as file_path")
+        .select("quality.*", "s.name", "s.qualified_name", "s.kind", "s.language", "s.signature", "f.path as file_path")
         .join("symbols s", "s.symbol_id = quality.symbol_id")
         .join("files f", "f.id = s.file_id")
         .join("repos r", "r.id = f.repo_id")
@@ -148,11 +154,7 @@ async def get_low_quality_symbols(
     if untested_only or undocumented_only or min_complexity > 0:
         query = query.where_group(_quality_filters)
 
-    results = await (
-        query.order_by("quality.complexity", "DESC")
-        .limit(limit)
-        .get()
-    )
+    results = await query.order_by("quality.complexity", "DESC").limit(limit).get()
 
     return [
         {
@@ -185,13 +187,11 @@ def _has_type_annotations(signature: str) -> bool:
     """
     if "->" in signature or ": " in signature:
         return True
-    return bool(re.search(r':\s*\w+', signature))
+    return bool(re.search(r":\s*\w+", signature))
 
 
 # Keywords that increase cyclomatic complexity
-_BRANCH_KEYWORDS = re.compile(
-    r'\b(if|elif|else|for|while|except|catch|case|switch|and|or|&&|\|\|)\b'
-)
+_BRANCH_KEYWORDS = re.compile(r"\b(if|elif|else|for|while|except|catch|case|switch|and|or|&&|\|\|)\b")
 
 
 def _estimate_complexity(source: str) -> int:

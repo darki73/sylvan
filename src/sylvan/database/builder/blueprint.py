@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from enum import StrEnum, auto
 from typing import Self
 
-_SAFE_NAME = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+_SAFE_NAME = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 """Regex pattern for validating DDL identifiers against injection."""
 
 
@@ -378,10 +378,7 @@ class Blueprint:
         Returns:
             One SQL statement per new column.
         """
-        return [
-            f"ALTER TABLE {self._table_name} ADD COLUMN {col.to_sql()}"
-            for col in self._columns
-        ]
+        return [f"ALTER TABLE {self._table_name} ADD COLUMN {col.to_sql()}" for col in self._columns]
 
     def to_index_sql(self) -> list[str]:
         """Compile all indexes to ``CREATE INDEX`` statements.
@@ -394,8 +391,5 @@ class Blueprint:
             idx_name = idx.name or f"idx_{self._table_name}_{'_'.join(idx.columns)}"
             unique = "UNIQUE " if idx.unique else ""
             cols = ", ".join(idx.columns)
-            stmts.append(
-                f"CREATE {unique}INDEX IF NOT EXISTS {idx_name} "
-                f"ON {self._table_name}({cols})"
-            )
+            stmts.append(f"CREATE {unique}INDEX IF NOT EXISTS {idx_name} ON {self._table_name}({cols})")
         return stmts

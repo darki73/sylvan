@@ -10,8 +10,8 @@ _REQUIRED_PERMISSION = "mcp__sylvan__*"
 _REQUIRED_HOOK = {
     "type": "command",
     "command": (
-        "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SubagentStart\","
-        "\"additionalContext\":\"CRITICAL: Always try mcp__sylvan__* tools FIRST "
+        'echo \'{"hookSpecificOutput":{"hookEventName":"SubagentStart",'
+        '"additionalContext":"CRITICAL: Always try mcp__sylvan__* tools FIRST '
         "before falling back to Read/Grep/Glob. "
         "mcp__sylvan__search_symbols to find code, "
         "mcp__sylvan__get_symbol to read source, "
@@ -39,43 +39,54 @@ def _check_setup(cwd: Path) -> list[dict]:
     settings_path = cwd / ".claude" / "settings.local.json"
 
     if not settings_path.exists():
-        actions.append({
-            "action": "create_settings",
-            "path": str(settings_path),
-            "detail": (
-                "Create .claude/settings.local.json with permissions.allow "
-                "containing 'mcp__sylvan__*' and a SubagentStart hook."
-            ),
-            "content": json.dumps({
-                "permissions": {"allow": [_REQUIRED_PERMISSION]},
-                "hooks": {
-                    "SubagentStart": [{
-                        "matcher": "*",
-                        "hooks": [_REQUIRED_HOOK],
-                    }],
-                },
-            }, indent=2),
-        })
+        actions.append(
+            {
+                "action": "create_settings",
+                "path": str(settings_path),
+                "detail": (
+                    "Create .claude/settings.local.json with permissions.allow "
+                    "containing 'mcp__sylvan__*' and a SubagentStart hook."
+                ),
+                "content": json.dumps(
+                    {
+                        "permissions": {"allow": [_REQUIRED_PERMISSION]},
+                        "hooks": {
+                            "SubagentStart": [
+                                {
+                                    "matcher": "*",
+                                    "hooks": [_REQUIRED_HOOK],
+                                }
+                            ],
+                        },
+                    },
+                    indent=2,
+                ),
+            }
+        )
         return actions
 
     try:
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        actions.append({
-            "action": "fix_json",
-            "path": str(settings_path),
-            "detail": "Settings file exists but has invalid JSON. Fix it manually.",
-        })
+        actions.append(
+            {
+                "action": "fix_json",
+                "path": str(settings_path),
+                "detail": "Settings file exists but has invalid JSON. Fix it manually.",
+            }
+        )
         return actions
 
     # Check permission
     allows = settings.get("permissions", {}).get("allow", [])
     if _REQUIRED_PERMISSION not in allows:
-        actions.append({
-            "action": "add_permission",
-            "path": str(settings_path),
-            "detail": f"Add '{_REQUIRED_PERMISSION}' to permissions.allow array.",
-        })
+        actions.append(
+            {
+                "action": "add_permission",
+                "path": str(settings_path),
+                "detail": f"Add '{_REQUIRED_PERMISSION}' to permissions.allow array.",
+            }
+        )
 
     # Check SubagentStart hook
     hooks = settings.get("hooks", {})
@@ -89,20 +100,24 @@ def _check_setup(cwd: Path) -> list[dict]:
                 break
 
     if not has_sylvan_hook:
-        actions.append({
-            "action": "add_subagent_hook",
-            "path": str(settings_path),
-            "detail": (
-                "Add a SubagentStart hook that injects sylvan tool instructions "
-                "into all subagents. Merge this into the existing hooks section."
-            ),
-            "hook_config": {
-                "SubagentStart": [{
-                    "matcher": "*",
-                    "hooks": [_REQUIRED_HOOK],
-                }],
-            },
-        })
+        actions.append(
+            {
+                "action": "add_subagent_hook",
+                "path": str(settings_path),
+                "detail": (
+                    "Add a SubagentStart hook that injects sylvan tool instructions "
+                    "into all subagents. Merge this into the existing hooks section."
+                ),
+                "hook_config": {
+                    "SubagentStart": [
+                        {
+                            "matcher": "*",
+                            "hooks": [_REQUIRED_HOOK],
+                        }
+                    ],
+                },
+            }
+        )
 
     return actions
 
@@ -127,6 +142,7 @@ async def get_workflow_guide(project_path: str | None = None) -> dict:
     meta = MetaBuilder()
 
     from sylvan.session.tracker import get_session
+
     session = get_session()
 
     # Resolve the project directory — prefer explicit param, then session, then cwd

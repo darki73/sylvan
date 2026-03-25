@@ -15,10 +15,12 @@ def register_summary_provider(name: str) -> Callable[[type], type]:
     Returns:
         Decorator that registers the provider class.
     """
+
     def decorator(cls: type) -> type:
         """Store the provider class in the summary registry."""
         _SUMMARY_PROVIDERS[name] = cls
         return cls
+
     return decorator
 
 
@@ -31,10 +33,12 @@ def register_embedding_provider(name: str) -> Callable[[type], type]:
     Returns:
         Decorator that registers the provider class.
     """
+
     def decorator(cls: type) -> type:
         """Store the provider class in the embedding registry."""
         _EMBEDDING_PROVIDERS[name] = cls
         return cls
+
     return decorator
 
 

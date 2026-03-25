@@ -49,8 +49,11 @@ async def pin_library(workspace: str, library: str) -> dict:
     meta.set("workspace", workspace)
     meta.set("library", library)
     meta.set("repo_id", repo.id)
-    return wrap_response({
-        "status": "pinned",
-        "workspace": workspace,
-        "library": library,
-    }, meta.build())
+    return wrap_response(
+        {
+            "status": "pinned",
+            "workspace": workspace,
+            "library": library,
+        },
+        meta.build(),
+    )

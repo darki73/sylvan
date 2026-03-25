@@ -73,13 +73,15 @@ def _search_provider_columns(
                 combined = f"{col_name} {col_desc} {model_name}"
                 score = _match_score(query_lower, combined)
                 if score > 0.0:
-                    results.append({
-                        "model": model_name,
-                        "column": col_name,
-                        "description": col_desc,
-                        "score": round(score, 3),
-                        "provider": provider.name,
-                    })
+                    results.append(
+                        {
+                            "model": model_name,
+                            "column": col_name,
+                            "description": col_desc,
+                            "score": round(score, 3),
+                            "provider": provider.name,
+                        }
+                    )
 
     results.sort(key=lambda r: r["score"], reverse=True)
     return results[:max_results]

@@ -40,8 +40,9 @@ class QuerySearchMixin:
         self._fts_query = prepare_fts_query(query)
         return self
 
-    def similar_to(self: QueryBuilder[T], text_or_vector: str | list[float], k: int = 20,
-                   weight: float = 0.3) -> QueryBuilder[T]:
+    def similar_to(
+        self: QueryBuilder[T], text_or_vector: str | list[float], k: int = 20, weight: float = 0.3
+    ) -> QueryBuilder[T]:
         """Add vector similarity search.
 
         The actual vector query syntax is handled by the dialect.
@@ -145,8 +146,11 @@ class QuerySearchMixin:
         fts_weight = 1.0 - self._vec_weight
 
         merged = reciprocal_rank_fusion(
-            fts_results, vec_results, id_key=pk,
-            fts_weight=fts_weight, vec_weight=self._vec_weight,
+            fts_results,
+            vec_results,
+            id_key=pk,
+            fts_weight=fts_weight,
+            vec_weight=self._vec_weight,
         )
 
         limit = self._limit_val or 20

@@ -34,9 +34,7 @@ class SylvanContext:
     identity_map: Any = None
 
 
-_current_context: contextvars.ContextVar[SylvanContext | None] = contextvars.ContextVar(
-    "sylvan_context", default=None
-)
+_current_context: contextvars.ContextVar[SylvanContext | None] = contextvars.ContextVar("sylvan_context", default=None)
 
 
 def get_context() -> SylvanContext:
@@ -141,18 +139,21 @@ def _build_default_context() -> SylvanContext:
 
     try:
         from sylvan.config import get_config
+
         ctx.config = get_config()
     except Exception as exc:
         logger.warning("context_component_failed", component="config", error=str(exc))
 
     try:
         from sylvan.session.tracker import get_session
+
         ctx.session = get_session()
     except Exception as exc:
         logger.warning("context_component_failed", component="session", error=str(exc))
 
     try:
         from sylvan.database.orm.runtime.query_cache import get_query_cache
+
         ctx.cache = get_query_cache()
     except Exception as exc:
         logger.warning("context_component_failed", component="cache", error=str(exc))

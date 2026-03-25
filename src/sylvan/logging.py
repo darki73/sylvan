@@ -111,6 +111,7 @@ def configure_logging(
                 foreign_pre_chain=foreign_pre_chain,
             )
             from logging.handlers import RotatingFileHandler
+
             file_handler = RotatingFileHandler(
                 str(log_file),
                 maxBytes=10 * 1024 * 1024,
@@ -120,10 +121,12 @@ def configure_logging(
             file_handler.setFormatter(file_formatter)
             file_handler.setLevel(logging.DEBUG)
             _original_emit = file_handler.emit
+
             def _flushing_emit(record, _orig=_original_emit):
                 """Emit and immediately flush to ensure log lines are visible for debugging."""
                 _orig(record)
                 file_handler.flush()
+
             file_handler.emit = _flushing_emit
             root.addHandler(file_handler)
         except Exception:  # noqa: S110 -- can't log about logging failure
@@ -132,10 +135,20 @@ def configure_logging(
     root.setLevel(logging.DEBUG)
 
     noisy_loggers = (
-        "httpx", "httpcore", "urllib3", "huggingface_hub",
-        "onnxruntime", "filelock", "aiosqlite", "asyncio",
-        "mcp", "mcp.server", "mcp.server.lowlevel",
-        "mcp.server.lowlevel.server", "mcp.shared", "mcp.server.stdio",
+        "httpx",
+        "httpcore",
+        "urllib3",
+        "huggingface_hub",
+        "onnxruntime",
+        "filelock",
+        "aiosqlite",
+        "asyncio",
+        "mcp",
+        "mcp.server",
+        "mcp.server.lowlevel",
+        "mcp.server.lowlevel.server",
+        "mcp.shared",
+        "mcp.server.stdio",
     )
     for name in noisy_loggers:
         logging.getLogger(name).setLevel(logging.WARNING)
@@ -164,8 +177,7 @@ _configured = False
 
 
 def _auto_configure() -> None:
-    """Apply default logging configuration on first import.
-    """
+    """Apply default logging configuration on first import."""
     global _configured
     if _configured:
         return

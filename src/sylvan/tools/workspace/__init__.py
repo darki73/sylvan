@@ -44,6 +44,7 @@ async def add_to_workspace(workspace: str, repo: str) -> dict:
 
     repo_ids = await async_get_workspace_repo_ids(backend, workspace)
     from sylvan.analysis.impact.cross_repo import resolve_cross_repo_imports
+
     resolved = await resolve_cross_repo_imports(repo_ids)
 
     ws = await async_get_workspace(backend, workspace)
@@ -84,6 +85,7 @@ async def index_workspace(
 
     repo_ids = await async_get_workspace_repo_ids(backend, workspace)
     from sylvan.analysis.impact.cross_repo import resolve_cross_repo_imports
+
     resolved = await resolve_cross_repo_imports(repo_ids)
 
     total_files = sum(r["files_indexed"] for r in results)
@@ -96,11 +98,14 @@ async def index_workspace(
     meta.set("total_sections", total_sections)
     meta.set("cross_repo_imports_resolved", resolved)
 
-    return wrap_response({
-        "workspace": workspace,
-        "repos": results,
-        "cross_repo_imports_resolved": resolved,
-    }, meta.build())
+    return wrap_response(
+        {
+            "workspace": workspace,
+            "repos": results,
+            "cross_repo_imports_resolved": resolved,
+        },
+        meta.build(),
+    )
 
 
 @log_tool_call
@@ -131,6 +136,7 @@ async def workspace_blast_radius(
         raise WorkspaceNotFoundError(workspace=workspace, _meta=meta.build())
 
     from sylvan.analysis.impact.cross_repo import cross_repo_blast_radius
+
     result = await cross_repo_blast_radius(symbol_id, repo_ids, max_depth=min(depth, 3))
 
     meta.set("confirmed_count", len(result.get("confirmed", [])))
@@ -169,10 +175,12 @@ async def workspace_search(
     if not repo_ids:
         raise WorkspaceNotFoundError(workspace=workspace, _meta=meta.build())
 
-    query_builder = (Symbol.search(query)
-          .join("files", "files.id = symbols.file_id")
-          .join("repos", "repos.id = files.repo_id")
-          .where_in("files.repo_id", repo_ids))
+    query_builder = (
+        Symbol.search(query)
+        .join("files", "files.id = symbols.file_id")
+        .join("repos", "repos.id = files.repo_id")
+        .where_in("files.repo_id", repo_ids)
+    )
 
     if kind:
         query_builder = query_builder.where("symbols.kind", kind)

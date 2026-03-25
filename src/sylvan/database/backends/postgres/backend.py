@@ -45,14 +45,12 @@ class PostgresBackend(BaseBackend):
         self._pool = None
 
     async def connect(self) -> None:
-        """Create the connection pool and verify pgvector is available.
-        """
+        """Create the connection pool and verify pgvector is available."""
         try:
             import asyncpg
         except ImportError as exc:
             raise ImportError(
-                "asyncpg is required for PostgreSQL support. "
-                "Install with: pip install sylvan[postgres]"
+                "asyncpg is required for PostgreSQL support. Install with: pip install sylvan[postgres]"
             ) from exc
 
         self._pool = await asyncpg.create_pool(
@@ -71,8 +69,7 @@ class PostgresBackend(BaseBackend):
         logger.info("postgres_backend_ready", dsn=self.dsn.split("@")[-1])
 
     async def disconnect(self) -> None:
-        """Close the connection pool.
-        """
+        """Close the connection pool."""
         if self._pool is not None:
             await self._pool.close()
             self._pool = None
@@ -88,9 +85,7 @@ class PostgresBackend(BaseBackend):
             RuntimeError: If the backend is not connected.
         """
         if self._pool is None:
-            raise RuntimeError(
-                "PostgresBackend is not connected. Call connect() first."
-            )
+            raise RuntimeError("PostgresBackend is not connected. Call connect() first.")
         return self._pool
 
     @property
@@ -186,8 +181,7 @@ class PostgresBackend(BaseBackend):
         """
 
     async def rollback(self) -> None:
-        """No-op for PostgreSQL — transaction rollback is handled by the pool.
-        """
+        """No-op for PostgreSQL — transaction rollback is handled by the pool."""
 
     async def ensure_schema(self, ddl: str) -> None:
         """Execute DDL statements.

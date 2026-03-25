@@ -27,8 +27,7 @@ class UsageAccumulator:
     _FLUSH_INTERVAL = 5  # flush every N increments
 
     def __init__(self) -> None:
-        """Initialize the accumulator with empty pending state.
-        """
+        """Initialize the accumulator with empty pending state."""
         self._lock = threading.Lock()
         self._pending: dict[int, dict] = {}  # repo_id -> {field: delta}
         self._call_count = 0
@@ -87,8 +86,7 @@ class UsageAccumulator:
             self._call_count += 1
 
     def flush(self) -> None:
-        """Force flush pending stats to DB (sync).
-        """
+        """Force flush pending stats to DB (sync)."""
         with self._lock:
             self._flush_locked()
 
@@ -107,6 +105,7 @@ class UsageAccumulator:
 
         try:
             from sylvan.context import get_context
+
             ctx = get_context()
             if ctx.backend is not None:
                 today = date.today().isoformat()
@@ -210,6 +209,7 @@ class UsageAccumulator:
             conn.close()
         except Exception as e:
             from sylvan.logging import get_logger
+
             get_logger(__name__).debug("usage_flush_failed", error=str(e))
 
         self._pending.clear()
@@ -273,14 +273,12 @@ def record_usage(
 
 
 def flush_usage() -> None:
-    """Force flush any pending usage stats (sync).
-    """
+    """Force flush any pending usage stats (sync)."""
     get_accumulator().flush()
 
 
 async def async_flush_usage() -> None:
-    """Force flush any pending usage stats (async).
-    """
+    """Force flush any pending usage stats (async)."""
     await get_accumulator().async_flush()
 
 
@@ -326,12 +324,18 @@ def get_project_usage(conn: sqlite3.Connection, repo_id: int) -> dict:
     ).fetchone()
 
     empty_project = {
-        "days_active": 0, "total_tool_calls": 0, "total_tokens_returned": 0,
-        "total_tokens_avoided": 0, "total_symbols_retrieved": 0,
+        "days_active": 0,
+        "total_tool_calls": 0,
+        "total_tokens_returned": 0,
+        "total_tokens_avoided": 0,
+        "total_symbols_retrieved": 0,
         "total_sections_retrieved": 0,
-        "total_tokens_returned_search": 0, "total_tokens_equivalent_search": 0,
-        "total_tokens_returned_retrieval": 0, "total_tokens_equivalent_retrieval": 0,
-        "first_used": None, "last_used": None,
+        "total_tokens_returned_search": 0,
+        "total_tokens_equivalent_search": 0,
+        "total_tokens_returned_retrieval": 0,
+        "total_tokens_equivalent_retrieval": 0,
+        "first_used": None,
+        "last_used": None,
     }
     if row is None or row["total_tool_calls"] is None:
         return empty_project
@@ -403,12 +407,19 @@ def get_overall_usage(conn: sqlite3.Connection) -> dict:
     ).fetchone()
 
     empty_overall = {
-        "repos_used": 0, "days_active": 0, "total_tool_calls": 0,
-        "total_tokens_returned": 0, "total_tokens_avoided": 0,
-        "total_symbols_retrieved": 0, "total_sections_retrieved": 0,
-        "total_tokens_returned_search": 0, "total_tokens_equivalent_search": 0,
-        "total_tokens_returned_retrieval": 0, "total_tokens_equivalent_retrieval": 0,
-        "first_used": None, "last_used": None,
+        "repos_used": 0,
+        "days_active": 0,
+        "total_tool_calls": 0,
+        "total_tokens_returned": 0,
+        "total_tokens_avoided": 0,
+        "total_symbols_retrieved": 0,
+        "total_sections_retrieved": 0,
+        "total_tokens_returned_search": 0,
+        "total_tokens_equivalent_search": 0,
+        "total_tokens_returned_retrieval": 0,
+        "total_tokens_equivalent_retrieval": 0,
+        "first_used": None,
+        "last_used": None,
     }
     if row is None or row["total_tool_calls"] is None:
         return empty_overall

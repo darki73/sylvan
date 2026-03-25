@@ -77,10 +77,7 @@ async def _suggest_structure_exploration(repo_id: int, repo: str) -> dict | None
     Returns:
         A suggestion dict, or None if no structure suggestion applies.
     """
-    languages = await (FileRecord.where(repo_id=repo_id)
-                 .where_not_null("language")
-                 .group_by("language")
-                 .count())
+    languages = await FileRecord.where(repo_id=repo_id).where_not_null("language").group_by("language").count()
     if languages:
         lang_names = ", ".join(languages.keys()) if isinstance(languages, dict) else ""
         return {
@@ -101,10 +98,9 @@ async def _suggest_documentation(repo_id: int, repo: str) -> dict | None:
     Returns:
         A suggestion dict, or None if no documentation exists.
     """
-    doc_count = await (Section.query()
-                 .join("files", "files.id = sections.file_id")
-                 .where("files.repo_id", repo_id)
-                 .count())
+    doc_count = await (
+        Section.query().join("files", "files.id = sections.file_id").where("files.repo_id", repo_id).count()
+    )
     if doc_count > 0:
         return {
             "query": f"get_toc for {repo}",
@@ -128,9 +124,7 @@ async def _suggest_unexplored_files(repo_id: int, session: object) -> dict | Non
     if not seen_files:
         return None
 
-    all_file_paths = await (FileRecord.where(repo_id=repo_id)
-                      .order_by("path")
-                      .pluck("path"))
+    all_file_paths = await FileRecord.where(repo_id=repo_id).order_by("path").pluck("path")
     unseen = [p for p in all_file_paths if p not in seen_files]
     if unseen:
         return {

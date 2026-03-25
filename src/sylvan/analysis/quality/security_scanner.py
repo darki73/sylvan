@@ -135,9 +135,7 @@ async def scan_security(repo_id: int) -> list[SecurityFinding]:
         for rule_name, severity, pattern, message in SECURITY_RULES:
             for match in pattern.finditer(text):
                 line_num = text[: match.start()].count("\n") + 1
-                snippet_line = (
-                    lines[line_num - 1].strip() if line_num <= len(lines) else ""
-                )
+                snippet_line = lines[line_num - 1].strip() if line_num <= len(lines) else ""
 
                 if _NOQA_MARKER in (lines[line_num - 1] if line_num <= len(lines) else ""):
                     continue

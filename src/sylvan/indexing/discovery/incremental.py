@@ -32,11 +32,7 @@ async def get_files_to_reindex(
         if changed:
             return changed
 
-    stored_files = await (
-        FileRecord.where(repo_id=repo_id)
-        .select("path", "mtime")
-        .get()
-    )
+    stored_files = await FileRecord.where(repo_id=repo_id).select("path", "mtime").get()
 
     if not stored_files:
         return None

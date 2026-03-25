@@ -207,9 +207,7 @@ class Schema:
         _validate_name(idx_name)
         unique_kw = "UNIQUE " if unique else ""
         cols = ", ".join(columns)
-        await self._backend.ensure_schema(
-            f"CREATE {unique_kw}INDEX IF NOT EXISTS {idx_name} ON {table}({cols})"
-        )
+        await self._backend.ensure_schema(f"CREATE {unique_kw}INDEX IF NOT EXISTS {idx_name} ON {table}({cols})")
 
     async def create_index_quoted(
         self,
@@ -231,9 +229,7 @@ class Schema:
         idx_name = name or f"idx_{table}_{'_'.join(columns)}"
         _validate_name(idx_name)
         cols = ", ".join(columns)
-        await self._backend.ensure_schema(
-            f'CREATE INDEX IF NOT EXISTS {idx_name} ON "{table}"({cols})'
-        )
+        await self._backend.ensure_schema(f'CREATE INDEX IF NOT EXISTS {idx_name} ON "{table}"({cols})')
 
     async def drop_index(self, name: str) -> None:
         """Drop an index if it exists.
@@ -368,6 +364,7 @@ class Schema:
         if dimensions is None:
             try:
                 from sylvan.config import get_config
+
                 dimensions = get_config().embedding.dimensions
             except Exception:
                 dimensions = 384
@@ -415,9 +412,7 @@ class Schema:
         _validate_name(name)
         _validate_name(table)
         await self._backend.ensure_schema(
-            f"CREATE TRIGGER IF NOT EXISTS {name} {event} ON {table} BEGIN\n"
-            f"    {body}\n"
-            f"END"
+            f"CREATE TRIGGER IF NOT EXISTS {name} {event} ON {table} BEGIN\n    {body}\nEND"
         )
 
     async def drop_trigger(self, name: str) -> None:

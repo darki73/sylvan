@@ -165,12 +165,14 @@ def _validate_path(folder_path: str, result: IndexResult) -> Path:
 
     if not Path(folder_path).is_absolute():
         logger.warning("relative_path_resolved", original=folder_path, resolved=str(root))
-        result.warnings.append({
-            "warning": "relative_path_resolved",
-            "original": folder_path,
-            "resolved": str(root),
-            "detail": "A relative path was given -- resolved to an absolute path.",
-        })
+        result.warnings.append(
+            {
+                "warning": "relative_path_resolved",
+                "original": folder_path,
+                "resolved": str(root),
+                "detail": "A relative path was given -- resolved to an absolute path.",
+            }
+        )
 
     return root
 
@@ -279,8 +281,10 @@ async def _maybe_start_background(repo_id: int) -> None:
     """
     try:
         import asyncio
+
         loop = asyncio.get_running_loop()
         from sylvan.indexing.post_processing.background_tasks import start_background_tasks
+
         loop.create_task(start_background_tasks(repo_id))
     except RuntimeError:
         logger.debug("skipping_background_tasks", reason="no_event_loop")

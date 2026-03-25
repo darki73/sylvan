@@ -40,10 +40,12 @@ def warm_up() -> None:
     from sylvan.tools.library import add, list, remove  # noqa: F401
     from sylvan.tools.meta import list_repos, scaffold, suggest_queries  # noqa: F401
     from sylvan.tools.search import search_sections, search_symbols, search_text  # noqa: F401
+
     logger.info("warmup_tools_imported")
 
     try:
         from sylvan.extensions.loader import load_extensions
+
         count = load_extensions()
         if count:
             logger.info("warmup_extensions_loaded", count=count)
@@ -52,6 +54,7 @@ def warm_up() -> None:
 
     try:
         from sylvan.search.embeddings import get_embedding_provider
+
         provider = get_embedding_provider()
         if provider and provider.available():
             provider.embed_one("warmup")
@@ -84,26 +87,31 @@ def _register_signal_handlers() -> None:
         """
         try:
             from sylvan.session.usage_stats import flush_all
+
             flush_all()
         except Exception as exc:
             logger.warning("flush_all_failed_on_signal", error=str(exc))
         try:
             from sylvan.cluster.heartbeat import stop_heartbeat_sync
+
             stop_heartbeat_sync()
         except Exception as exc:
             logger.warning("stop_heartbeat_failed_on_signal", error=str(exc))
         try:
             from sylvan.dashboard.server import stop_dashboard_sync
+
             stop_dashboard_sync()
         except Exception as exc:
             logger.warning("stop_dashboard_failed_on_signal", error=str(exc))
         try:
             from sylvan.cluster.discovery import cleanup_leader
+
             cleanup_leader()
         except Exception as exc:
             logger.warning("cleanup_leader_failed_on_signal", error=str(exc))
         try:
             from sylvan.server import _shutdown_backend_sync
+
             _shutdown_backend_sync()
         except Exception as exc:
             logger.warning("shutdown_backend_failed_on_signal", error=str(exc))
@@ -112,6 +120,7 @@ def _register_signal_handlers() -> None:
 
     signal.signal(signal.SIGTERM, _flush_and_exit)
     import contextlib
+
     with contextlib.suppress(OSError, ValueError):
         signal.signal(signal.SIGINT, _flush_and_exit)
 
@@ -181,20 +190,25 @@ def main(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8420) ->
     finally:
         try:
             from sylvan.session.usage_stats import flush_all
+
             flush_all()
-        except Exception:
+        except Exception:  # noqa: S110 -- shutdown must not crash on cleanup
             pass
         try:
             from sylvan.cluster.heartbeat import stop_heartbeat_sync
+
             stop_heartbeat_sync()
-        except Exception:
+        except Exception:  # noqa: S110 -- shutdown must not crash on cleanup
             pass
         try:
             from sylvan.dashboard.server import stop_dashboard_sync
+
             stop_dashboard_sync()
-        except Exception:
+        except Exception:  # noqa: S110 -- shutdown must not crash on cleanup
             pass
         from sylvan.cluster.discovery import cleanup_leader
+
         cleanup_leader()
         from sylvan.server import _shutdown_backend_sync
+
         _shutdown_backend_sync()

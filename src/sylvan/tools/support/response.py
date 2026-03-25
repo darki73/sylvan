@@ -50,6 +50,7 @@ def log_tool_call(func: Callable[..., Any]) -> Callable[..., Any]:
         Wrapped function with automatic logging.
     """
     if inspect.iscoroutinefunction(func):
+
         @functools.wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             """Async logging wrapper for tool handlers."""
@@ -65,8 +66,10 @@ def log_tool_call(func: Callable[..., Any]) -> Callable[..., Any]:
                 elapsed_ms = (time.monotonic() - start) * 1000
                 _tool_logger.error("tool_call_error", tool=tool_name, error=str(exc), elapsed_ms=round(elapsed_ms, 1))
                 raise
+
         return async_wrapper
     else:
+
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             """Sync logging wrapper for tool handlers."""
@@ -82,6 +85,7 @@ def log_tool_call(func: Callable[..., Any]) -> Callable[..., Any]:
                 elapsed_ms = (time.monotonic() - start) * 1000
                 _tool_logger.error("tool_call_error", tool=tool_name, error=str(exc), elapsed_ms=round(elapsed_ms, 1))
                 raise
+
         return wrapper
 
 
@@ -96,8 +100,7 @@ class MetaBuilder:
     """
 
     def __init__(self) -> None:
-        """Initialize the builder and start the timing clock.
-        """
+        """Initialize the builder and start the timing clock."""
         self._start = time.monotonic()
         self._data: dict[str, Any] = {}
         self._returned_tokens: int = 0
@@ -152,9 +155,7 @@ class MetaBuilder:
             result["token_efficiency"] = {
                 "returned": self._returned_tokens,
                 "equivalent_file_read": self._equivalent_tokens,
-                "reduction_percent": round(
-                    (1 - self._returned_tokens / self._equivalent_tokens) * 100, 1
-                ),
+                "reduction_percent": round((1 - self._returned_tokens / self._equivalent_tokens) * 100, 1),
                 "method": self._efficiency_method,
             }
         return result
@@ -180,6 +181,7 @@ def wrap_response(data: dict, meta: dict, include_hints: bool = False) -> dict:
         hints: dict = {}
         try:
             from sylvan.session.tracker import get_session
+
             session = get_session()
             needs = session.predict_next_needs()
             if needs.get("working_files"):
@@ -268,8 +270,7 @@ async def check_staleness(repo_id: int, result: dict) -> dict:
 
     if is_stale:
         result["_stale"] = (
-            "Index may be outdated -- files have changed since last indexing. "
-            "Re-run index_folder to refresh."
+            "Index may be outdated -- files have changed since last indexing. Re-run index_folder to refresh."
         )
     return result
 
@@ -332,6 +333,7 @@ async def record_savings(
         return
 
     from sylvan.tools.support.token_counting import estimate_savings
+
     file_text = file_content.decode("utf-8", errors="replace")
     savings = estimate_savings(
         returned_bytes=len(returned_text.encode("utf-8")),
@@ -349,6 +351,7 @@ async def record_savings(
         meta.record_token_efficiency(tokens_returned, total_file_tokens)
 
     from sylvan.session.usage_stats import record_usage
+
     record_usage(
         repo_id=file_record.repo_id,
         tokens_returned=tokens_returned,
@@ -363,8 +366,7 @@ _schema_ready = False
 
 
 def reset_orm() -> None:
-    """Reset ORM state. Used by tests that change SYLVAN_HOME between runs.
-    """
+    """Reset ORM state. Used by tests that change SYLVAN_HOME between runs."""
     global _schema_ready
     _schema_ready = False
 
@@ -381,6 +383,7 @@ def ensure_orm() -> None:
         return
 
     from sylvan.context import get_context
+
     ctx = get_context()
     if ctx.backend is not None:
         _schema_ready = True

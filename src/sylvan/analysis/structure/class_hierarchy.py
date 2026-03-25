@@ -7,10 +7,10 @@ from sylvan.database.orm import Symbol
 
 # Patterns to extract base classes from signatures
 _EXTENDS_PATTERNS = [
-    re.compile(r'class\s+\w+\s*\(([^)]+)\)'),      # Python
-    re.compile(r'class\s+\w+\s+extends\s+(\w+)'),   # JS/TS/Java
-    re.compile(r'class\s+\w+\s*:\s*(?:public|private|protected)?\s*(\w+)'),  # C++/C#
-    re.compile(r'implements\s+([\w,\s]+)'),           # Java/TS interfaces
+    re.compile(r"class\s+\w+\s*\(([^)]+)\)"),  # Python
+    re.compile(r"class\s+\w+\s+extends\s+(\w+)"),  # JS/TS/Java
+    re.compile(r"class\s+\w+\s*:\s*(?:public|private|protected)?\s*(\w+)"),  # C++/C#
+    re.compile(r"implements\s+([\w,\s]+)"),  # Java/TS interfaces
 ]
 
 
@@ -63,8 +63,14 @@ async def get_class_hierarchy(
             Symbol.where(name=base_name)
             .where_in("kind", ["class", "type"])
             .join("files f", "f.id = symbols.file_id")
-            .select("symbols.symbol_id", "symbols.name", "symbols.kind",
-                    "symbols.signature", "f.path as file_path", "symbols.line_start")
+            .select(
+                "symbols.symbol_id",
+                "symbols.name",
+                "symbols.kind",
+                "symbols.signature",
+                "f.path as file_path",
+                "symbols.line_start",
+            )
             .limit(1)
             .first()
         )
@@ -82,18 +88,26 @@ async def get_class_hierarchy(
             parent_bases = _extract_bases(base_sym.signature or "")
             queue.extend(parent_bases)
         else:
-            ancestors.append({
-                "name": base_name,
-                "kind": "class",
-                "file_path": "(external)",
-                "line_start": 0,
-            })
+            ancestors.append(
+                {
+                    "name": base_name,
+                    "kind": "class",
+                    "file_path": "(external)",
+                    "line_start": 0,
+                }
+            )
 
     all_classes = await (
         Symbol.where_in("kind", ["class", "type"])
         .join("files f", "f.id = symbols.file_id")
-        .select("symbols.symbol_id", "symbols.name", "symbols.kind",
-                "symbols.signature", "f.path as file_path", "symbols.line_start")
+        .select(
+            "symbols.symbol_id",
+            "symbols.name",
+            "symbols.kind",
+            "symbols.signature",
+            "f.path as file_path",
+            "symbols.line_start",
+        )
         .get()
     )
 
@@ -153,8 +167,8 @@ def _extract_bases(signature: str) -> list[str]:
             raw = m.group(1)
             for raw_name in raw.split(","):
                 cleaned = raw_name.strip()
-                cleaned = re.sub(r'<[^>]*>', '', cleaned).strip()
-                cleaned = re.split(r'\s+', cleaned)[-1]
+                cleaned = re.sub(r"<[^>]*>", "", cleaned).strip()
+                cleaned = re.split(r"\s+", cleaned)[-1]
                 if cleaned and cleaned[0].isupper() and cleaned not in ("object", "Object"):
                     bases.append(cleaned)
     return bases

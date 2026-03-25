@@ -23,6 +23,7 @@ async def get_blast_radius(symbol_id: str, depth: int = 2) -> dict:
     ensure_orm()
 
     from sylvan.analysis.impact.blast_radius import get_blast_radius as _blast
+
     result = await _blast(symbol_id, max_depth=depth)
     meta.set("confirmed_count", len(result.get("confirmed", [])))
     meta.set("potential_count", len(result.get("potential", [])))
@@ -51,13 +52,15 @@ async def batch_blast_radius(symbol_ids: list[str], depth: int = 2) -> dict:
     for sid in symbol_ids:
         try:
             result = await _blast(sid, max_depth=depth)
-            results.append({
-                "symbol_id": sid,
-                "confirmed": result.get("confirmed", []),
-                "potential": result.get("potential", []),
-                "confirmed_count": len(result.get("confirmed", [])),
-                "potential_count": len(result.get("potential", [])),
-            })
+            results.append(
+                {
+                    "symbol_id": sid,
+                    "confirmed": result.get("confirmed", []),
+                    "potential": result.get("potential", []),
+                    "confirmed_count": len(result.get("confirmed", [])),
+                    "potential_count": len(result.get("potential", [])),
+                }
+            )
         except Exception as exc:
             results.append({"symbol_id": sid, "error": str(exc)})
 

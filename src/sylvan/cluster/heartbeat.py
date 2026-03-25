@@ -22,9 +22,7 @@ async def ensure_coding_session(backend, coding_session_id: str) -> None:
         coding_session_id: The coding session identifier.
     """
     now = datetime.now(UTC).isoformat()
-    existing = await backend.fetch_one(
-        "SELECT id FROM coding_sessions WHERE id = ?", [coding_session_id]
-    )
+    existing = await backend.fetch_one("SELECT id FROM coding_sessions WHERE id = ?", [coding_session_id])
     if existing is None:
         await backend.execute(
             "INSERT INTO coding_sessions (id, started_at, instances_spawned) VALUES (?, ?, 1)",
@@ -201,12 +199,15 @@ async def push_stats_to_leader(session_tracker, cache, instance_id: str) -> None
 
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(f"{state.leader_url}/api/session/heartbeat", json={
-                "session_id": instance_id,
-                "stats": stats,
-                "efficiency": efficiency,
-                "cache": cache_stats,
-            })
+            await client.post(
+                f"{state.leader_url}/api/session/heartbeat",
+                json={
+                    "session_id": instance_id,
+                    "stats": stats,
+                    "efficiency": efficiency,
+                    "cache": cache_stats,
+                },
+            )
     except Exception as exc:
         logger.debug("heartbeat_push_failed", error=str(exc))
 
@@ -236,7 +237,9 @@ async def start_heartbeat(
         nonlocal current_role
         while True:
             try:
-                await flush_instance_to_db(backend, session_tracker, cache, instance_id, coding_session_id, current_role)
+                await flush_instance_to_db(
+                    backend, session_tracker, cache, instance_id, coding_session_id, current_role
+                )
                 if current_role == "follower":
                     await push_stats_to_leader(session_tracker, cache, instance_id)
                     if await _should_promote():
@@ -296,15 +299,18 @@ async def _promote_to_leader(backend: object, instance_id: str, coding_session_i
     _LEADER_FILE.parent.mkdir(parents=True, exist_ok=True)
     _LEADER_FILE.write_text(json.dumps(leader_data, indent=2))
 
-    set_cluster_state(ClusterState(
-        role="leader",
-        session_id=instance_id,
-        coding_session_id=coding_session_id,
-        leader_url=None,
-    ))
+    set_cluster_state(
+        ClusterState(
+            role="leader",
+            session_id=instance_id,
+            coding_session_id=coding_session_id,
+            leader_url=None,
+        )
+    )
 
     try:
         from sylvan.dashboard.server import start_dashboard
+
         await start_dashboard()
     except Exception as exc:
         logger.debug("dashboard_start_on_promote_failed", error=str(exc))

@@ -15,8 +15,7 @@ class IdentityMap:
     """
 
     def __init__(self) -> None:
-        """Initialize an empty identity map.
-        """
+        """Initialize an empty identity map."""
         self._map: dict[tuple[type, Any], Any] = {}
 
     def get(self, model_class: type, pk_value: Any) -> Any | None:
@@ -52,8 +51,7 @@ class IdentityMap:
         self._map.pop((model_class, pk_value), None)
 
     def clear(self) -> None:
-        """Clear the entire map.
-        """
+        """Clear the entire map."""
         self._map.clear()
 
     def __len__(self) -> int:

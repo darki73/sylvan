@@ -80,9 +80,15 @@ async def get_related(symbol_id: str, max_results: int = 10) -> dict:
 
     candidates = await (
         Symbol.query()
-        .select("symbols.symbol_id", "symbols.name", "symbols.kind",
-                "symbols.language", "symbols.signature",
-                "symbols.file_id", "f.path as file_path")
+        .select(
+            "symbols.symbol_id",
+            "symbols.name",
+            "symbols.kind",
+            "symbols.language",
+            "symbols.signature",
+            "symbols.file_id",
+            "f.path as file_path",
+        )
         .join("files f", "f.id = symbols.file_id")
         .where("f.repo_id", target_file.repo_id)
         .where_not(symbol_id=symbol_id)
@@ -94,13 +100,18 @@ async def get_related(symbol_id: str, max_results: int = 10) -> dict:
     for c in candidates:
         score = _score_candidate(c, target_file_id, target_tokens)
         if score > 0:
-            scored.append((score, {
-                "symbol_id": c.symbol_id,
-                "name": c.name,
-                "kind": c.kind,
-                "file_path": getattr(c, "file_path", ""),
-                "signature": c.signature or "",
-            }))
+            scored.append(
+                (
+                    score,
+                    {
+                        "symbol_id": c.symbol_id,
+                        "name": c.name,
+                        "kind": c.kind,
+                        "file_path": getattr(c, "file_path", ""),
+                        "signature": c.signature or "",
+                    },
+                )
+            )
 
     scored.sort(key=lambda x: -x[0])
     top = scored[:max_results]
@@ -118,6 +129,4 @@ async def get_related(symbol_id: str, max_results: int = 10) -> dict:
     ]
 
     meta.set("count", len(results))
-    return wrap_response(
-        {"symbol_id": symbol_id, "related": results}, meta.build()
-    )
+    return wrap_response({"symbol_id": symbol_id, "related": results}, meta.build())

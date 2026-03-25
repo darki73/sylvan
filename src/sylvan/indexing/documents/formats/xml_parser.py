@@ -104,8 +104,14 @@ def _walk_element(
     if depth < _MAX_DEPTH:
         for child in elem:
             _walk_element(
-                child, depth + 1, doc_path, repo,
-                sections, slug_stack, used_slugs, byte_cursor,
+                child,
+                depth + 1,
+                doc_path,
+                repo,
+                sections,
+                slug_stack,
+                used_slugs,
+                byte_cursor,
             )
 
 

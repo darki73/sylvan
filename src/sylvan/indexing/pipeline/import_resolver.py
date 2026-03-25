@@ -14,26 +14,102 @@ from sylvan.logging import get_logger
 logger = get_logger(__name__)
 
 # Go standard library packages (single-segment, no dots).
-_GO_STDLIB = frozenset({
-    "archive", "bufio", "builtin", "bytes", "cmp", "compress", "container",
-    "context", "crypto", "database", "debug", "embed", "encoding", "errors",
-    "expvar", "flag", "fmt", "go", "hash", "html", "image", "index", "io",
-    "iter", "log", "maps", "math", "mime", "net", "os", "path", "plugin",
-    "reflect", "regexp", "runtime", "slices", "sort", "strconv", "strings",
-    "structs", "sync", "syscall", "testing", "text", "time", "unicode",
-    "unsafe",
-})
+_GO_STDLIB = frozenset(
+    {
+        "archive",
+        "bufio",
+        "builtin",
+        "bytes",
+        "cmp",
+        "compress",
+        "container",
+        "context",
+        "crypto",
+        "database",
+        "debug",
+        "embed",
+        "encoding",
+        "errors",
+        "expvar",
+        "flag",
+        "fmt",
+        "go",
+        "hash",
+        "html",
+        "image",
+        "index",
+        "io",
+        "iter",
+        "log",
+        "maps",
+        "math",
+        "mime",
+        "net",
+        "os",
+        "path",
+        "plugin",
+        "reflect",
+        "regexp",
+        "runtime",
+        "slices",
+        "sort",
+        "strconv",
+        "strings",
+        "structs",
+        "sync",
+        "syscall",
+        "testing",
+        "text",
+        "time",
+        "unicode",
+        "unsafe",
+    }
+)
 
 # Common C/C++ system headers (angle-bracket includes to skip).
-_C_SYSTEM_HEADERS = frozenset({
-    "stdio.h", "stdlib.h", "string.h", "math.h", "time.h", "assert.h",
-    "ctype.h", "errno.h", "float.h", "limits.h", "locale.h", "setjmp.h",
-    "signal.h", "stdarg.h", "stddef.h", "stdint.h", "stdbool.h",
-    "iostream", "fstream", "sstream", "vector", "string", "map", "set",
-    "unordered_map", "unordered_set", "algorithm", "memory", "functional",
-    "utility", "numeric", "cassert", "cmath", "cstdio", "cstdlib",
-    "cstring", "ctime", "climits", "cfloat",
-})
+_C_SYSTEM_HEADERS = frozenset(
+    {
+        "stdio.h",
+        "stdlib.h",
+        "string.h",
+        "math.h",
+        "time.h",
+        "assert.h",
+        "ctype.h",
+        "errno.h",
+        "float.h",
+        "limits.h",
+        "locale.h",
+        "setjmp.h",
+        "signal.h",
+        "stdarg.h",
+        "stddef.h",
+        "stdint.h",
+        "stdbool.h",
+        "iostream",
+        "fstream",
+        "sstream",
+        "vector",
+        "string",
+        "map",
+        "set",
+        "unordered_map",
+        "unordered_set",
+        "algorithm",
+        "memory",
+        "functional",
+        "utility",
+        "numeric",
+        "cassert",
+        "cmath",
+        "cstdio",
+        "cstdlib",
+        "cstring",
+        "ctime",
+        "climits",
+        "cfloat",
+    }
+)
 
 
 async def resolve_imports(repo_id: int) -> int:
@@ -72,7 +148,7 @@ async def resolve_imports(repo_id: int) -> int:
         # Also index without configured source-root prefixes for package resolution.
         for prefix in source_roots:
             if prefix and f.path.startswith(prefix):
-                path_to_id[f.path[len(prefix):]] = f.id
+                path_to_id[f.path[len(prefix) :]] = f.id
 
     # Get all unresolved imports with their source file info.
     rows = await backend.fetch_all(
@@ -120,7 +196,9 @@ async def resolve_imports(repo_id: int) -> int:
 
 
 def _generate_candidates(
-    specifier: str, language: str, source_path: str,
+    specifier: str,
+    language: str,
+    source_path: str,
 ) -> list[str]:
     """Generate candidate file paths from an import specifier.
 
@@ -316,7 +394,7 @@ def _rust_candidates(specifier: str, source_path: str) -> list[str]:
         return []
 
     if specifier.startswith("crate::"):
-        remainder = specifier[len("crate::"):]
+        remainder = specifier[len("crate::") :]
         # Remove the last segment (it's typically the item, not a module).
         parts = remainder.split("::")
         if len(parts) > 1:
@@ -346,7 +424,9 @@ def _rust_candidates(specifier: str, source_path: str) -> list[str]:
 
 
 def _java_candidates(
-    specifier: str, source_path: str, language: str,
+    specifier: str,
+    source_path: str,
+    language: str,
 ) -> list[str]:
     """Generate candidate paths for a Java/Kotlin import specifier.
 
@@ -499,7 +579,7 @@ async def resolve_cross_repo_imports(repo_ids: list[int]) -> int:
         path_to_id[row["path"]] = row["id"]
         for prefix in source_roots:
             if prefix and row["path"].startswith(prefix):
-                path_to_id[row["path"][len(prefix):]] = row["id"]
+                path_to_id[row["path"][len(prefix) :]] = row["id"]
 
     # Get all unresolved imports across these repos.
     rows = await backend.fetch_all(

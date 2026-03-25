@@ -122,8 +122,7 @@ class QueryRelationMixin:
         related_model = rel_desc.related_model
         related_table = related_model.__table__
         subq = (
-            f"SELECT 1 FROM {related_table} "
-            f"WHERE {related_table}.{rel_desc.local_key} = {table}.{rel_desc.foreign_key}"
+            f"SELECT 1 FROM {related_table} WHERE {related_table}.{rel_desc.local_key} = {table}.{rel_desc.foreign_key}"
         )
         if getattr(related_model, "__soft_deletes__", False):
             subq += f" AND {related_table}.deleted_at IS NULL"
@@ -142,8 +141,7 @@ class QueryRelationMixin:
         related_model = rel_desc.related_model
         related_table = related_model.__table__
         subq = (
-            f"SELECT 1 FROM {related_table} "
-            f"WHERE {related_table}.{rel_desc.foreign_key} = {table}.{rel_desc.local_key}"
+            f"SELECT 1 FROM {related_table} WHERE {related_table}.{rel_desc.foreign_key} = {table}.{rel_desc.local_key}"
         )
         if getattr(related_model, "__soft_deletes__", False):
             subq += f" AND {related_table}.deleted_at IS NULL"

@@ -56,7 +56,8 @@ def _validate_file_path(source_path: Path, file_path: str, meta: MetaBuilder) ->
     except ValueError as exc:
         raise IndexFileNotFoundError(
             f"Path '{file_path}' resolves outside the repository root.",
-            file_path=file_path, _meta=meta.build(),
+            file_path=file_path,
+            _meta=meta.build(),
         ) from exc
 
     if not abs_path.is_file():
@@ -93,7 +94,9 @@ async def _check_unchanged(repo_id: int, rel_path: str, content_hash: str, meta:
     return None
 
 
-async def _upsert_file_record(repo_id: int, rel_path: str, language: str | None, content_hash: str, abs_path: Path) -> FileRecord:
+async def _upsert_file_record(
+    repo_id: int, rel_path: str, language: str | None, content_hash: str, abs_path: Path
+) -> FileRecord:
     """Create or update the file record with current metadata.
 
     Args:
@@ -176,11 +179,21 @@ async def _extract_symbols_and_imports(
         await Symbol.upsert(
             conflict_columns=["symbol_id"],
             update_columns=[
-                "file_id", "name", "qualified_name", "kind",
-                "language", "signature", "docstring", "summary",
-                "decorators", "keywords",
-                "line_start", "line_end", "byte_offset",
-                "byte_length", "content_hash",
+                "file_id",
+                "name",
+                "qualified_name",
+                "kind",
+                "language",
+                "signature",
+                "docstring",
+                "summary",
+                "decorators",
+                "keywords",
+                "line_start",
+                "line_end",
+                "byte_offset",
+                "byte_length",
+                "content_hash",
             ],
             file_id=sym.file_id,
             symbol_id=sym.symbol_id,
@@ -290,7 +303,10 @@ async def index_file(
         if content_str:
             if language:
                 symbols_extracted, imports_extracted = await _extract_symbols_and_imports(
-                    file_id, rel_path, content_str, language,
+                    file_id,
+                    rel_path,
+                    content_str,
+                    language,
                 )
 
             idx_result = IndexResult()

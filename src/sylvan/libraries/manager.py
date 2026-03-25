@@ -99,6 +99,7 @@ async def async_add_library(
     fetch_source(info.repo_url, info.tag, dest, timeout=timeout)
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(dest), name=display_name)
 
     backend = get_backend()
@@ -209,40 +210,16 @@ async def async_remove_library(spec: str) -> dict:
     repo_id = repo.id
 
     files_q = FileRecord.where(repo_id=repo_id).to_subquery("id")
-    symbols_q = (
-        Symbol.query()
-        .where_in_subquery("file_id", files_q)
-        .to_subquery("symbol_id")
-    )
+    symbols_q = Symbol.query().where_in_subquery("file_id", files_q).to_subquery("symbol_id")
 
     counts: dict[str, int] = {}
 
     async with backend.transaction():
-        counts["references"] = await (
-            Reference.query()
-            .where_in_subquery("source_symbol_id", symbols_q)
-            .delete()
-        )
-        counts["quality"] = await (
-            Quality.query()
-            .where_in_subquery("symbol_id", symbols_q)
-            .delete()
-        )
-        counts["file_imports"] = await (
-            FileImport.query()
-            .where_in_subquery("file_id", files_q)
-            .delete()
-        )
-        counts["sections"] = await (
-            Section.query()
-            .where_in_subquery("file_id", files_q)
-            .delete()
-        )
-        counts["symbols"] = await (
-            Symbol.query()
-            .where_in_subquery("file_id", files_q)
-            .delete()
-        )
+        counts["references"] = await Reference.query().where_in_subquery("source_symbol_id", symbols_q).delete()
+        counts["quality"] = await Quality.query().where_in_subquery("symbol_id", symbols_q).delete()
+        counts["file_imports"] = await FileImport.query().where_in_subquery("file_id", files_q).delete()
+        counts["sections"] = await Section.query().where_in_subquery("file_id", files_q).delete()
+        counts["symbols"] = await Symbol.query().where_in_subquery("file_id", files_q).delete()
         counts["files"] = await FileRecord.where(repo_id=repo_id).delete()
         await repo.delete()
         counts["repos"] = 1
@@ -417,8 +394,5 @@ async def async_update_library(spec: str, timeout: int = 120) -> dict:
         "new_name": new_result.get("name", ""),
         "files_indexed": new_result.get("files_indexed", 0),
         "symbols_extracted": new_result.get("symbols_extracted", 0),
-        "hint": (
-            "Use compare_library_versions to see what changed, then "
-            "pin_library to update specific workspaces."
-        ),
+        "hint": ("Use compare_library_versions to see what changed, then pin_library to update specific workspaces."),
     }

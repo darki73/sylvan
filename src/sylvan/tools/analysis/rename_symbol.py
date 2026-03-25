@@ -76,21 +76,25 @@ async def rename_symbol(symbol_id: str, new_name: str) -> dict:
         file_has_edits = False
         for line_num, line in enumerate(lines, start=1):
             if pattern.search(line):
-                edits.append({
-                    "file": file_path,
-                    "line": line_num,
-                    "old_text": line.rstrip("\r"),
-                    "new_text": pattern.sub(new_name, line).rstrip("\r"),
-                })
+                edits.append(
+                    {
+                        "file": file_path,
+                        "line": line_num,
+                        "old_text": line.rstrip("\r"),
+                        "new_text": pattern.sub(new_name, line).rstrip("\r"),
+                    }
+                )
                 file_has_edits = True
 
         if file_has_edits:
             files_with_edits.add(file_path)
-            hint_reads.append({
-                "read_file": file_path,
-                "read_offset": 1,
-                "read_limit": len(lines),
-            })
+            hint_reads.append(
+                {
+                    "read_file": file_path,
+                    "read_offset": 1,
+                    "read_limit": len(lines),
+                }
+            )
 
     if target_content_hash:
         await _scan_file(target_file_path, target_content_hash)

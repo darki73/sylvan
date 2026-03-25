@@ -22,6 +22,7 @@ def _get_model(model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
     if _model is not None and _model_name == model_name:
         return _model
     from fastembed import TextEmbedding
+
     _model = TextEmbedding(model_name)
     _model_name = model_name
     return _model
@@ -67,6 +68,7 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
         """
         try:
             from fastembed import TextEmbedding
+
             return True
         except ImportError:
             return False

@@ -17,6 +17,7 @@ def load_overrides() -> dict[str, str]:
         Dictionary mapping ``"manager/package"`` to repository URL strings.
     """
     from sylvan.config import get_config
+
     return dict(get_config().overrides)
 
 
@@ -28,6 +29,7 @@ def save_override(key: str, repo_url: str) -> None:
         repo_url: Git repository URL to associate.
     """
     from sylvan.config import get_config
+
     get_config().set_override(key, repo_url)
     logger.info("registry_override_saved", key=key, repo_url=repo_url)
 
@@ -42,6 +44,7 @@ def remove_override(key: str) -> bool:
         ``True`` if the key existed and was removed.
     """
     from sylvan.config import get_config
+
     removed = get_config().remove_override(key)
     if removed:
         logger.info("registry_override_removed", key=key)

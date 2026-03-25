@@ -289,6 +289,7 @@ class QueryWhereMixin:
             # Produces: WHERE (summary IS NULL OR summary = ?)
         """
         from sylvan.database.orm.query.builder import QueryBuilder
+
         inner = QueryBuilder(self._model)
         callback(inner)
         if not inner._wheres:

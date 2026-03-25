@@ -74,13 +74,11 @@ class StorageBackend(Protocol):
     """
 
     async def connect(self) -> None:
-        """Establish the database connection.
-        """
+        """Establish the database connection."""
         ...
 
     async def disconnect(self) -> None:
-        """Close the database connection.
-        """
+        """Close the database connection."""
         ...
 
     async def execute(self, sql: str, params: list[Any] | None = None) -> int:
@@ -144,13 +142,11 @@ class StorageBackend(Protocol):
         ...
 
     async def commit(self) -> None:
-        """Commit the current transaction.
-        """
+        """Commit the current transaction."""
         ...
 
     async def rollback(self) -> None:
-        """Roll back the current transaction.
-        """
+        """Roll back the current transaction."""
         ...
 
     async def ensure_schema(self, ddl: str) -> None:

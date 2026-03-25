@@ -28,6 +28,7 @@ async def get_server_config() -> dict:
             break
 
     from sylvan.config import get_config
+
     cfg = get_config()
 
     config = {
@@ -50,6 +51,7 @@ async def get_server_config() -> dict:
 
     try:
         from sylvan.dashboard.server import get_dashboard_url
+
         config["dashboard_url"] = get_dashboard_url()
     except Exception:  # noqa: S110 -- dashboard may not be running
         pass

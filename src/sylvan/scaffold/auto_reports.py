@@ -25,10 +25,9 @@ async def async_generate_dependencies_internal(repo_name: str) -> str:
     if not repo:
         return ""
 
-    imports = await (FileImport.query()
-               .join("files", "files.id = file_imports.file_id")
-               .where("files.repo_id", repo.id)
-               .get())
+    imports = await (
+        FileImport.query().join("files", "files.id = file_imports.file_id").where("files.repo_id", repo.id).get()
+    )
 
     deps: dict[str, set[str]] = defaultdict(set)
     for imp in imports:
@@ -65,6 +64,7 @@ async def async_generate_dependencies_external(repo_name: str) -> str:
         return "# External Dependencies\n\nNo source path available.\n"
 
     from sylvan.git.dependency_files import parse_dependencies
+
     deps = parse_dependencies(Path(repo.source_path))
 
     lines = ["# External Dependencies\n"]
@@ -133,11 +133,13 @@ async def async_generate_entry_points(repo_name: str) -> str:
         return ""
 
     entry_names = {"main", "app", "cli", "run", "start", "serve", "server"}
-    entries = await (Symbol.query()
-               .join("files", "files.id = symbols.file_id")
-               .where("files.repo_id", repo.id)
-               .where(kind="function")
-               .get())
+    entries = await (
+        Symbol.query()
+        .join("files", "files.id = symbols.file_id")
+        .where("files.repo_id", repo.id)
+        .where(kind="function")
+        .get()
+    )
 
     found = [symbol for symbol in entries if symbol.name in entry_names]
 
@@ -170,6 +172,7 @@ async def async_generate_recent_changes(repo_name: str) -> str:
         return "# Recent Changes\n\nNo source path available.\n"
 
     from sylvan.git.diff import get_commit_log
+
     commits = get_commit_log(Path(repo.source_path), max_count=20)
 
     lines = ["# Recent Changes\n"]
@@ -196,6 +199,7 @@ async def async_generate_hot_files(repo_name: str) -> str:
         return "# Hot Files\n\nNo source path available.\n"
 
     from sylvan.git.blame import get_change_frequency
+
     root = Path(repo.source_path)
 
     files = await FileRecord.where(repo_id=repo.id).order_by("path").get()

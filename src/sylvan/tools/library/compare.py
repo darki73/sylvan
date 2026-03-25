@@ -94,12 +94,14 @@ async def compare_library_versions(
         old_sig = old_by_name[name]["signature"]
         new_sig = new_by_name[name]["signature"]
         if old_sig != new_sig:
-            changed.append({
-                "qualified_name": name,
-                "kind": old_by_name[name]["kind"],
-                "old_signature": old_sig,
-                "new_signature": new_sig,
-            })
+            changed.append(
+                {
+                    "qualified_name": name,
+                    "kind": old_by_name[name]["kind"],
+                    "old_signature": old_sig,
+                    "new_signature": new_sig,
+                }
+            )
 
     meta.set("from_version", from_version)
     meta.set("to_version", to_version)
@@ -108,17 +110,20 @@ async def compare_library_versions(
     meta.set("changed_count", len(changed))
     meta.set("breaking_risk", "high" if removed or changed else "low")
 
-    return wrap_response({
-        "package": package,
-        "from_version": from_version,
-        "to_version": to_version,
-        "added": added[:50],
-        "removed": removed[:50],
-        "changed": changed[:50],
-        "summary": {
-            "total_added": len(added),
-            "total_removed": len(removed),
-            "total_changed": len(changed),
-            "breaking_risk": "high" if removed or changed else "low",
+    return wrap_response(
+        {
+            "package": package,
+            "from_version": from_version,
+            "to_version": to_version,
+            "added": added[:50],
+            "removed": removed[:50],
+            "changed": changed[:50],
+            "summary": {
+                "total_added": len(added),
+                "total_removed": len(removed),
+                "total_changed": len(changed),
+                "breaking_risk": "high" if removed or changed else "low",
+            },
         },
-    }, meta.build())
+        meta.build(),
+    )

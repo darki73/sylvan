@@ -37,7 +37,9 @@ async def async_generate_project_md(repo_name: str) -> str:
     for symbol in symbols:
         kinds[symbol.kind] += 1
 
-    sections = await Section.query().join("files", "files.id = sections.file_id").where("files.repo_id", repo.id).count()
+    sections = (
+        await Section.query().join("files", "files.id = sections.file_id").where("files.repo_id", repo.id).count()
+    )
 
     primary_lang = max(langs, key=langs.get) if langs else "unknown"
 
@@ -111,10 +113,7 @@ async def async_generate_module_doc(repo_name: str, module_path: str) -> str:
     if not repo:
         return ""
 
-    files = await (FileRecord.where(repo_id=repo.id)
-             .where_like("path", f"{module_path}/%")
-             .order_by("path")
-             .get())
+    files = await FileRecord.where(repo_id=repo.id).where_like("path", f"{module_path}/%").order_by("path").get()
 
     lines = [f"# Module: `{module_path}/`\n"]
 

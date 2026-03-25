@@ -33,6 +33,7 @@ def _resolve_model(ref: str | type) -> type:
     """
     if isinstance(ref, str):
         from sylvan.database.orm.runtime.model_registry import get_model
+
         return get_model(ref)
     return ref
 

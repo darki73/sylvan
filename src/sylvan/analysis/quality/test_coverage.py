@@ -104,9 +104,7 @@ async def analyze_test_coverage(repo_id: int) -> dict:
     for sym in all_symbols:
         module = file_id_to_module.get(sym.file_id, "")
         name_called = sym.name in called_names
-        module_imported = any(
-            spec in module or module in spec for spec in imported_specifiers
-        )
+        module_imported = any(spec in module or module in spec for spec in imported_specifiers)
 
         if name_called and module_imported:
             covered.append(sym.symbol_id)

@@ -166,7 +166,9 @@ def _has_skippable_directory(rel_path: str) -> bool:
     return any(should_skip_dir(part) for part in parts[:-1])
 
 
-def _discover_via_git(root: Path, git_files: list[str], max_files: int, max_file_size: int, result: DiscoveryResult) -> None:
+def _discover_via_git(
+    root: Path, git_files: list[str], max_files: int, max_file_size: int, result: DiscoveryResult
+) -> None:
     """Populate discovery result using git ls-files output.
 
     Args:
@@ -194,12 +196,14 @@ def _discover_via_git(root: Path, git_files: list[str], max_files: int, max_file
 
         try:
             stat = full_path.stat()
-            result.files.append(DiscoveredFile(
-                path=full_path,
-                relative_path=rel_path.replace("\\", "/"),
-                size=stat.st_size,
-                mtime=stat.st_mtime,
-            ))
+            result.files.append(
+                DiscoveredFile(
+                    path=full_path,
+                    relative_path=rel_path.replace("\\", "/"),
+                    size=stat.st_size,
+                    mtime=stat.st_mtime,
+                )
+            )
         except OSError:
             result.add_skipped(rel_path, "stat_error")
 
@@ -216,10 +220,7 @@ def _discover_via_walk(root: Path, max_files: int, max_file_size: int, result: D
     gitignore_spec = _load_gitignore(root)
 
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        dirnames[:] = [
-            d for d in dirnames
-            if not should_skip_dir(d)
-        ]
+        dirnames[:] = [d for d in dirnames if not should_skip_dir(d)]
 
         for filename in filenames:
             full_path = Path(dirpath) / filename
@@ -240,12 +241,14 @@ def _discover_via_walk(root: Path, max_files: int, max_file_size: int, result: D
 
             try:
                 stat = full_path.stat()
-                result.files.append(DiscoveredFile(
-                    path=full_path,
-                    relative_path=rel_path,
-                    size=stat.st_size,
-                    mtime=stat.st_mtime,
-                ))
+                result.files.append(
+                    DiscoveredFile(
+                        path=full_path,
+                        relative_path=rel_path,
+                        size=stat.st_size,
+                        mtime=stat.st_mtime,
+                    )
+                )
             except OSError:
                 result.add_skipped(rel_path, "stat_error")
 

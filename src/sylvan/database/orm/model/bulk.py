@@ -288,7 +288,7 @@ class _BulkMixin:
         total = 0
 
         for i in range(0, len(records), batch_size):
-            batch = records[i:i + batch_size]
+            batch = records[i : i + batch_size]
             all_values: list = []
             value_rows: list[str] = []
             for record in batch:

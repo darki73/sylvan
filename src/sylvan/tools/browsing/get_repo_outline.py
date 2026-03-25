@@ -28,34 +28,33 @@ async def get_repo_outline(repo: str) -> dict:
 
     repo_id = repo_obj.id
 
-    languages = await (FileRecord.where(repo_id=repo_id)
-                 .where_not_null("language")
-                 .group_by("language")
-                 .count())
+    languages = await FileRecord.where(repo_id=repo_id).where_not_null("language").group_by("language").count()
 
-    symbol_kinds = await (Symbol.query()
-                    .join("files", "files.id = symbols.file_id")
-                    .where("files.repo_id", repo_id)
-                    .group_by("symbols.kind")
-                    .count())
+    symbol_kinds = await (
+        Symbol.query()
+        .join("files", "files.id = symbols.file_id")
+        .where("files.repo_id", repo_id)
+        .group_by("symbols.kind")
+        .count()
+    )
 
     total_files = await FileRecord.where(repo_id=repo_id).count()
 
-    total_symbols = await (Symbol.query()
-                     .join("files", "files.id = symbols.file_id")
-                     .where("files.repo_id", repo_id)
-                     .count())
+    total_symbols = await (
+        Symbol.query().join("files", "files.id = symbols.file_id").where("files.repo_id", repo_id).count()
+    )
 
-    total_sections = await (Section.query()
-                      .join("files", "files.id = sections.file_id")
-                      .where("files.repo_id", repo_id)
-                      .count())
+    total_sections = await (
+        Section.query().join("files", "files.id = sections.file_id").where("files.repo_id", repo_id).count()
+    )
 
-    doc_files = await (FileRecord.query()
-                 .select("DISTINCT files.id")
-                 .join("sections sec", "sec.file_id = files.id")
-                 .where("files.repo_id", repo_id)
-                 .count())
+    doc_files = await (
+        FileRecord.query()
+        .select("DISTINCT files.id")
+        .join("sections sec", "sec.file_id = files.id")
+        .where("files.repo_id", repo_id)
+        .count()
+    )
 
     result = {
         "repo": repo,

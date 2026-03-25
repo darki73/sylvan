@@ -88,15 +88,11 @@ async def get_quality_report(repo: str) -> dict:
     if coverage["coverage_percent"] < quality_config.min_test_coverage:
         gate_passed = False
         gate_failures.append(
-            f"Test coverage {coverage['coverage_percent']}% "
-            f"< {quality_config.min_test_coverage}% minimum"
+            f"Test coverage {coverage['coverage_percent']}% < {quality_config.min_test_coverage}% minimum"
         )
     if doc_coverage < quality_config.min_doc_coverage:
         gate_passed = False
-        gate_failures.append(
-            f"Documentation coverage {doc_coverage}% "
-            f"< {quality_config.min_doc_coverage}% minimum"
-        )
+        gate_failures.append(f"Documentation coverage {doc_coverage}% < {quality_config.min_doc_coverage}% minimum")
 
     critical_security = [f for f in security_findings if f.severity in ("critical", "high")]
     if critical_security:
@@ -170,18 +166,14 @@ async def get_quality_report(repo: str) -> dict:
                 {
                     "hash": g.hash,
                     "line_count": g.line_count,
-                    "instances": [
-                        {"name": s["name"], "file": s["file"], "line": s["line_start"]}
-                        for s in g.symbols
-                    ],
+                    "instances": [{"name": s["name"], "file": s["file"], "line": s["line_start"]} for s in g.symbols],
                 }
                 for g in duplicates[:10]
             ],
         },
         "dead_code": {
             "total": len(dead_code),
-            **({"warning": "Reference graph is empty. Run index_folder to populate it."}
-               if refs_empty else {}),
+            **({"warning": "Reference graph is empty. Run index_folder to populate it."} if refs_empty else {}),
             "items": [
                 {
                     "name": d["name"],

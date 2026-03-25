@@ -61,11 +61,13 @@ def _parse_requirements_txt(path: Path) -> list[dict]:
                 continue
             m = re.match(r"([\w.-]+)\s*([><=!~]+\s*[\w.*]+)?", stripped)
             if m:
-                deps.append({
-                    "manager": "pip",
-                    "name": m.group(1),
-                    "version": (m.group(2) or "").strip(),
-                })
+                deps.append(
+                    {
+                        "manager": "pip",
+                        "name": m.group(1),
+                        "version": (m.group(2) or "").strip(),
+                    }
+                )
     except OSError:
         pass
     return deps
@@ -85,7 +87,7 @@ def _parse_pyproject_toml(path: Path) -> list[dict]:
         content = path.read_text(encoding="utf-8", errors="ignore")
         in_deps = False
         for line in content.splitlines():
-            if re.match(r'^dependencies\s*=\s*\[', line):
+            if re.match(r"^dependencies\s*=\s*\[", line):
                 in_deps = True
                 continue
             if in_deps:
@@ -165,7 +167,7 @@ def _parse_cargo_toml(path: Path) -> list[dict]:
     try:
         in_deps = False
         for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
-            if re.match(r'^\[dependencies\]', line):
+            if re.match(r"^\[dependencies\]", line):
                 in_deps = True
                 continue
             if line.startswith("[") and in_deps:

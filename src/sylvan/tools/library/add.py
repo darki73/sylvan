@@ -21,6 +21,7 @@ async def add_library(package: str) -> dict:
 
     try:
         from sylvan.libraries.manager import async_add_library
+
         result = await async_add_library(package)
         meta.set("status", result.get("status", ""))
         return wrap_response(result, meta.build())

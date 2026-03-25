@@ -24,8 +24,7 @@ async def get_toc(
     query_builder = Section.in_repo(repo).with_("file")
 
     if doc_path:
-        query_builder = (query_builder.join("files", "files.id = sections.file_id")
-                 .where("files.path", doc_path))
+        query_builder = query_builder.join("files", "files.id = sections.file_id").where("files.path", doc_path)
 
     query_builder = query_builder.order_by("sections.byte_start").limit(5000)
     sections = await query_builder.get()
@@ -60,11 +59,7 @@ async def get_toc_tree(repo: str, max_depth: int = 3) -> dict:
 
     max_depth = min(max(max_depth, 1), 6)
 
-    sections = await (Section.in_repo(repo)
-                .with_("file")
-                .order_by("sections.byte_start")
-                .limit(5000)
-                .get())
+    sections = await Section.in_repo(repo).with_("file").order_by("sections.byte_start").limit(5000).get()
 
     docs: dict[str, list] = {}
     nodes: dict[str, dict] = {}
@@ -91,10 +86,7 @@ async def get_toc_tree(repo: str, max_depth: int = 3) -> dict:
         else:
             docs.setdefault(file_path, []).append(node)
 
-    tree = [
-        {"file": fp, "sections": secs}
-        for fp, secs in docs.items()
-    ]
+    tree = [{"file": fp, "sections": secs} for fp, secs in docs.items()]
 
     meta.set("document_count", len(tree))
     meta.set("section_count", len(nodes))

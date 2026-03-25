@@ -24,6 +24,7 @@ async def start_background_tasks(repo_id: int) -> None:
 
     try:
         from sylvan.indexing.post_processing.summarizer import generate_summaries
+
         await generate_summaries(repo_id)
     except Exception as exc:
         logger.warning("commit_after_summaries_failed", error=str(exc))
@@ -32,6 +33,7 @@ async def start_background_tasks(repo_id: int) -> None:
         from sylvan.indexing.post_processing.summarizer import (
             generate_section_summaries,
         )
+
         await generate_section_summaries(repo_id)
     except Exception as exc:
         logger.warning("commit_after_section_summaries_failed", error=str(exc))

@@ -134,8 +134,7 @@ class _CrudMixin:
         return self
 
     async def delete(self) -> None:
-        """Delete this instance from the database.
-        """
+        """Delete this instance from the database."""
         from sylvan.database.orm.runtime.connection_manager import get_backend
 
         backend = get_backend()
@@ -146,6 +145,7 @@ class _CrudMixin:
 
         try:
             from sylvan.context import get_context
+
             ctx = get_context()
             if ctx.identity_map is not None:
                 ctx.identity_map.remove(type(self), getattr(self, self._pk_column))

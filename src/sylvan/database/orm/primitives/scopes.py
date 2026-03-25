@@ -68,6 +68,7 @@ class ScopeDescriptor:
         def scope_caller(*args: Any, **kwargs: Any) -> Any:
             """Create a QueryBuilder and apply the scope function."""
             from sylvan.database.orm.query.builder import QueryBuilder
+
             builder = QueryBuilder(model_class)
             return self.func(builder, *args, **kwargs)
 
