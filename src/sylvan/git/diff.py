@@ -83,10 +83,12 @@ def get_commit_log(
             continue
         parts = line.split("|", 3)
         if len(parts) == 4:
-            commits.append({
-                "hash": parts[0],
-                "author": parts[1],
-                "date": parts[2],
-                "message": parts[3],
-            })
+            commits.append(
+                {
+                    "hash": parts[0],
+                    "author": parts[1],
+                    "date": parts[2],
+                    "message": parts[3],
+                }
+            )
     return commits

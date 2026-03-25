@@ -18,8 +18,7 @@ class _HTMLToMarkdown(HTMLParser):
     """Minimal HTML-to-Markdown converter for structured text extraction."""
 
     def __init__(self) -> None:
-        """Initialize the converter state.
-        """
+        """Initialize the converter state."""
         super().__init__()
         self._parts: list[str] = []
         self._skip_depth: int = 0
@@ -148,6 +147,7 @@ class _HTMLToMarkdown(HTMLParser):
             name: Entity name without the ampersand and semicolon.
         """
         from html import unescape
+
         self.handle_data(unescape(f"&{name};"))
 
     def handle_charref(self, name: str) -> None:
@@ -157,6 +157,7 @@ class _HTMLToMarkdown(HTMLParser):
             name: Character reference value (decimal or hex).
         """
         from html import unescape
+
         self.handle_data(unescape(f"&#{name};"))
 
     def get_text(self) -> str:

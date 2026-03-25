@@ -16,6 +16,7 @@ def _get_client(endpoint: str):
         An ``ollama.Client`` instance.
     """
     from ollama import Client
+
     return Client(host=endpoint)
 
 

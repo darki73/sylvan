@@ -52,10 +52,7 @@ async def get_file_tree(repo: str, max_depth: int = 3) -> dict:
 
     max_depth = min(max(max_depth, 1), 10)
 
-    files = await (FileRecord.where(repo_id=repo_obj.id)
-             .with_count("symbols")
-             .order_by("path")
-             .get())
+    files = await FileRecord.where(repo_id=repo_obj.id).with_count("symbols").order_by("path").get()
 
     root = _build_tree_structure(files)
 

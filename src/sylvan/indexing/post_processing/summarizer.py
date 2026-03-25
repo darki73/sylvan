@@ -68,6 +68,7 @@ async def _generate_summaries(repo_id: int) -> None:
     """
     try:
         from sylvan.providers import get_summary_provider
+
         provider = get_summary_provider()
 
         if _is_heuristic_provider(provider):
@@ -79,16 +80,24 @@ async def _generate_summaries(repo_id: int) -> None:
         while True:
             symbols = await (
                 Symbol.query()
-                .select("symbols.symbol_id", "symbols.name", "symbols.signature",
-                        "symbols.docstring", "symbols.byte_offset", "symbols.byte_length",
-                        "f.content_hash")
+                .select(
+                    "symbols.symbol_id",
+                    "symbols.name",
+                    "symbols.signature",
+                    "symbols.docstring",
+                    "symbols.byte_offset",
+                    "symbols.byte_length",
+                    "f.content_hash",
+                )
                 .join("files f", "f.id = symbols.file_id")
                 .where("f.repo_id", repo_id)
-                .where_group(lambda q: (
-                    q.where_null("symbols.summary")
-                     .or_where_raw("length(symbols.summary) < 20")
-                     .or_where_raw("symbols.summary = symbols.signature")
-                ))
+                .where_group(
+                    lambda q: (
+                        q.where_null("symbols.summary")
+                        .or_where_raw("length(symbols.summary) < 20")
+                        .or_where_raw("symbols.summary = symbols.signature")
+                    )
+                )
                 .limit(500)
                 .get()
             )
@@ -107,7 +116,7 @@ async def _generate_summaries(repo_id: int) -> None:
                 if not _source_in_bounds(sym, content):
                     continue
 
-                source = content[sym.byte_offset:sym.byte_offset + sym.byte_length]
+                source = content[sym.byte_offset : sym.byte_offset + sym.byte_length]
                 source_text = source.decode("utf-8", errors="replace")
 
                 try:
@@ -229,10 +238,7 @@ async def _generate_section_summaries(repo_id: int) -> None:
                 )
                 .join("files f", "f.id = sections.file_id")
                 .where("f.repo_id", repo_id)
-                .where_group(lambda q: (
-                    q.where_null("sections.summary")
-                     .or_where("sections.summary", "")
-                ))
+                .where_group(lambda q: q.where_null("sections.summary").or_where("sections.summary", ""))
                 .limit(500)
                 .get()
             )
@@ -269,9 +275,7 @@ async def _generate_section_summaries(repo_id: int) -> None:
                 try:
                     summary = provider.summarize_section(sec.title, body_without_heading)
                     if summary and len(summary) > 5:
-                        sec_record = await Section.where(
-                            section_id=sec.section_id
-                        ).first()
+                        sec_record = await Section.where(section_id=sec.section_id).first()
                         if sec_record:
                             await sec_record.update(summary=summary)
                         batch_updated += 1

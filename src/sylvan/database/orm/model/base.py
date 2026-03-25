@@ -85,7 +85,11 @@ class Model(_CrudMixin, _QueryMixin, _BulkMixin, metaclass=ModelMeta):
         for attr_name, field in fields.items():
             value = kwargs.get(attr_name, kwargs.get(field.db_name))
             if value is not None:
-                value = field.from_db(value) if isinstance(value, (str, int, float, bytes, bool)) or value is None else value
+                value = (
+                    field.from_db(value)
+                    if isinstance(value, (str, int, float, bytes, bool)) or value is None
+                    else value
+                )
             elif field.default is not None:
                 value = field.default
             object.__setattr__(self, attr_name, value)
@@ -163,8 +167,7 @@ class Model(_CrudMixin, _QueryMixin, _BulkMixin, metaclass=ModelMeta):
             A dict mapping database column names to serialized values.
         """
         fields = self._get_fields()
-        return {field.db_name: field.to_db(getattr(self, attr_name, None))
-                for attr_name, field in fields.items()}
+        return {field.db_name: field.to_db(getattr(self, attr_name, None)) for attr_name, field in fields.items()}
 
     @classmethod
     def _prepare_insert_data(cls, **kwargs: Any) -> _InsertData:
@@ -259,8 +262,7 @@ class Model(_CrudMixin, _QueryMixin, _BulkMixin, metaclass=ModelMeta):
                     object.__setattr__(self, cache_key, [])
                     continue
                 rows = await backend.fetch_all(
-                    f"SELECT {rel_desc.related_key} FROM {rel_desc.pivot_table} "
-                    f"WHERE {rel_desc.foreign_key} = ?",
+                    f"SELECT {rel_desc.related_key} FROM {rel_desc.pivot_table} WHERE {rel_desc.foreign_key} = ?",
                     [local_value],
                 )
                 if not rows:
@@ -309,9 +311,7 @@ class Model(_CrudMixin, _QueryMixin, _BulkMixin, metaclass=ModelMeta):
         """
         fields = self._get_fields()
         kwargs: dict[str, Any] = {
-            attr_name: getattr(self, attr_name, None)
-            for attr_name, field in fields.items()
-            if not field.primary_key
+            attr_name: getattr(self, attr_name, None) for attr_name, field in fields.items() if not field.primary_key
         }
         kwargs.update(overrides)
         return self.__class__(**kwargs)

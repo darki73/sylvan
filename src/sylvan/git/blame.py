@@ -27,11 +27,16 @@ def blame_symbol(
         Dictionary with ``hash``, ``author``, ``timestamp``, and ``message``
         for the most recent commit, or empty dict on failure.
     """
-    output = run_git(root, [
-        "blame", "--porcelain",
-        f"-L{line_start},{line_end}",
-        "--", file_path,
-    ])
+    output = run_git(
+        root,
+        [
+            "blame",
+            "--porcelain",
+            f"-L{line_start},{line_end}",
+            "--",
+            file_path,
+        ],
+    )
 
     if not output:
         return {}
@@ -90,12 +95,14 @@ def blame_file_symbols(
     for row in symbols:
         record = dict(row)
         blame = blame_symbol(root, file_path, record["line_start"], record["line_end"] or record["line_start"])
-        results.append({
-            **record,
-            "last_author": blame.get("author", ""),
-            "last_commit": blame.get("hash", ""),
-            "last_message": blame.get("message", ""),
-        })
+        results.append(
+            {
+                **record,
+                "last_author": blame.get("author", ""),
+                "last_commit": blame.get("hash", ""),
+                "last_message": blame.get("message", ""),
+            }
+        )
 
     return results
 

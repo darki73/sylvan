@@ -44,34 +44,61 @@ async def remove_repo(repo: str) -> dict:
     counts: dict[str, int] = {}
 
     from sylvan.database.orm.runtime.connection_manager import get_backend
+
     backend = get_backend()
 
     async with backend.transaction():
         counts["usage_stats"] = await UsageStats.where(repo_id=repo_id).delete()
 
         await backend.execute(
-            "DELETE FROM workspace_repos WHERE repo_id = ?", [repo_id],
+            "DELETE FROM workspace_repos WHERE repo_id = ?",
+            [repo_id],
         )
 
-        counts["references"] = await Reference.query().where_in_subquery(
-            "source_symbol_id", symbols_q,
-        ).delete()
+        counts["references"] = (
+            await Reference.query()
+            .where_in_subquery(
+                "source_symbol_id",
+                symbols_q,
+            )
+            .delete()
+        )
 
-        counts["quality"] = await Quality.query().where_in_subquery(
-            "symbol_id", symbols_q,
-        ).delete()
+        counts["quality"] = (
+            await Quality.query()
+            .where_in_subquery(
+                "symbol_id",
+                symbols_q,
+            )
+            .delete()
+        )
 
-        counts["file_imports"] = await FileImport.query().where_in_subquery(
-            "file_id", files_q,
-        ).delete()
+        counts["file_imports"] = (
+            await FileImport.query()
+            .where_in_subquery(
+                "file_id",
+                files_q,
+            )
+            .delete()
+        )
 
-        counts["sections"] = await Section.query().where_in_subquery(
-            "file_id", files_q,
-        ).delete()
+        counts["sections"] = (
+            await Section.query()
+            .where_in_subquery(
+                "file_id",
+                files_q,
+            )
+            .delete()
+        )
 
-        counts["symbols"] = await Symbol.query().where_in_subquery(
-            "file_id", files_q,
-        ).delete()
+        counts["symbols"] = (
+            await Symbol.query()
+            .where_in_subquery(
+                "file_id",
+                files_q,
+            )
+            .delete()
+        )
 
         counts["files"] = await FileRecord.where(repo_id=repo_id).delete()
         await repo_obj.delete()

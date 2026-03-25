@@ -56,16 +56,16 @@ def _extract_vue_script(content: str) -> tuple[str, str, int]:
     import re
 
     match = re.search(
-        r'<script\b[^>]*>(.*?)</script>',
+        r"<script\b[^>]*>(.*?)</script>",
         content,
         re.DOTALL | re.IGNORECASE,
     )
     if not match:
         return "", "typescript", 0
 
-    tag = content[match.start():match.start(1)]
+    tag = content[match.start() : match.start(1)]
     lang = "typescript" if "ts" in tag.lower() else "javascript"
-    byte_offset = len(content[:match.start(1)].encode("utf-8"))
+    byte_offset = len(content[: match.start(1)].encode("utf-8"))
 
     return match.group(1), lang, byte_offset
 
@@ -102,6 +102,7 @@ def parse_file(content: str, filename: str, language: str) -> list[Symbol]:
         parser = get_parser(spec.ts_language)
     except Exception as e:
         from sylvan.logging import get_logger
+
         get_logger(__name__).debug("parser_load_failed", language=spec.ts_language, error=str(e))
         return []
 
@@ -109,6 +110,7 @@ def parse_file(content: str, filename: str, language: str) -> list[Symbol]:
         tree = parser.parse(source_bytes)
     except Exception as e:
         from sylvan.logging import get_logger
+
         get_logger(__name__).debug("tree_parse_failed", language=spec.ts_language, error=str(e))
         return []
 
@@ -134,10 +136,14 @@ def parse_file(content: str, filename: str, language: str) -> list[Symbol]:
     return symbols
 
 
-_HANDLER_WRAPPERS = frozenset({
-    "defineEventHandler", "defineNuxtRouteMiddleware",
-    "eventHandler", "defineNitroPlugin",
-})
+_HANDLER_WRAPPERS = frozenset(
+    {
+        "defineEventHandler",
+        "defineNuxtRouteMiddleware",
+        "eventHandler",
+        "defineNitroPlugin",
+    }
+)
 
 
 def _try_extract_export_default(
@@ -162,11 +168,12 @@ def _try_extract_export_default(
         language: Language identifier.
         symbols: Accumulator list for extracted symbols.
     """
-    text = source_bytes[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
+    text = source_bytes[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
     if not any(w in text for w in _HANDLER_WRAPPERS):
         return
 
     from pathlib import PurePosixPath
+
     stem = PurePosixPath(filename).stem
     parts = stem.split(".")
     if len(parts) >= 2:
@@ -176,23 +183,25 @@ def _try_extract_export_default(
 
     start = node.start_byte
     end = node.end_byte
-    symbols.append(Symbol(
-        symbol_id=make_symbol_id(filename, name, "function"),
-        name=name,
-        qualified_name=name,
-        kind="function",
-        language=language,
-        signature="export default defineEventHandler()",
-        docstring=extract_docstring(node, spec, source_bytes, language),
-        summary=f"Server route handler: {stem}",
-        keywords=extract_keywords(name, None, []),
-        parent_symbol_id=None,
-        line_start=node.start_point[0] + 1,
-        line_end=node.end_point[0] + 1,
-        byte_offset=start,
-        byte_length=end - start,
-        content_hash=compute_content_hash(source_bytes[start:end]),
-    ))
+    symbols.append(
+        Symbol(
+            symbol_id=make_symbol_id(filename, name, "function"),
+            name=name,
+            qualified_name=name,
+            kind="function",
+            language=language,
+            signature="export default defineEventHandler()",
+            docstring=extract_docstring(node, spec, source_bytes, language),
+            summary=f"Server route handler: {stem}",
+            keywords=extract_keywords(name, None, []),
+            parent_symbol_id=None,
+            line_start=node.start_point[0] + 1,
+            line_end=node.end_point[0] + 1,
+            byte_offset=start,
+            byte_length=end - start,
+            content_hash=compute_content_hash(source_bytes[start:end]),
+        )
+    )
 
 
 def _walk_tree(
@@ -222,58 +231,92 @@ def _walk_tree(
 
     if node.type in spec.symbol_node_types:
         sym = _extract_symbol(
-            node, spec, source_bytes, filename, language,
-            parent_symbol, scope_parts,
+            node,
+            spec,
+            source_bytes,
+            filename,
+            language,
+            parent_symbol,
+            scope_parts,
         )
         if sym is not None:
             symbols.append(sym)
             if node.type in spec.container_node_types:
                 for child in node.children:
                     _walk_tree(
-                        child, spec, source_bytes, filename, language,
-                        symbols, sym, [*scope_parts, sym.name],
+                        child,
+                        spec,
+                        source_bytes,
+                        filename,
+                        language,
+                        symbols,
+                        sym,
+                        [*scope_parts, sym.name],
                     )
                 return
 
     if node.type == "decorated_definition":
         _handle_decorated_definition(
-            node, spec, source_bytes, filename, language,
-            symbols, parent_symbol, scope_parts,
+            node,
+            spec,
+            source_bytes,
+            filename,
+            language,
+            symbols,
+            parent_symbol,
+            scope_parts,
         )
         return
 
     if node.type in ("lexical_declaration", "variable_declaration") and language in (
-        "javascript", "typescript", "tsx",
+        "javascript",
+        "typescript",
+        "tsx",
     ):
         for child in node.children:
             if child.type == "variable_declarator":
                 try_extract_variable_function(
-                    child, node, spec, source_bytes, filename, language,
-                    symbols, parent_symbol, scope_parts,
+                    child,
+                    node,
+                    spec,
+                    source_bytes,
+                    filename,
+                    language,
+                    symbols,
+                    parent_symbol,
+                    scope_parts,
                 )
 
-    if (
-        node.type in ("expression_statement", "assignment")
-        and language == "python"
-        and parent_symbol is None
-    ):
+    if node.type in ("expression_statement", "assignment") and language == "python" and parent_symbol is None:
         try_extract_python_constant(
-            node, spec, source_bytes, filename, language, symbols,
+            node,
+            spec,
+            source_bytes,
+            filename,
+            language,
+            symbols,
         )
 
-    if (
-        node.type == "export_statement"
-        and language in ("javascript", "typescript", "tsx")
-        and parent_symbol is None
-    ):
+    if node.type == "export_statement" and language in ("javascript", "typescript", "tsx") and parent_symbol is None:
         _try_extract_export_default(
-            node, spec, source_bytes, filename, language, symbols,
+            node,
+            spec,
+            source_bytes,
+            filename,
+            language,
+            symbols,
         )
 
     for child in node.children:
         _walk_tree(
-            child, spec, source_bytes, filename, language,
-            symbols, parent_symbol, scope_parts,
+            child,
+            spec,
+            source_bytes,
+            filename,
+            language,
+            symbols,
+            parent_symbol,
+            scope_parts,
         )
 
 
@@ -306,8 +349,13 @@ def _handle_decorated_definition(
     for child in node.children:
         if child.type in spec.symbol_node_types:
             sym = _extract_symbol(
-                child, spec, source_bytes, filename, language,
-                parent_symbol, scope_parts,
+                child,
+                spec,
+                source_bytes,
+                filename,
+                language,
+                parent_symbol,
+                scope_parts,
                 decorator_node=node,
             )
             if sym is not None:
@@ -315,8 +363,14 @@ def _handle_decorated_definition(
                 if child.type in spec.container_node_types:
                     for grandchild in child.children:
                         _walk_tree(
-                            grandchild, spec, source_bytes, filename, language,
-                            symbols, sym, [*scope_parts, sym.name],
+                            grandchild,
+                            spec,
+                            source_bytes,
+                            filename,
+                            language,
+                            symbols,
+                            sym,
+                            [*scope_parts, sym.name],
                         )
             return
 

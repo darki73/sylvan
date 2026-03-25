@@ -81,17 +81,16 @@ class Section(Model):
     @scope
     def in_repo(query, name) -> QueryBuilder:
         """Filter to sections within a named repository."""
-        return (query
-                .join("files", "files.id = sections.file_id")
-                .join("repos", "repos.id = files.repo_id")
-                .where("repos.name", name))
+        return (
+            query.join("files", "files.id = sections.file_id")
+            .join("repos", "repos.id = files.repo_id")
+            .where("repos.name", name)
+        )
 
     @scope
     def in_doc(query, path) -> QueryBuilder:
         """Filter to sections within a specific document path."""
-        return (query
-                .join("files", "files.id = sections.file_id")
-                .where("files.path", path))
+        return query.join("files", "files.id = sections.file_id").where("files.path", path)
 
     async def get_content(self) -> str:
         """Extract section content from blob via byte range.
@@ -106,7 +105,7 @@ class Section(Model):
         blob = await file_rec.get_content()
         if blob is None:
             return ""
-        return blob[self.byte_start:self.byte_end].decode("utf-8", errors="replace")
+        return blob[self.byte_start : self.byte_end].decode("utf-8", errors="replace")
 
     async def _resolve_file_path(self) -> str:
         """Resolve the file path via the file relation.

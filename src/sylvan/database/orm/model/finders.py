@@ -134,8 +134,7 @@ class _QueryMixin:
         return QueryBuilder(cls).search(query)
 
     @classmethod
-    def similar_to(cls, text_or_vector: str | list[float], k: int = 20,
-                   weight: float = 0.3) -> QueryBuilder:
+    def similar_to(cls, text_or_vector: str | list[float], k: int = 20, weight: float = 0.3) -> QueryBuilder:
         """Start a vector similarity search query.
 
         Args:

@@ -25,9 +25,7 @@ class DuplicateGroup:
     line_count: int
 
 
-async def detect_duplicates(
-    repo_id: int, min_lines: int = 5
-) -> list[DuplicateGroup]:
+async def detect_duplicates(repo_id: int, min_lines: int = 5) -> list[DuplicateGroup]:
     """Find functions with identical normalized bodies.
 
     Normalizes function bodies by:

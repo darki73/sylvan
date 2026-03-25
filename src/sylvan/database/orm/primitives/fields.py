@@ -100,7 +100,9 @@ class JsonColumn(Column):
         """
         self._default_factory = default_factory or (list if inner_type is list else dict)
         super().__init__(
-            type=inner_type, nullable=nullable, column_name=column_name,
+            type=inner_type,
+            nullable=nullable,
+            column_name=column_name,
             default=None,
         )
 
@@ -152,6 +154,5 @@ class AutoPrimaryKey(Column):
     """INTEGER PRIMARY KEY with auto-increment."""
 
     def __init__(self):
-        """Define an auto-incrementing integer primary key.
-        """
+        """Define an auto-incrementing integer primary key."""
         super().__init__(type=int, nullable=True, primary_key=True)

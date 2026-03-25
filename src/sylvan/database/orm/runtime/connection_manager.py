@@ -21,8 +21,5 @@ def get_backend() -> StorageBackend:
 
     ctx = get_context()
     if ctx.backend is None:
-        raise RuntimeError(
-            "No storage backend configured. "
-            "Set up a SylvanContext with a backend first."
-        )
+        raise RuntimeError("No storage backend configured. Set up a SylvanContext with a backend first.")
     return ctx.backend

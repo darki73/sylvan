@@ -113,6 +113,7 @@ async def search_symbols(
         EmptyQueryError: If the query is empty or whitespace-only.
     """
     from sylvan.context import get_context
+
     meta = MetaBuilder()
     ctx = get_context()
     session = ctx.session if ctx.session else get_session()
@@ -238,13 +239,15 @@ async def batch_search_symbols(
 
         formatted = []
         for symbol in results:
-            formatted.append({
-                "symbol_id": symbol.symbol_id,
-                "name": symbol.name,
-                "kind": symbol.kind,
-                "file": await symbol._resolve_file_path(),
-                "signature": symbol.signature or "",
-            })
+            formatted.append(
+                {
+                    "symbol_id": symbol.symbol_id,
+                    "name": symbol.name,
+                    "kind": symbol.kind,
+                    "file": await symbol._resolve_file_path(),
+                    "signature": symbol.signature or "",
+                }
+            )
 
         unique_files = set()
         for symbol in results:

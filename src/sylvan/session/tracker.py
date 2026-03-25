@@ -40,14 +40,12 @@ class SessionTracker:
     _tokens_avoided: int = 0
     _workflow_loaded: bool = False
     _project_path: str | None = None
-    _efficiency_by_category: dict[str, dict] = field(default_factory=lambda: {
-        cat: {"calls": 0, "returned": 0, "equivalent": 0}
-        for cat in _EFFICIENCY_CATEGORIES
-    })
+    _efficiency_by_category: dict[str, dict] = field(
+        default_factory=lambda: {cat: {"calls": 0, "returned": 0, "equivalent": 0} for cat in _EFFICIENCY_CATEGORIES}
+    )
 
     def __post_init__(self) -> None:
-        """Create the threading lock (not suitable as a dataclass field).
-        """
+        """Create the threading lock (not suitable as a dataclass field)."""
         self._lock = threading.Lock()
 
     def record_symbol_access(self, symbol_id: str, file_path: str | None = None) -> None:
@@ -84,11 +82,13 @@ class SessionTracker:
             tool: Name of the tool that issued the query.
         """
         with self._lock:
-            self._query_history.append({
-                "query": query,
-                "tool": tool,
-                "timestamp": time.monotonic(),
-            })
+            self._query_history.append(
+                {
+                    "query": query,
+                    "tool": tool,
+                    "timestamp": time.monotonic(),
+                }
+            )
 
     def record_tool_call(self, tool_name: str) -> None:
         """Record any tool call.
@@ -137,17 +137,12 @@ class SessionTracker:
         with self._lock:
             total_returned = sum(c["returned"] for c in self._efficiency_by_category.values())
             total_equivalent = sum(c["equivalent"] for c in self._efficiency_by_category.values())
-            reduction = (
-                round((1 - total_returned / total_equivalent) * 100, 1)
-                if total_equivalent > 0 else 0.0
-            )
+            reduction = round((1 - total_returned / total_equivalent) * 100, 1) if total_equivalent > 0 else 0.0
             return {
                 "total_returned": total_returned,
                 "total_equivalent": total_equivalent,
                 "reduction_percent": reduction,
-                "by_category": {
-                    k: dict(v) for k, v in self._efficiency_by_category.items()
-                },
+                "by_category": {k: dict(v) for k, v in self._efficiency_by_category.items()},
             }
 
     def is_symbol_seen(self, symbol_id: str) -> bool:
@@ -181,9 +176,7 @@ class SessionTracker:
         Returns:
             List of file path strings.
         """
-        sorted_files = sorted(
-            self._working_files.items(), key=lambda x: -x[1]
-        )
+        sorted_files = sorted(self._working_files.items(), key=lambda x: -x[1])
         return [f for f, _ in sorted_files[:max_count]]
 
     def get_recent_queries(self, max_count: int = 10) -> list[str]:
@@ -280,7 +273,6 @@ def get_session() -> SessionTracker:
 
 
 def reset_session() -> None:
-    """Reset the session (for testing).
-    """
+    """Reset the session (for testing)."""
     global _session
     _session = SessionTracker()

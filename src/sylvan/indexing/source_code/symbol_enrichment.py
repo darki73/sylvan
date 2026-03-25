@@ -29,7 +29,9 @@ def _content_hash(source_bytes: bytes) -> str:
 
 
 def heuristic_summary(
-    docstring: str | None, signature: str, name: str,
+    docstring: str | None,
+    signature: str,
+    name: str,
 ) -> str:
     """Generate a one-line summary from available metadata.
 
@@ -77,7 +79,9 @@ def split_identifier(name: str) -> list[str]:
 
 
 def extract_keywords(
-    name: str, docstring: str | None, decorators: list[str],
+    name: str,
+    docstring: str | None,
+    decorators: list[str],
 ) -> list[str]:
     """Extract searchable keywords from symbol metadata.
 
@@ -104,19 +108,47 @@ def extract_keywords(
     return sorted(keywords)
 
 
-_REACTIVE_CALLS = frozenset({
-    "ref", "reactive", "computed", "shallowRef", "shallowReactive",
-    "toRef", "toRefs", "readonly", "shallowReadonly",
-})
-_MACRO_CALLS = frozenset({
-    "defineProps", "defineEmits", "defineExpose", "defineModel",
-    "defineSlots", "defineOptions", "withDefaults", "inject",
-})
-_CONSTANT_VALUE_TYPES = frozenset({
-    "object", "array", "string", "number", "true", "false", "null",
-    "template_string", "as_expression", "new_expression",
-    "non_null_expression", "satisfies_expression",
-})
+_REACTIVE_CALLS = frozenset(
+    {
+        "ref",
+        "reactive",
+        "computed",
+        "shallowRef",
+        "shallowReactive",
+        "toRef",
+        "toRefs",
+        "readonly",
+        "shallowReadonly",
+    }
+)
+_MACRO_CALLS = frozenset(
+    {
+        "defineProps",
+        "defineEmits",
+        "defineExpose",
+        "defineModel",
+        "defineSlots",
+        "defineOptions",
+        "withDefaults",
+        "inject",
+    }
+)
+_CONSTANT_VALUE_TYPES = frozenset(
+    {
+        "object",
+        "array",
+        "string",
+        "number",
+        "true",
+        "false",
+        "null",
+        "template_string",
+        "as_expression",
+        "new_expression",
+        "non_null_expression",
+        "satisfies_expression",
+    }
+)
 
 
 def _classify_variable(name_node: object, value_node: object) -> str | None:
@@ -209,30 +241,32 @@ def try_extract_variable_function(
                         qn = ".".join([*scope_parts, var_name]) if scope_parts else var_name
                         start = parent_node.start_byte
                         end = parent_node.end_byte
-                        symbols.append(Symbol(
-                            symbol_id=make_symbol_id(filename, qn, "constant"),
-                            name=var_name,
-                            qualified_name=qn,
-                            kind="constant",
-                            language=language,
-                            signature=f"const {{ {var_name}, ... }} = {fn_name}()",
-                            docstring=None,
-                            summary=f"Destructured from {fn_name}()",
-                            keywords=extract_keywords(var_name, None, []),
-                            parent_symbol_id=parent_symbol.symbol_id if parent_symbol else None,
-                            line_start=parent_node.start_point[0] + 1,
-                            line_end=parent_node.end_point[0] + 1,
-                            byte_offset=start,
-                            byte_length=end - start,
-                            content_hash=_content_hash(source_bytes[start:end]),
-                        ))
+                        symbols.append(
+                            Symbol(
+                                symbol_id=make_symbol_id(filename, qn, "constant"),
+                                name=var_name,
+                                qualified_name=qn,
+                                kind="constant",
+                                language=language,
+                                signature=f"const {{ {var_name}, ... }} = {fn_name}()",
+                                docstring=None,
+                                summary=f"Destructured from {fn_name}()",
+                                keywords=extract_keywords(var_name, None, []),
+                                parent_symbol_id=parent_symbol.symbol_id if parent_symbol else None,
+                                line_start=parent_node.start_point[0] + 1,
+                                line_end=parent_node.end_point[0] + 1,
+                                byte_offset=start,
+                                byte_length=end - start,
+                                content_hash=_content_hash(source_bytes[start:end]),
+                            )
+                        )
         return
 
     kind = _classify_variable(name_node, value_node)
     if kind is None:
         return
 
-    name = source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8", errors="replace")
+    name = source_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8", errors="replace")
     qualified_name = ".".join([*scope_parts, name]) if scope_parts else name
 
     signature = build_signature(parent_node, spec, source_bytes)
@@ -307,7 +341,7 @@ def try_extract_python_constant(
                     left = child
                     break
         if left and left.type == "identifier":
-            name = source_bytes[left.start_byte:left.end_byte].decode("utf-8", errors="replace")
+            name = source_bytes[left.start_byte : left.end_byte].decode("utf-8", errors="replace")
             if _is_upper_case_constant(name):
                 start = assign.start_byte
                 end = assign.end_byte

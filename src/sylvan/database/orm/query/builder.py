@@ -79,14 +79,12 @@ class QueryBuilder[T: "Model"](
 
     @classmethod
     def enable_debug(cls) -> None:
-        """Turn on query logging.
-        """
+        """Turn on query logging."""
         cls._debug = True
 
     @classmethod
     def disable_debug(cls) -> None:
-        """Turn off query logging.
-        """
+        """Turn off query logging."""
         cls._debug = False
 
     @classmethod
@@ -100,8 +98,7 @@ class QueryBuilder[T: "Model"](
 
     @classmethod
     def clear_query_log(cls) -> None:
-        """Clear all entries from the query log.
-        """
+        """Clear all entries from the query log."""
         cls._query_log.clear()
 
     def __init__(self, model_class: type[T]):
@@ -161,9 +158,11 @@ class QueryBuilder[T: "Model"](
             if name in cls.__dict__:
                 attr = cls.__dict__[name]
                 if isinstance(attr, ScopeDescriptor):
+
                     def apply_scope(*args: Any, _attr: Any = attr, **kwargs: Any) -> QueryBuilder[T]:
                         """Apply a named scope to this builder."""
                         return _attr.func(self, *args, **kwargs)
+
                     return apply_scope
         raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
 
@@ -178,6 +177,7 @@ class QueryBuilder[T: "Model"](
             RuntimeError: If no backend is configured.
         """
         from sylvan.database.orm.runtime.connection_manager import get_backend
+
         return get_backend()
 
     def select(self, *columns: str) -> QueryBuilder[T]:

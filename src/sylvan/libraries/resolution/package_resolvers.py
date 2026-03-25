@@ -21,6 +21,7 @@ def _register(name: str) -> callable:
     Returns:
         Decorator that registers the function.
     """
+
     def decorator(fn: callable) -> callable:
         """Add the function to the RESOLVERS table.
 
@@ -32,6 +33,7 @@ def _register(name: str) -> callable:
         """
         RESOLVERS[name] = fn
         return fn
+
     return decorator
 
 
@@ -69,6 +71,7 @@ def resolve_pypi(name: str, version: str) -> PackageInfo:
         )
 
     from sylvan.libraries.resolution.package_registry import guess_tag
+
     tag = guess_tag(resolved_version, repo_url)
 
     return PackageInfo(
@@ -168,6 +171,7 @@ def resolve_cargo(name: str, version: str) -> PackageInfo:
         resolved_version = version
 
     from sylvan.libraries.resolution.package_registry import guess_tag
+
     tag = guess_tag(resolved_version, repo_url)
 
     return PackageInfo(
@@ -277,7 +281,7 @@ def _clean_repo_url(url: str) -> str:
             continue
         url = url.split("#", maxsplit=1)[0].split("?", maxsplit=1)[0].rstrip("/")
         idx = url.index(host)
-        path = url[idx + len(host):]
+        path = url[idx + len(host) :]
         parts = [p for p in path.split("/") if p]
         if len(parts) >= 2:
             return f"https://{host}/{parts[0]}/{parts[1]}"

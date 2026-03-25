@@ -30,6 +30,7 @@ def _is_pid_alive(pid: int) -> bool:
 
     if sys.platform == "win32":
         import ctypes
+
         kernel32 = ctypes.windll.kernel32
         handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
         if handle:

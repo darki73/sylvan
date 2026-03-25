@@ -1,6 +1,5 @@
 """MCP tool: get_logs - retrieve sylvan server log entries."""
 
-
 from sylvan.tools.support.response import MetaBuilder, log_tool_call, wrap_response
 
 
@@ -49,7 +48,7 @@ async def get_logs(
     total = len(all_lines)
 
     if from_start:
-        result = all_lines[offset:offset + lines]
+        result = all_lines[offset : offset + lines]
     else:
         end = total - offset
         start = max(0, end - lines)

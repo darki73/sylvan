@@ -18,12 +18,14 @@ def register_language(name: str, extensions: list[str]) -> Callable:
     Returns:
         Decorator that registers the language spec.
     """
+
     def decorator(spec: object) -> object:
         """Store the spec in the registry and map extensions to this language."""
         _LANGUAGES[name] = spec
         for ext in extensions:
             _EXTENSION_MAP[ext.lower()] = name
         return spec
+
     return decorator
 
 

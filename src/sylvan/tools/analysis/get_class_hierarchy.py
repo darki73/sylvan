@@ -19,6 +19,7 @@ async def get_class_hierarchy(class_name: str, repo: str | None = None) -> dict:
     ensure_orm()
 
     from sylvan.analysis.structure.class_hierarchy import get_class_hierarchy as _hierarchy
+
     result = await _hierarchy(class_name, repo_name=repo)
     meta.set("ancestors", len(result.get("ancestors", [])))
     meta.set("descendants", len(result.get("descendants", [])))

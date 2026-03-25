@@ -73,9 +73,7 @@ async def get_blast_radius(
         if depth > max_depth:
             continue
 
-        file_row = await backend.fetch_one(
-            "SELECT path, content_hash FROM files WHERE id = ?", [file_id]
-        )
+        file_row = await backend.fetch_one("SELECT path, content_hash FROM files WHERE id = ?", [file_id])
         if file_row is None:
             continue
 
@@ -84,7 +82,7 @@ async def get_blast_radius(
             continue
 
         text = content.decode("utf-8", errors="replace")
-        occurrences = len(re.findall(r'\b' + re.escape(target_name) + r'\b', text))
+        occurrences = len(re.findall(r"\b" + re.escape(target_name) + r"\b", text))
 
         entry = {
             "file": file_row["path"],
@@ -93,14 +91,10 @@ async def get_blast_radius(
         }
 
         file_symbols = await (
-            Symbol.where(file_id=file_id)
-            .select("symbol_id", "name", "kind", "line_start")
-            .limit(10)
-            .get()
+            Symbol.where(file_id=file_id).select("symbol_id", "name", "kind", "line_start").limit(10).get()
         )
         entry["symbols"] = [
-            {"symbol_id": s.symbol_id, "name": s.name, "kind": s.kind, "line_start": s.line_start}
-            for s in file_symbols
+            {"symbol_id": s.symbol_id, "name": s.name, "kind": s.kind, "line_start": s.line_start} for s in file_symbols
         ]
 
         if occurrences > 0:

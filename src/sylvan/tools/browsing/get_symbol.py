@@ -45,9 +45,11 @@ async def get_symbol(
     if not found:
         query = Symbol.where(symbol_id=symbol_id).with_("file")
         if repo:
-            query = query.join("files", "files.id = symbols.file_id").join(
-                "repos", "repos.id = files.repo_id"
-            ).where("repos.name", repo)
+            query = (
+                query.join("files", "files.id = symbols.file_id")
+                .join("repos", "repos.id = files.repo_id")
+                .where("repos.name", repo)
+            )
         symbol = await query.first()
         if symbol is not None:
             cache.put(cache_key, symbol)

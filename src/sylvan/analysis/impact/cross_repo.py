@@ -58,18 +58,14 @@ async def resolve_cross_repo_imports(
 
         if spec in file_lookup:
             target_fid = file_lookup[spec]
-            target_repo = await backend.fetch_one(
-                "SELECT repo_id FROM files WHERE id = ?", [target_fid]
-            )
+            target_repo = await backend.fetch_one("SELECT repo_id FROM files WHERE id = ?", [target_fid])
             if target_repo and target_repo["repo_id"] != source_repo_id:
                 candidates.append(target_fid)
 
         stem = spec.rsplit("/", 1)[-1].rsplit(".", 1)[0]
         if stem in file_lookup and not candidates:
             target_fid = file_lookup[stem]
-            target_repo = await backend.fetch_one(
-                "SELECT repo_id FROM files WHERE id = ?", [target_fid]
-            )
+            target_repo = await backend.fetch_one("SELECT repo_id FROM files WHERE id = ?", [target_fid])
             if target_repo and target_repo["repo_id"] != source_repo_id:
                 candidates.append(target_fid)
 
@@ -78,9 +74,7 @@ async def resolve_cross_repo_imports(
             key = dotpath + suffix
             if key in file_lookup and not candidates:
                 target_fid = file_lookup[key]
-                target_repo = await backend.fetch_one(
-                    "SELECT repo_id FROM files WHERE id = ?", [target_fid]
-                )
+                target_repo = await backend.fetch_one("SELECT repo_id FROM files WHERE id = ?", [target_fid])
                 if target_repo and target_repo["repo_id"] != source_repo_id:
                     candidates.append(target_fid)
 

@@ -3,67 +3,192 @@
 import fnmatch
 
 # Directories to always skip during indexing
-SKIP_DIRS: frozenset[str] = frozenset({
-    "node_modules", "vendor", ".git", "__pycache__", ".tox",
-    ".mypy_cache", ".pytest_cache", ".ruff_cache",
-    "target", "build", "dist", ".gradle", ".mvn",
-    ".next", ".nuxt", ".output", ".vercel", ".turbo",
-    "venv", ".venv", "env", ".env",
-    ".idea", ".vscode", ".vs",
-    "coverage", "htmlcov", ".nyc_output",
-    ".terraform", ".pulumi",
-    "Pods", "DerivedData", "xcuserdata",
-    ".bundle", ".cache",
-})
+SKIP_DIRS: frozenset[str] = frozenset(
+    {
+        "node_modules",
+        "vendor",
+        ".git",
+        "__pycache__",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "target",
+        "build",
+        "dist",
+        ".gradle",
+        ".mvn",
+        ".next",
+        ".nuxt",
+        ".output",
+        ".vercel",
+        ".turbo",
+        "venv",
+        ".venv",
+        "env",
+        ".env",
+        ".idea",
+        ".vscode",
+        ".vs",
+        "coverage",
+        "htmlcov",
+        ".nyc_output",
+        ".terraform",
+        ".pulumi",
+        "Pods",
+        "DerivedData",
+        "xcuserdata",
+        ".bundle",
+        ".cache",
+    }
+)
 
 # File patterns to skip
-SKIP_FILE_PATTERNS: frozenset[str] = frozenset({
-    "*.min.js", "*.min.css", "*.map",
-    "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
-    "go.sum", "Cargo.lock", "poetry.lock", "uv.lock",
-    "*.pb.go", "*.generated.*",
-    "*.pyc", "*.pyo",
-})
+SKIP_FILE_PATTERNS: frozenset[str] = frozenset(
+    {
+        "*.min.js",
+        "*.min.css",
+        "*.map",
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "go.sum",
+        "Cargo.lock",
+        "poetry.lock",
+        "uv.lock",
+        "*.pb.go",
+        "*.generated.*",
+        "*.pyc",
+        "*.pyo",
+    }
+)
 
 # Secret file patterns (filename-based)
-SECRET_PATTERNS: frozenset[str] = frozenset({
-    ".env", ".env.*", "*.key", "*.pem", "*.p12", "*.pfx",
-    "*.keystore", "*.jks",
-    "credentials.json", "service-account*.json",
-    "id_rsa", "id_rsa.*", "id_ed25519", "id_ed25519.*",
-    "*.secret", "*.secrets",
-    ".htpasswd", ".netrc", ".pgpass",
-})
+SECRET_PATTERNS: frozenset[str] = frozenset(
+    {
+        ".env",
+        ".env.*",
+        "*.key",
+        "*.pem",
+        "*.p12",
+        "*.pfx",
+        "*.keystore",
+        "*.jks",
+        "credentials.json",
+        "service-account*.json",
+        "id_rsa",
+        "id_rsa.*",
+        "id_ed25519",
+        "id_ed25519.*",
+        "*.secret",
+        "*.secrets",
+        ".htpasswd",
+        ".netrc",
+        ".pgpass",
+    }
+)
 
 # Binary file extensions
-BINARY_EXTENSIONS: frozenset[str] = frozenset({
-    # Executables
-    ".exe", ".dll", ".so", ".dylib", ".a", ".lib", ".o", ".obj",
-    # Archives
-    ".zip", ".tar", ".gz", ".bz2", ".xz", ".7z", ".rar", ".jar", ".war",
-    # Images
-    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".svg", ".webp",
-    ".tiff", ".tif", ".psd",
-    # Media
-    ".mp3", ".mp4", ".avi", ".mov", ".flv", ".wmv", ".wav", ".ogg", ".webm",
-    # Compiled/bytecode
-    ".pyc", ".pyo", ".class", ".wasm",
-    # Fonts
-    ".ttf", ".otf", ".woff", ".woff2", ".eot",
-    # Documents (not text)
-    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
-    # Databases
-    ".db", ".sqlite", ".sqlite3", ".mdb",
-    # Misc binary
-    ".bin", ".dat", ".pkl", ".npy", ".npz", ".h5", ".hdf5",
-})
+BINARY_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        # Executables
+        ".exe",
+        ".dll",
+        ".so",
+        ".dylib",
+        ".a",
+        ".lib",
+        ".o",
+        ".obj",
+        # Archives
+        ".zip",
+        ".tar",
+        ".gz",
+        ".bz2",
+        ".xz",
+        ".7z",
+        ".rar",
+        ".jar",
+        ".war",
+        # Images
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".bmp",
+        ".ico",
+        ".svg",
+        ".webp",
+        ".tiff",
+        ".tif",
+        ".psd",
+        # Media
+        ".mp3",
+        ".mp4",
+        ".avi",
+        ".mov",
+        ".flv",
+        ".wmv",
+        ".wav",
+        ".ogg",
+        ".webm",
+        # Compiled/bytecode
+        ".pyc",
+        ".pyo",
+        ".class",
+        ".wasm",
+        # Fonts
+        ".ttf",
+        ".otf",
+        ".woff",
+        ".woff2",
+        ".eot",
+        # Documents (not text)
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".ppt",
+        ".pptx",
+        # Databases
+        ".db",
+        ".sqlite",
+        ".sqlite3",
+        ".mdb",
+        # Misc binary
+        ".bin",
+        ".dat",
+        ".pkl",
+        ".npy",
+        ".npz",
+        ".h5",
+        ".hdf5",
+    }
+)
 
 # Extensions that are documentation (exempt from broad secret matching)
-DOC_EXTENSIONS: frozenset[str] = frozenset({
-    ".md", ".markdown", ".rst", ".txt", ".html", ".htm",
-    ".adoc", ".asciidoc", ".ipynb", ".xml", ".json", ".yaml", ".yml",
-    ".toml", ".cfg", ".ini", ".conf",
-})
+DOC_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".md",
+        ".markdown",
+        ".rst",
+        ".txt",
+        ".html",
+        ".htm",
+        ".adoc",
+        ".asciidoc",
+        ".ipynb",
+        ".xml",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".cfg",
+        ".ini",
+        ".conf",
+    }
+)
 
 
 def is_secret_file(filename: str) -> bool:

@@ -31,9 +31,7 @@ async def async_create_workspace(
         [name, description],
     )
     await backend.commit()
-    row = await backend.fetch_one(
-        "SELECT id FROM workspaces WHERE name = ?", [name]
-    )
+    row = await backend.fetch_one("SELECT id FROM workspaces WHERE name = ?", [name])
     return row["id"]
 
 
@@ -85,9 +83,7 @@ async def async_get_workspace(backend: BaseBackend, name: str) -> dict | None:
     Returns:
         A dict with workspace info and repo list, or None if not found.
     """
-    ws = await backend.fetch_one(
-        "SELECT * FROM workspaces WHERE name = ?", [name]
-    )
+    ws = await backend.fetch_one("SELECT * FROM workspaces WHERE name = ?", [name])
     if ws is None:
         return None
 
@@ -142,8 +138,6 @@ async def async_delete_workspace(backend: BaseBackend, name: str) -> bool:
     Returns:
         True if a workspace was deleted, False if it did not exist.
     """
-    rows_affected = await backend.execute(
-        "DELETE FROM workspaces WHERE name = ?", [name]
-    )
+    rows_affected = await backend.execute("DELETE FROM workspaces WHERE name = ?", [name])
     await backend.commit()
     return rows_affected > 0

@@ -29,7 +29,7 @@ def extract_name(node: object, spec: LanguageSpec, source_bytes: bytes) -> str |
     if name_node.type in ("function_declarator", "pointer_declarator", "reference_declarator"):
         return _extract_declarator_name(name_node, source_bytes)
 
-    return source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8", errors="replace")
+    return source_bytes[name_node.start_byte : name_node.end_byte].decode("utf-8", errors="replace")
 
 
 def _scan_children_for_name(node: object, source_bytes: bytes) -> str | None:
@@ -44,11 +44,11 @@ def _scan_children_for_name(node: object, source_bytes: bytes) -> str | None:
     """
     for child in node.children:
         if child.type in ("identifier", "type_identifier", "field_identifier", "property_identifier"):
-            return source_bytes[child.start_byte:child.end_byte].decode("utf-8", errors="replace")
+            return source_bytes[child.start_byte : child.end_byte].decode("utf-8", errors="replace")
         if child.type == "type_spec":
             inner_name = child.child_by_field_name("name")
             if inner_name:
-                return source_bytes[inner_name.start_byte:inner_name.end_byte].decode("utf-8", errors="replace")
+                return source_bytes[inner_name.start_byte : inner_name.end_byte].decode("utf-8", errors="replace")
     return None
 
 
@@ -64,7 +64,7 @@ def _extract_declarator_name(node: object, source_bytes: bytes) -> str | None:
     """
     for child in node.children:
         if child.type in ("identifier", "field_identifier", "type_identifier"):
-            return source_bytes[child.start_byte:child.end_byte].decode("utf-8", errors="replace")
+            return source_bytes[child.start_byte : child.end_byte].decode("utf-8", errors="replace")
         if child.type in ("function_declarator", "pointer_declarator", "reference_declarator"):
             return _extract_declarator_name(child, source_bytes)
     return None
@@ -85,12 +85,12 @@ def build_signature(node: object, spec: LanguageSpec, source_bytes: bytes) -> st
     """
     body = node.child_by_field_name("body")
     if body is not None:
-        sig_bytes = source_bytes[node.start_byte:body.start_byte]
+        sig_bytes = source_bytes[node.start_byte : body.start_byte]
     else:
         end = source_bytes.find(b"\n", node.start_byte)
         if end == -1:
             end = node.end_byte
-        sig_bytes = source_bytes[node.start_byte:end]
+        sig_bytes = source_bytes[node.start_byte : end]
 
     sig = sig_bytes.decode("utf-8", errors="replace").strip()
     sig = sig.rstrip(":{ \t\n\r")
@@ -98,7 +98,10 @@ def build_signature(node: object, spec: LanguageSpec, source_bytes: bytes) -> st
 
 
 def extract_docstring(
-    node: object, spec: LanguageSpec, source_bytes: bytes, language: str,
+    node: object,
+    spec: LanguageSpec,
+    source_bytes: bytes,
+    language: str,
 ) -> str | None:
     """Extract docstring/documentation comment for a symbol.
 
@@ -137,9 +140,7 @@ def _extract_python_style_docstring(node: object, source_bytes: bytes) -> str | 
         if first_stmt.type == "expression_statement" and first_stmt.child_count > 0:
             target = first_stmt.children[0]
         if target.type == "string":
-            raw = source_bytes[target.start_byte:target.end_byte].decode(
-                "utf-8", errors="replace"
-            )
+            raw = source_bytes[target.start_byte : target.end_byte].decode("utf-8", errors="replace")
             return _clean_docstring(raw)
     return None
 
@@ -160,11 +161,7 @@ def _extract_preceding_comment(node: object, source_bytes: bytes, language: str)
         parts: list[str] = []
         current = prev
         while current is not None and current.type == "comment":
-            parts.append(
-                source_bytes[current.start_byte:current.end_byte].decode(
-                    "utf-8", errors="replace"
-                )
-            )
+            parts.append(source_bytes[current.start_byte : current.end_byte].decode("utf-8", errors="replace"))
             current = current.prev_named_sibling
         parts.reverse()
         return _clean_comment_block("\n".join(parts), language)
@@ -182,7 +179,7 @@ def _clean_docstring(raw: str) -> str:
     """
     for q in ('"""', "'''", '"', "'"):
         if raw.startswith(q) and raw.endswith(q):
-            raw = raw[len(q):-len(q)]
+            raw = raw[len(q) : -len(q)]
             break
     return raw.strip()
 
@@ -203,14 +200,17 @@ def _clean_comment_block(text: str, language: str) -> str:
         stripped = raw_line.strip()
         for prefix in ("///", "//!", "//", "#", "/*", "*/", "*"):
             if stripped.startswith(prefix):
-                stripped = stripped[len(prefix):]
+                stripped = stripped[len(prefix) :]
                 break
         cleaned.append(stripped.strip())
     return "\n".join(cleaned).strip()
 
 
 def extract_decorators(
-    node: object, spec: LanguageSpec, source_bytes: bytes, decorator_node: object = None,
+    node: object,
+    spec: LanguageSpec,
+    source_bytes: bytes,
+    decorator_node: object = None,
 ) -> list[str]:
     """Extract decorator/annotation strings.
 
@@ -228,16 +228,12 @@ def extract_decorators(
     if decorator_node is not None:
         for child in decorator_node.children:
             if child.type in ("decorator", "annotation", "marker_annotation", "attribute_list"):
-                text = source_bytes[child.start_byte:child.end_byte].decode(
-                    "utf-8", errors="replace"
-                ).strip()
+                text = source_bytes[child.start_byte : child.end_byte].decode("utf-8", errors="replace").strip()
                 decorators.append(text)
     elif spec.decorator_node_type:
         prev = node.prev_named_sibling
         while prev is not None and prev.type == spec.decorator_node_type:
-            text = source_bytes[prev.start_byte:prev.end_byte].decode(
-                "utf-8", errors="replace"
-            ).strip()
+            text = source_bytes[prev.start_byte : prev.end_byte].decode("utf-8", errors="replace").strip()
             decorators.insert(0, text)
             prev = prev.prev_named_sibling
 

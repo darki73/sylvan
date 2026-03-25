@@ -34,11 +34,17 @@ class LanguageSpec:
 
 LANGUAGE_EXTENSIONS: dict[str, str] = {
     # Python
-    ".py": "python", ".pyi": "python", ".pyx": "python",
+    ".py": "python",
+    ".pyi": "python",
+    ".pyx": "python",
     # JavaScript
-    ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript", ".cjs": "javascript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
     # TypeScript
-    ".ts": "typescript", ".tsx": "tsx",
+    ".ts": "typescript",
+    ".tsx": "tsx",
     # Go
     ".go": "go",
     # Rust
@@ -46,11 +52,17 @@ LANGUAGE_EXTENSIONS: dict[str, str] = {
     # Java
     ".java": "java",
     # Kotlin
-    ".kt": "kotlin", ".kts": "kotlin",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
     # C
     ".c": "c",
     # C++
-    ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp", ".hpp": "cpp", ".hh": "cpp", ".hxx": "cpp",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".hpp": "cpp",
+    ".hh": "cpp",
+    ".hxx": "cpp",
     # C header (defaults to C, heuristic may upgrade to C++)
     ".h": "c",
     # C#
@@ -58,44 +70,63 @@ LANGUAGE_EXTENSIONS: dict[str, str] = {
     # Swift
     ".swift": "swift",
     # Ruby
-    ".rb": "ruby", ".rake": "ruby",
+    ".rb": "ruby",
+    ".rake": "ruby",
     # PHP
     ".php": "php",
     # Scala
-    ".scala": "scala", ".sc": "scala",
+    ".scala": "scala",
+    ".sc": "scala",
     # Dart
     ".dart": "dart",
     # Elixir
-    ".ex": "elixir", ".exs": "elixir",
+    ".ex": "elixir",
+    ".exs": "elixir",
     # Lua
     ".lua": "lua",
     # Perl
-    ".pl": "perl", ".pm": "perl", ".t": "perl",
+    ".pl": "perl",
+    ".pm": "perl",
+    ".t": "perl",
     # Bash/Shell
-    ".sh": "bash", ".bash": "bash",
+    ".sh": "bash",
+    ".bash": "bash",
     # Haskell
-    ".hs": "haskell", ".lhs": "haskell",
+    ".hs": "haskell",
+    ".lhs": "haskell",
     # Julia
     ".jl": "julia",
     # R
-    ".r": "r", ".R": "r",
+    ".r": "r",
+    ".R": "r",
     # Erlang
-    ".erl": "erlang", ".hrl": "erlang",
+    ".erl": "erlang",
+    ".hrl": "erlang",
     # Fortran
-    ".f90": "fortran", ".f95": "fortran", ".f03": "fortran", ".f08": "fortran",
-    ".f": "fortran", ".for": "fortran", ".fpp": "fortran",
+    ".f90": "fortran",
+    ".f95": "fortran",
+    ".f03": "fortran",
+    ".f08": "fortran",
+    ".f": "fortran",
+    ".for": "fortran",
+    ".fpp": "fortran",
     # SQL
     ".sql": "sql",
     # Objective-C
-    ".m": "objc", ".mm": "objc",
+    ".m": "objc",
+    ".mm": "objc",
     # Protocol Buffers
     ".proto": "proto",
     # HCL/Terraform
-    ".tf": "hcl", ".hcl": "hcl", ".tfvars": "hcl",
+    ".tf": "hcl",
+    ".hcl": "hcl",
+    ".tfvars": "hcl",
     # GraphQL
-    ".graphql": "graphql", ".gql": "graphql",
+    ".graphql": "graphql",
+    ".gql": "graphql",
     # Groovy
-    ".groovy": "groovy", ".gradle": "groovy",
+    ".groovy": "groovy",
+    ".gradle": "groovy",
     # Nix
     ".nix": "nix",
     # Vue
@@ -109,11 +140,16 @@ LANGUAGE_EXTENSIONS: dict[str, str] = {
     # TOML
     ".toml": "toml",
     # YAML
-    ".yaml": "yaml", ".yml": "yaml",
+    ".yaml": "yaml",
+    ".yml": "yaml",
     # Assembly
-    ".asm": "asm", ".s": "asm", ".S": "asm", ".inc": "asm",
+    ".asm": "asm",
+    ".s": "asm",
+    ".S": "asm",
+    ".inc": "asm",
     # XML
-    ".xml": "xml", ".xul": "xml",
+    ".xml": "xml",
+    ".xul": "xml",
 }
 """Mapping of file extensions to language identifiers."""
 
@@ -702,9 +738,15 @@ LANGUAGE_REGISTRY: dict[str, LanguageSpec] = {
 }
 """Language extraction specs indexed by language identifier."""
 
-CUSTOM_EXTRACTION_LANGUAGES: frozenset[str] = frozenset({
-    "asm", "vue", "css", "toml", "yaml",
-})
+CUSTOM_EXTRACTION_LANGUAGES: frozenset[str] = frozenset(
+    {
+        "asm",
+        "vue",
+        "css",
+        "toml",
+        "yaml",
+    }
+)
 """Languages where tree-sitter extraction may be incomplete."""
 
 

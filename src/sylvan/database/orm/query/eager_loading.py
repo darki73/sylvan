@@ -47,9 +47,7 @@ class QueryEagerMixin:
             rel_desc: The BelongsTo descriptor.
         """
         fk_values = [
-            getattr(inst, rel_desc.foreign_key)
-            for inst in instances
-            if getattr(inst, rel_desc.foreign_key) is not None
+            getattr(inst, rel_desc.foreign_key) for inst in instances if getattr(inst, rel_desc.foreign_key) is not None
         ]
         if not fk_values:
             return
@@ -71,9 +69,7 @@ class QueryEagerMixin:
         from sylvan.database.orm.primitives.relations import HasMany
 
         local_values = [
-            getattr(inst, rel_desc.local_key)
-            for inst in instances
-            if getattr(inst, rel_desc.local_key) is not None
+            getattr(inst, rel_desc.local_key) for inst in instances if getattr(inst, rel_desc.local_key) is not None
         ]
         if not local_values:
             return
@@ -125,9 +121,7 @@ class QueryEagerMixin:
             rel_desc: The HasMany descriptor.
         """
         local_values = [
-            getattr(inst, rel_desc.local_key)
-            for inst in instances
-            if getattr(inst, rel_desc.local_key) is not None
+            getattr(inst, rel_desc.local_key) for inst in instances if getattr(inst, rel_desc.local_key) is not None
         ]
         if not local_values:
             return
@@ -154,9 +148,7 @@ class QueryEagerMixin:
             rel_desc: The BelongsToMany descriptor.
         """
         local_values = [
-            getattr(inst, rel_desc.local_key)
-            for inst in instances
-            if getattr(inst, rel_desc.local_key) is not None
+            getattr(inst, rel_desc.local_key) for inst in instances if getattr(inst, rel_desc.local_key) is not None
         ]
         if not local_values:
             return

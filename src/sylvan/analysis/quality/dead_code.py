@@ -38,17 +38,23 @@ async def find_dead_code(
 
     rows = await (
         Symbol.query()
-        .select("symbols.symbol_id", "symbols.name", "symbols.qualified_name",
-                "symbols.kind", "symbols.language", "symbols.signature",
-                "symbols.line_start", "f.path as file_path")
+        .select(
+            "symbols.symbol_id",
+            "symbols.name",
+            "symbols.qualified_name",
+            "symbols.kind",
+            "symbols.language",
+            "symbols.signature",
+            "symbols.line_start",
+            "f.path as file_path",
+        )
         .join("files f", "f.id = symbols.file_id")
         .join("repos r", "r.id = f.repo_id")
         .where("r.name", repo_name)
         .where_in("symbols.kind", kinds)
         .where_not_in_subquery(
             "symbols.symbol_id",
-            'SELECT DISTINCT target_symbol_id FROM "references" '
-            'WHERE target_symbol_id IS NOT NULL',
+            'SELECT DISTINCT target_symbol_id FROM "references" WHERE target_symbol_id IS NOT NULL',
         )
         .order_by("f.path")
         .order_by("symbols.line_start")
@@ -63,16 +69,18 @@ async def find_dead_code(
         if _is_entry_point(name, file_path):
             continue
 
-        results.append({
-            "symbol_id": r.symbol_id,
-            "name": r.name,
-            "qualified_name": r.qualified_name,
-            "kind": r.kind,
-            "language": r.language,
-            "signature": r.signature,
-            "line_start": r.line_start,
-            "file_path": file_path,
-        })
+        results.append(
+            {
+                "symbol_id": r.symbol_id,
+                "name": r.name,
+                "qualified_name": r.qualified_name,
+                "kind": r.kind,
+                "language": r.language,
+                "signature": r.signature,
+                "line_start": r.line_start,
+                "file_path": file_path,
+            }
+        )
 
     return results
 

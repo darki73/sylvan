@@ -3,7 +3,14 @@
 from sylvan.context import get_context
 from sylvan.database.orm import Section
 from sylvan.error_codes import ContentNotAvailableError, SectionNotFoundError
-from sylvan.tools.support.response import MetaBuilder, check_staleness, ensure_orm, log_tool_call, record_savings, wrap_response
+from sylvan.tools.support.response import (
+    MetaBuilder,
+    check_staleness,
+    ensure_orm,
+    log_tool_call,
+    record_savings,
+    wrap_response,
+)
 
 
 @log_tool_call
@@ -103,13 +110,15 @@ async def get_sections(section_ids: list[str]) -> dict:
         ctx.session.record_section_access(sid, file_path)
         if section.file:
             repo_ids.add(section.file.repo_id)
-        results.append({
-            "section_id": section.section_id,
-            "title": section.title,
-            "level": section.level,
-            "file": file_path,
-            "content": section_text,
-        })
+        results.append(
+            {
+                "section_id": section.section_id,
+                "title": section.title,
+                "level": section.level,
+                "file": file_path,
+                "content": section_text,
+            }
+        )
 
     meta.set("found", len(results))
     meta.set("not_found", len(not_found))

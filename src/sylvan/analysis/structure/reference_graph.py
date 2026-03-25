@@ -41,11 +41,13 @@ async def build_reference_graph(repo_id: int) -> int:
     symbols_by_file: dict[int, list[dict]] = {}
     for sym in symbols_rows:
         fid = sym.file_id
-        symbols_by_file.setdefault(fid, []).append({
-            "symbol_id": sym.symbol_id,
-            "name": sym.name,
-            "file_id": sym.file_id,
-        })
+        symbols_by_file.setdefault(fid, []).append(
+            {
+                "symbol_id": sym.symbol_id,
+                "name": sym.name,
+                "file_id": sym.file_id,
+            }
+        )
 
     file_records = await FileRecord.where(repo_id=repo_id).get()
     file_paths = {}
@@ -132,9 +134,16 @@ async def get_references_to(symbol_id: str) -> list[dict]:
     """
     refs = await (
         Reference.query()
-        .select('"references".source_symbol_id', '"references".target_specifier',
-                's.name', 's.qualified_name', 's.kind', 's.language',
-                's.signature', 'f.path as file_path')
+        .select(
+            '"references".source_symbol_id',
+            '"references".target_specifier',
+            "s.name",
+            "s.qualified_name",
+            "s.kind",
+            "s.language",
+            "s.signature",
+            "f.path as file_path",
+        )
         .left_join("symbols s", 's.symbol_id = "references".source_symbol_id')
         .left_join("files f", "f.id = s.file_id")
         .where('"references".target_symbol_id', symbol_id)
@@ -169,9 +178,16 @@ async def get_references_from(symbol_id: str) -> list[dict]:
     """
     refs = await (
         Reference.query()
-        .select('"references".target_symbol_id', '"references".target_specifier',
-                's.name', 's.qualified_name', 's.kind', 's.language',
-                's.signature', 'f.path as file_path')
+        .select(
+            '"references".target_symbol_id',
+            '"references".target_specifier',
+            "s.name",
+            "s.qualified_name",
+            "s.kind",
+            "s.language",
+            "s.signature",
+            "f.path as file_path",
+        )
         .left_join("symbols s", 's.symbol_id = "references".target_symbol_id')
         .left_join("files f", "f.id = s.file_id")
         .where('"references".source_symbol_id', symbol_id)
@@ -205,5 +221,5 @@ def _name_appears_in(name: str, text: str) -> bool:
     """
     if len(name) < 2:
         return False
-    pattern = r'\b' + re.escape(name) + r'\b'
+    pattern = r"\b" + re.escape(name) + r"\b"
     return bool(re.search(pattern, text))

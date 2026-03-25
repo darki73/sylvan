@@ -9,12 +9,14 @@ from sylvan.tools.support.response import MetaBuilder, log_tool_call, wrap_respo
 def _unlock_gate() -> None:
     """Mark the workflow gate as loaded."""
     from sylvan.session.tracker import get_session
+
     get_session()._workflow_loaded = True
 
 
 def _auto_configure_enabled() -> bool:
     """Check if auto_configure is enabled in server config."""
     from sylvan.config import get_config
+
     return get_config().server.auto_configure
 
 
@@ -52,8 +54,7 @@ def _get_workflow_rules() -> list[dict]:
         {
             "rule": "Use blast_radius before refactoring",
             "detail": (
-                "Call get_blast_radius before renaming or changing signatures. "
-                "Shows every file that would be affected."
+                "Call get_blast_radius before renaming or changing signatures. Shows every file that would be affected."
             ),
         },
         {
@@ -71,39 +72,47 @@ def _claude_code_settings_content() -> dict:
     return {
         "permissions": {"allow": ["mcp__sylvan__*"]},
         "hooks": {
-            "SubagentStart": [{
-                "matcher": "*",
-                "hooks": [{
-                    "type": "command",
-                    "command": (
-                        "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SubagentStart\","
-                        "\"additionalContext\":\"CRITICAL: Always try mcp__sylvan__* tools FIRST "
-                        "before falling back to Read/Grep/Glob. "
-                        "mcp__sylvan__search_symbols to find code, "
-                        "mcp__sylvan__get_symbol to read source, "
-                        "mcp__sylvan__get_file_outline to understand files, "
-                        "mcp__sylvan__find_importers for dependencies, "
-                        "mcp__sylvan__get_blast_radius before refactoring. "
-                        "These return only the exact code you need and save 90%+ tokens. "
-                        "Only fall back to Read/Grep if the repo is not indexed or sylvan "
-                        "returns no results.\"}}'"
-                    ),
-                    "timeout": 5,
-                }],
-            }],
-            "PostToolUse": [{
-                "matcher": "Edit|Write",
-                "hooks": [{
-                    "type": "command",
-                    "command": (
-                        "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\","
-                        "\"additionalContext\":\"You just edited a file. Run "
-                        "mcp__sylvan__index_file to update the index so search results "
-                        "stay fresh. Pass the repo name and the relative file path.\"}}'"
-                    ),
-                    "timeout": 5,
-                }],
-            }],
+            "SubagentStart": [
+                {
+                    "matcher": "*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": (
+                                'echo \'{"hookSpecificOutput":{"hookEventName":"SubagentStart",'
+                                '"additionalContext":"CRITICAL: Always try mcp__sylvan__* tools FIRST '
+                                "before falling back to Read/Grep/Glob. "
+                                "mcp__sylvan__search_symbols to find code, "
+                                "mcp__sylvan__get_symbol to read source, "
+                                "mcp__sylvan__get_file_outline to understand files, "
+                                "mcp__sylvan__find_importers for dependencies, "
+                                "mcp__sylvan__get_blast_radius before refactoring. "
+                                "These return only the exact code you need and save 90%+ tokens. "
+                                "Only fall back to Read/Grep if the repo is not indexed or sylvan "
+                                "returns no results.\"}}'"
+                            ),
+                            "timeout": 5,
+                        }
+                    ],
+                }
+            ],
+            "PostToolUse": [
+                {
+                    "matcher": "Edit|Write",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": (
+                                'echo \'{"hookSpecificOutput":{"hookEventName":"PostToolUse",'
+                                '"additionalContext":"You just edited a file. Run '
+                                "mcp__sylvan__index_file to update the index so search results "
+                                "stay fresh. Pass the repo name and the relative file path.\"}}'"
+                            ),
+                            "timeout": 5,
+                        }
+                    ],
+                }
+            ],
         },
     }
 
@@ -144,9 +153,7 @@ async def configure_claude_code(project_path: str) -> dict:
         for hook_type, hook_entries in settings_content["hooks"].items():
             existing_hooks = hooks.setdefault(hook_type, [])
             has_sylvan = any(
-                "sylvan" in h.get("command", "")
-                for entry in existing_hooks
-                for h in entry.get("hooks", [])
+                "sylvan" in h.get("command", "") for entry in existing_hooks for h in entry.get("hooks", [])
             )
             if not has_sylvan:
                 existing_hooks.extend(hook_entries)
@@ -155,29 +162,35 @@ async def configure_claude_code(project_path: str) -> dict:
         settings_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
 
         _unlock_gate()
-        return wrap_response({
-            "editor": "claude_code",
-            "configured": True,
-            "auto_written": True,
-            "path": str(settings_path),
-            "rules": _get_workflow_rules(),
-        }, meta.build())
+        return wrap_response(
+            {
+                "editor": "claude_code",
+                "configured": True,
+                "auto_written": True,
+                "path": str(settings_path),
+                "rules": _get_workflow_rules(),
+            },
+            meta.build(),
+        )
 
     # Default: return instructions for the agent to apply
     _unlock_gate()
-    return wrap_response({
-        "editor": "claude_code",
-        "configured": False,
-        "auto_written": False,
-        "path": str(settings_path),
-        "instructions": (
-            "Add the following to .claude/settings.local.json. "
-            "Merge with existing content if the file already exists. "
-            "Create .claude/ directory if it does not exist."
-        ),
-        "content": settings_content,
-        "rules": _get_workflow_rules(),
-    }, meta.build())
+    return wrap_response(
+        {
+            "editor": "claude_code",
+            "configured": False,
+            "auto_written": False,
+            "path": str(settings_path),
+            "instructions": (
+                "Add the following to .claude/settings.local.json. "
+                "Merge with existing content if the file already exists. "
+                "Create .claude/ directory if it does not exist."
+            ),
+            "content": settings_content,
+            "rules": _get_workflow_rules(),
+        },
+        meta.build(),
+    )
 
 
 @log_tool_call
@@ -202,27 +215,32 @@ async def configure_cursor(project_path: str) -> dict:
         rules_path.parent.mkdir(parents=True, exist_ok=True)
         rules_path.write_text(rules_content, encoding="utf-8")
         _unlock_gate()
-        return wrap_response({
-            "editor": "cursor",
-            "configured": True,
-            "auto_written": True,
-            "path": str(rules_path),
-            "rules": _get_workflow_rules(),
-        }, meta.build())
+        return wrap_response(
+            {
+                "editor": "cursor",
+                "configured": True,
+                "auto_written": True,
+                "path": str(rules_path),
+                "rules": _get_workflow_rules(),
+            },
+            meta.build(),
+        )
 
     _unlock_gate()
-    return wrap_response({
-        "editor": "cursor",
-        "configured": False,
-        "auto_written": False,
-        "path": str(rules_path),
-        "instructions": (
-            "Create .cursor/rules/sylvan.md with the content below. "
-            "Create the directories if they do not exist."
-        ),
-        "content": rules_content,
-        "rules": _get_workflow_rules(),
-    }, meta.build())
+    return wrap_response(
+        {
+            "editor": "cursor",
+            "configured": False,
+            "auto_written": False,
+            "path": str(rules_path),
+            "instructions": (
+                "Create .cursor/rules/sylvan.md with the content below. Create the directories if they do not exist."
+            ),
+            "content": rules_content,
+            "rules": _get_workflow_rules(),
+        },
+        meta.build(),
+    )
 
 
 @log_tool_call
@@ -247,27 +265,32 @@ async def configure_windsurf(project_path: str) -> dict:
         rules_path.parent.mkdir(parents=True, exist_ok=True)
         rules_path.write_text(rules_content, encoding="utf-8")
         _unlock_gate()
-        return wrap_response({
-            "editor": "windsurf",
-            "configured": True,
-            "auto_written": True,
-            "path": str(rules_path),
-            "rules": _get_workflow_rules(),
-        }, meta.build())
+        return wrap_response(
+            {
+                "editor": "windsurf",
+                "configured": True,
+                "auto_written": True,
+                "path": str(rules_path),
+                "rules": _get_workflow_rules(),
+            },
+            meta.build(),
+        )
 
     _unlock_gate()
-    return wrap_response({
-        "editor": "windsurf",
-        "configured": False,
-        "auto_written": False,
-        "path": str(rules_path),
-        "instructions": (
-            "Create .windsurf/rules/sylvan.md with the content below. "
-            "Create the directories if they do not exist."
-        ),
-        "content": rules_content,
-        "rules": _get_workflow_rules(),
-    }, meta.build())
+    return wrap_response(
+        {
+            "editor": "windsurf",
+            "configured": False,
+            "auto_written": False,
+            "path": str(rules_path),
+            "instructions": (
+                "Create .windsurf/rules/sylvan.md with the content below. Create the directories if they do not exist."
+            ),
+            "content": rules_content,
+            "rules": _get_workflow_rules(),
+        },
+        meta.build(),
+    )
 
 
 @log_tool_call
@@ -292,27 +315,33 @@ async def configure_copilot(project_path: str) -> dict:
         instructions_path.parent.mkdir(parents=True, exist_ok=True)
         instructions_path.write_text(rules_content, encoding="utf-8")
         _unlock_gate()
-        return wrap_response({
-            "editor": "copilot",
-            "configured": True,
-            "auto_written": True,
-            "path": str(instructions_path),
-            "rules": _get_workflow_rules(),
-        }, meta.build())
+        return wrap_response(
+            {
+                "editor": "copilot",
+                "configured": True,
+                "auto_written": True,
+                "path": str(instructions_path),
+                "rules": _get_workflow_rules(),
+            },
+            meta.build(),
+        )
 
     _unlock_gate()
-    return wrap_response({
-        "editor": "copilot",
-        "configured": False,
-        "auto_written": False,
-        "path": str(instructions_path),
-        "instructions": (
-            "Create .github/copilot-instructions.md with the content below. "
-            "Create the .github/ directory if it does not exist."
-        ),
-        "content": rules_content,
-        "rules": _get_workflow_rules(),
-    }, meta.build())
+    return wrap_response(
+        {
+            "editor": "copilot",
+            "configured": False,
+            "auto_written": False,
+            "path": str(instructions_path),
+            "instructions": (
+                "Create .github/copilot-instructions.md with the content below. "
+                "Create the .github/ directory if it does not exist."
+            ),
+            "content": rules_content,
+            "rules": _get_workflow_rules(),
+        },
+        meta.build(),
+    )
 
 
 def _build_rules_markdown() -> str:

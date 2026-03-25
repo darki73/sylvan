@@ -54,14 +54,16 @@ async def search_sections(
         if file_rec:
             await file_rec.load("repo")
         repo_obj = file_rec.repo if file_rec else None
-        formatted.append({
-            "section_id": section.section_id,
-            "title": section.title,
-            "level": section.level,
-            "summary": section.summary or "",
-            "file": file_rec.path if file_rec else "",
-            "repo": repo_obj.name if repo_obj else "",
-        })
+        formatted.append(
+            {
+                "section_id": section.section_id,
+                "title": section.title,
+                "level": section.level,
+                "summary": section.summary or "",
+                "file": file_rec.path if file_rec else "",
+                "repo": repo_obj.name if repo_obj else "",
+            }
+        )
 
     meta.set("results_count", len(formatted))
     meta.set("query", query)

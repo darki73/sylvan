@@ -165,7 +165,7 @@ class QuerySqlMixin:
 
         if select_override:
             base_sql = base_sql.replace(
-                base_sql[base_sql.index("SELECT") + 7:base_sql.index("FROM")].strip(),
+                base_sql[base_sql.index("SELECT") + 7 : base_sql.index("FROM")].strip(),
                 select_override,
                 1,
             )

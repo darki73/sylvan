@@ -78,15 +78,11 @@ async def get_context_bundle(
             .limit(20)
             .get()
         )
-        bundle["callers"] = [
-            {"path": c.path, "language": c.language} for c in caller_files
-        ]
+        bundle["callers"] = [{"path": c.path, "language": c.language} for c in caller_files]
 
-    siblings = await (Symbol.where(file_id=symbol.file_id)
-                .where_not(symbol_id=symbol_id)
-                .order_by("line_start")
-                .limit(10)
-                .get())
+    siblings = await (
+        Symbol.where(file_id=symbol.file_id).where_not(symbol_id=symbol_id).order_by("line_start").limit(10).get()
+    )
     bundle["siblings"] = [
         {
             "symbol_id": sibling.symbol_id,

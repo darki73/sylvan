@@ -22,11 +22,15 @@ async def _find_files_that_are_imported(importer_file_ids: list[int]) -> set[int
     if not importer_file_ids:
         return set()
 
-    rows = await FileImport.query().select(
-        "DISTINCT file_imports.resolved_file_id"
-    ).where_in(
-        "file_imports.resolved_file_id", importer_file_ids,
-    ).get()
+    rows = (
+        await FileImport.query()
+        .select("DISTINCT file_imports.resolved_file_id")
+        .where_in(
+            "file_imports.resolved_file_id",
+            importer_file_ids,
+        )
+        .get()
+    )
     return {row.resolved_file_id for row in rows}
 
 
@@ -49,11 +53,13 @@ async def find_importers(repo: str, file_path: str, max_results: int = 50) -> di
     max_results = clamp(max_results, 1, 1000)
     ensure_orm()
 
-    target = await (FileRecord.query()
-              .join("repos", "repos.id = files.repo_id")
-              .where("repos.name", repo)
-              .where("files.path", file_path)
-              .first())
+    target = await (
+        FileRecord.query()
+        .join("repos", "repos.id = files.repo_id")
+        .where("repos.name", repo)
+        .where("files.path", file_path)
+        .first()
+    )
 
     if target is None:
         raise IndexFileNotFoundError(file_path=file_path, _meta=meta.build())
@@ -74,17 +80,17 @@ async def find_importers(repo: str, file_path: str, max_results: int = 50) -> di
     importers = []
     for f in importing_files:
         symbol_count = await Symbol.where(file_id=f.id).count()
-        importers.append({
-            "path": f.path,
-            "language": f.language,
-            "symbol_count": symbol_count,
-            "has_importers": f.id in files_that_are_imported,
-        })
+        importers.append(
+            {
+                "path": f.path,
+                "language": f.language,
+                "symbol_count": symbol_count,
+                "has_importers": f.id in files_that_are_imported,
+            }
+        )
 
     meta.set("count", len(importers))
-    return wrap_response(
-        {"file": file_path, "importers": importers}, meta.build()
-    )
+    return wrap_response({"file": file_path, "importers": importers}, meta.build())
 
 
 @log_tool_call
@@ -108,11 +114,13 @@ async def batch_find_importers(repo: str, file_paths: list[str], max_results: in
     not_found = []
 
     for fp in file_paths:
-        target = await (FileRecord.query()
-                  .join("repos", "repos.id = files.repo_id")
-                  .where("repos.name", repo)
-                  .where("files.path", fp)
-                  .first())
+        target = await (
+            FileRecord.query()
+            .join("repos", "repos.id = files.repo_id")
+            .where("repos.name", repo)
+            .where("files.path", fp)
+            .first()
+        )
 
         if target is None:
             not_found.append(fp)
@@ -128,16 +136,15 @@ async def batch_find_importers(repo: str, file_paths: list[str], max_results: in
             .get()
         )
 
-        importers = [
-            {"path": f.path, "language": f.language}
-            for f in importing_files
-        ]
+        importers = [{"path": f.path, "language": f.language} for f in importing_files]
 
-        results.append({
-            "file": fp,
-            "importer_count": len(importers),
-            "importers": importers,
-        })
+        results.append(
+            {
+                "file": fp,
+                "importer_count": len(importers),
+                "importers": importers,
+            }
+        )
 
     meta.set("found", len(results))
     meta.set("not_found", len(not_found))

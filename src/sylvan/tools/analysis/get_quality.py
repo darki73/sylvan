@@ -34,17 +34,21 @@ async def get_quality(
     if repo_obj is None:
         raise RepoNotFoundError(repo=repo, _meta=meta.build())
 
-    count = await (Quality.query()
-             .join("symbols s", "s.symbol_id = quality.symbol_id")
-             .join("files f", "f.id = s.file_id")
-             .where("f.repo_id", repo_obj.id)
-             .count())
+    count = await (
+        Quality.query()
+        .join("symbols s", "s.symbol_id = quality.symbol_id")
+        .join("files f", "f.id = s.file_id")
+        .where("f.repo_id", repo_obj.id)
+        .count()
+    )
 
     if count == 0:
         from sylvan.analysis.quality.quality_metrics import compute_quality_metrics
+
         await compute_quality_metrics(repo_obj.id)
 
     from sylvan.analysis.quality.quality_metrics import get_low_quality_symbols
+
     results = await get_low_quality_symbols(
         repo,
         min_complexity=min_complexity,

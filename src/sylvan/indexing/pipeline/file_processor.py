@@ -15,12 +15,25 @@ if TYPE_CHECKING:
     from sylvan.indexing.pipeline.orchestrator import IndexResult
 
 
-_DOC_EXTENSIONS = frozenset({
-    ".md", ".markdown", ".mdx", ".rst", ".adoc",
-    ".txt", ".html", ".htm",
-    ".ipynb", ".json", ".jsonc",
-    ".yaml", ".yml", ".xml", ".svg",
-})
+_DOC_EXTENSIONS = frozenset(
+    {
+        ".md",
+        ".markdown",
+        ".mdx",
+        ".rst",
+        ".adoc",
+        ".txt",
+        ".html",
+        ".htm",
+        ".ipynb",
+        ".json",
+        ".jsonc",
+        ".yaml",
+        ".yml",
+        ".xml",
+        ".svg",
+    }
+)
 """File extensions recognized as documentation formats."""
 
 
@@ -61,8 +74,12 @@ async def process_file(
     file_obj = await FileRecord.upsert(
         conflict_columns=["repo_id", "path"],
         update_columns=["language", "content_hash", "byte_size", "mtime"],
-        repo_id=repo_id, path=df.relative_path, language=language,
-        content_hash=content_hash, byte_size=df.size, mtime=df.mtime,
+        repo_id=repo_id,
+        path=df.relative_path,
+        language=language,
+        content_hash=content_hash,
+        byte_size=df.size,
+        mtime=df.mtime,
     )
     file_id = file_obj.id
 
@@ -133,20 +150,37 @@ async def _upsert_symbol_without_parent(sym: object, file_id: int) -> None:
     await Symbol.upsert(
         conflict_columns=["symbol_id"],
         update_columns=[
-            "file_id", "name", "qualified_name", "kind",
-            "language", "signature", "docstring", "summary",
-            "decorators", "keywords",
-            "line_start", "line_end", "byte_offset",
-            "byte_length", "content_hash",
+            "file_id",
+            "name",
+            "qualified_name",
+            "kind",
+            "language",
+            "signature",
+            "docstring",
+            "summary",
+            "decorators",
+            "keywords",
+            "line_start",
+            "line_end",
+            "byte_offset",
+            "byte_length",
+            "content_hash",
         ],
-        file_id=file_id, symbol_id=sym.symbol_id,
-        name=sym.name, qualified_name=sym.qualified_name,
-        kind=sym.kind, language=sym.language,
-        signature=sym.signature, docstring=sym.docstring,
-        summary=sym.summary, decorators=sym.decorators or [],
+        file_id=file_id,
+        symbol_id=sym.symbol_id,
+        name=sym.name,
+        qualified_name=sym.qualified_name,
+        kind=sym.kind,
+        language=sym.language,
+        signature=sym.signature,
+        docstring=sym.docstring,
+        summary=sym.summary,
+        decorators=sym.decorators or [],
         keywords=sym.keywords or [],
-        line_start=sym.line_start, line_end=sym.line_end,
-        byte_offset=sym.byte_offset, byte_length=sym.byte_length,
+        line_start=sym.line_start,
+        line_end=sym.line_end,
+        byte_offset=sym.byte_offset,
+        byte_length=sym.byte_length,
         content_hash=sym.content_hash,
     )
 
@@ -188,13 +222,21 @@ async def _store_code_symbols(
             )
 
     if parse_result.error:
-        result.errors.append({
-            "error": "parse_error", "path": file_path, "detail": parse_result.error,
-        })
+        result.errors.append(
+            {
+                "error": "parse_error",
+                "path": file_path,
+                "detail": parse_result.error,
+            }
+        )
 
 
 async def _store_imports(
-    file_id: int, content: str, file_path: str, language: str, result: IndexResult,
+    file_id: int,
+    content: str,
+    file_path: str,
+    language: str,
+    result: IndexResult,
 ) -> None:
     """Extract and store file-level imports.
 
@@ -207,7 +249,9 @@ async def _store_imports(
     """
     for imp_dict in extract_imports(content, file_path, language):
         await FileImport.create(
-            file_id=file_id, specifier=imp_dict["specifier"], names=imp_dict.get("names", []),
+            file_id=file_id,
+            specifier=imp_dict["specifier"],
+            names=imp_dict.get("names", []),
         )
         result.imports_extracted += 1
 
@@ -234,15 +278,20 @@ async def store_doc_sections(
 
     try:
         from sylvan.indexing.documents.parser import parse_document
+
         for sec in parse_document(content, file_path, repo_name):
             sec.file_id = file_id
-            body_text = content[sec.byte_start:sec.byte_end][:500] if sec.byte_start is not None else ""
+            body_text = content[sec.byte_start : sec.byte_end][:500] if sec.byte_start is not None else ""
             await Section.create(
-                file_id=sec.file_id, section_id=sec.section_id,
-                title=sec.title, level=sec.level,
+                file_id=sec.file_id,
+                section_id=sec.section_id,
+                title=sec.title,
+                level=sec.level,
                 parent_section_id=sec.parent_section_id,
-                byte_start=sec.byte_start, byte_end=sec.byte_end,
-                summary=sec.summary, tags=sec.tags or [],
+                byte_start=sec.byte_start,
+                byte_end=sec.byte_end,
+                summary=sec.summary,
+                tags=sec.tags or [],
                 references=sec.references or [],
                 content_hash=sec.content_hash,
                 body_text=body_text,

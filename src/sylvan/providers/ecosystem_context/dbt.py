@@ -16,8 +16,7 @@ class DbtContextProvider(ContextProvider):
     """Enriches dbt model files with descriptions, tags, and column metadata."""
 
     def __init__(self) -> None:
-        """Initialize the dbt context provider with empty state.
-        """
+        """Initialize the dbt context provider with empty state."""
         self._models: dict[str, dict] = {}
         self._doc_blocks: dict[str, str] = {}
         self._project_root: Path | None = None
@@ -42,10 +41,7 @@ class DbtContextProvider(ContextProvider):
         Returns:
             ``True`` if a ``dbt_project.yml`` is found within 3 levels.
         """
-        return any(
-            list(folder_path.glob("*/" * depth + "dbt_project.yml"))
-            for depth in range(3)
-        )
+        return any(list(folder_path.glob("*/" * depth + "dbt_project.yml")) for depth in range(3))
 
     @override
     def load(self, folder_path: Path) -> None:
@@ -68,7 +64,8 @@ class DbtContextProvider(ContextProvider):
                 content = md_file.read_text(encoding="utf-8", errors="ignore")
                 for m in re.finditer(
                     r"\{%\s*docs\s+(\w+)\s*%\}(.*?)\{%\s*enddocs\s*%\}",
-                    content, re.DOTALL,
+                    content,
+                    re.DOTALL,
                 ):
                     self._doc_blocks[m.group(1)] = m.group(2).strip()
             except OSError:

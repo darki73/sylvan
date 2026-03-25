@@ -12,6 +12,7 @@ def _get_tokenizer() -> object | None:
     """
     try:
         import tiktoken
+
         return tiktoken.get_encoding("cl100k_base")
     except (ImportError, Exception):
         return None
@@ -54,9 +55,7 @@ def estimate_savings(
         "returned_bytes": returned_bytes,
         "total_file_bytes": total_file_bytes,
         "bytes_avoided": max(0, total_file_bytes - returned_bytes),
-        "file_percent_returned": round(
-            (returned_bytes / total_file_bytes * 100) if total_file_bytes > 0 else 0, 1
-        ),
+        "file_percent_returned": round((returned_bytes / total_file_bytes * 100) if total_file_bytes > 0 else 0, 1),
     }
 
     enc = _get_tokenizer()

@@ -124,26 +124,26 @@ class Symbol(Model):
     @scope
     def in_repo(query, name) -> QueryBuilder:
         """Filter to symbols within a named repository."""
-        return (query
-                .join("files", "files.id = symbols.file_id")
-                .join("repos", "repos.id = files.repo_id")
-                .where("repos.name", name))
+        return (
+            query.join("files", "files.id = symbols.file_id")
+            .join("repos", "repos.id = files.repo_id")
+            .where("repos.name", name)
+        )
 
     @scope
     def in_workspace(query, name) -> QueryBuilder:
         """Filter to symbols within a named workspace."""
-        return (query
-                .join("files", "files.id = symbols.file_id")
-                .join("workspace_repos", "workspace_repos.repo_id = files.repo_id")
-                .join("workspaces", "workspaces.id = workspace_repos.workspace_id")
-                .where("workspaces.name", name))
+        return (
+            query.join("files", "files.id = symbols.file_id")
+            .join("workspace_repos", "workspace_repos.repo_id = files.repo_id")
+            .join("workspaces", "workspaces.id = workspace_repos.workspace_id")
+            .where("workspaces.name", name)
+        )
 
     @scope
     def in_file(query, path) -> QueryBuilder:
         """Filter to symbols within a specific file path."""
-        return (query
-                .join("files", "files.id = symbols.file_id")
-                .where("files.path", path))
+        return query.join("files", "files.id = symbols.file_id").where("files.path", path)
 
     async def get_source(self) -> str:
         """Extract source code from blob via byte offset.
@@ -158,9 +158,7 @@ class Symbol(Model):
         content = await file_rec.get_content()
         if content is None:
             return ""
-        return content[self.byte_offset:self.byte_offset + self.byte_length].decode(
-            "utf-8", errors="replace"
-        )
+        return content[self.byte_offset : self.byte_offset + self.byte_length].decode("utf-8", errors="replace")
 
     async def _resolve_file_path(self) -> str:
         """Resolve the file path via the file relation.

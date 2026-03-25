@@ -40,7 +40,8 @@ def default(ctx: typer.Context) -> None:
 def serve(
     transport: str = typer.Option(
         "stdio",
-        "--transport", "-t",
+        "--transport",
+        "-t",
         help="Transport mode: stdio, sse, or http (streamable-http).",
     ),
     host: str = typer.Option(
@@ -50,7 +51,8 @@ def serve(
     ),
     port: int = typer.Option(
         8420,
-        "--port", "-p",
+        "--port",
+        "-p",
         help="Port for SSE/HTTP modes.",
     ),
 ) -> None:
@@ -62,6 +64,7 @@ def serve(
         port: Bind port for network transports.
     """
     from sylvan.server.startup import main as serve_main
+
     serve_main(transport=transport, host=host, port=port)
 
 
@@ -94,8 +97,7 @@ def scaffold(
 
 @app.command()
 def init() -> None:
-    """Interactive configuration setup for providers and embeddings.
-    """
+    """Interactive configuration setup for providers and embeddings."""
 
     typer.echo("Sylvan -- first time setup\n")
 
@@ -117,6 +119,7 @@ def init() -> None:
     match choice:
         case "2":
             from sylvan.providers.external.ollama.setup import configure_ollama
+
             configure_ollama(config)
         case "3":
             config.summary = SummaryConfig(provider="claude-code")
@@ -133,6 +136,7 @@ def init() -> None:
         config_path.chmod(0o600)
     except OSError as exc:
         from sylvan.logging import get_logger as _get_logger
+
         _get_logger(__name__).warning("config_chmod_failed", path=str(config_path), error=str(exc))
     typer.echo(f"\nConfig saved to {config_path}")
 
@@ -159,6 +163,7 @@ def index(
         repo_name = name or Path(path).resolve().name
         typer.echo(f"\nWatching {resolved} for changes (Ctrl+C to stop)...")
         from sylvan.indexing.post_processing.file_watcher import watch_folder
+
         asyncio.run(watch_folder(resolved, repo_name=repo_name))
 
 
@@ -231,6 +236,7 @@ def remove(
                 raise typer.Exit(1)
 
             from sylvan.tools.meta.remove_repo import remove_repo
+
             result = await remove_repo(repo=name)
 
         await backend.disconnect()
@@ -246,8 +252,7 @@ def remove(
 
 @app.command()
 def status() -> None:
-    """Show all indexed repositories with stats.
-    """
+    """Show all indexed repositories with stats."""
     asyncio.run(_async_status())
 
 
@@ -280,10 +285,7 @@ async def _async_status() -> None:
         for r in repos:
             file_count = await FileRecord.where(repo_id=r.id).count()
             symbol_count = await (
-                Symbol.query()
-                .join("files", "files.id = symbols.file_id")
-                .where("files.repo_id", r.id)
-                .count()
+                Symbol.query().join("files", "files.id = symbols.file_id").where("files.repo_id", r.id).count()
             )
             badge = f" [{r.repo_type}]" if r.repo_type and r.repo_type != "local" else ""
             typer.echo(f"  {r.name}{badge}: {file_count} files, {symbol_count} symbols (indexed {r.indexed_at})")
@@ -302,8 +304,7 @@ def doctor() -> None:
 
 
 async def _async_doctor() -> None:
-    """Async implementation of the doctor command.
-    """
+    """Async implementation of the doctor command."""
     import sqlite3
     import sys
     from pathlib import Path
@@ -335,6 +336,7 @@ async def _async_doctor() -> None:
         conn = sqlite3.connect(":memory:")
         conn.enable_load_extension(True)
         import sqlite_vec
+
         sqlite_vec.load(conn)
         _check("sqlite-vec extension", True, "loaded")
         conn.close()
@@ -343,6 +345,7 @@ async def _async_doctor() -> None:
 
     try:
         from sylvan.config import get_config
+
         config = get_config()
         db_path = config.db_path
         db_exists = Path(db_path).exists()
@@ -356,6 +359,7 @@ async def _async_doctor() -> None:
 
     try:
         from sylvan.config import get_config
+
         config = get_config()
         _check(
             "Configuration",
@@ -367,6 +371,7 @@ async def _async_doctor() -> None:
 
     try:
         from sylvan.search.embeddings import get_embedding_provider
+
         provider = get_embedding_provider()
         if provider and provider.available():
             _check("Embedding model", True, f"{provider.name} ({provider.dimensions}d)")
@@ -402,6 +407,7 @@ async def _async_doctor() -> None:
 
     try:
         from tree_sitter_language_pack import get_parser
+
         get_parser("python")
         _check("Tree-sitter", True, "language pack available")
     except Exception as exc:
@@ -465,6 +471,7 @@ def shell() -> None:
 
     with using_context_sync(ctx):
         import code
+
         namespace["asyncio"] = asyncio
         code.interact(banner=banner, local=namespace)
 
@@ -546,26 +553,30 @@ async def _async_export(repo: str, output: str, format: str) -> None:
         symbol_dicts = []
         for s in symbols:
             file_path = await s._resolve_file_path()
-            symbol_dicts.append({
-                "symbol_id": s.symbol_id,
-                "name": s.name,
-                "kind": s.kind,
-                "language": s.language,
-                "signature": s.signature or "",
-                "file": file_path,
-                "line_start": s.line_start,
-                "line_end": s.line_end,
-            })
+            symbol_dicts.append(
+                {
+                    "symbol_id": s.symbol_id,
+                    "name": s.name,
+                    "kind": s.kind,
+                    "language": s.language,
+                    "signature": s.signature or "",
+                    "file": file_path,
+                    "line_start": s.line_start,
+                    "line_end": s.line_end,
+                }
+            )
 
         section_dicts = []
         for s in sections:
             file_path = await s._resolve_file_path()
-            section_dicts.append({
-                "section_id": s.section_id,
-                "title": s.title,
-                "level": s.level,
-                "file": file_path,
-            })
+            section_dicts.append(
+                {
+                    "section_id": s.section_id,
+                    "title": s.title,
+                    "level": s.level,
+                    "file": file_path,
+                }
+            )
 
         data = {
             "repo": {
@@ -577,10 +588,7 @@ async def _async_export(repo: str, output: str, format: str) -> None:
             "files": [{"path": f.path, "language": f.language} for f in files],
             "symbols": symbol_dicts,
             "sections": section_dicts,
-            "imports": [
-                {"file_id": i.file_id, "specifier": i.specifier}
-                for i in imports
-            ],
+            "imports": [{"file_id": i.file_id, "specifier": i.specifier} for i in imports],
             "summary": {
                 "files": len(files),
                 "symbols": len(symbols),
@@ -631,8 +639,7 @@ def library_add(
 
 @library_app.command("list")
 def library_list() -> None:
-    """List all indexed third-party libraries.
-    """
+    """List all indexed third-party libraries."""
     from sylvan.libraries.manager import list_libraries
 
     libs = list_libraries()
@@ -723,8 +730,7 @@ def library_unmap(
 
 @library_app.command("mappings")
 def library_mappings() -> None:
-    """List all user-provided repo URL mappings.
-    """
+    """List all user-provided repo URL mappings."""
     from sylvan.libraries.resolution.package_registry import list_overrides
 
     overrides = list_overrides()
@@ -740,7 +746,9 @@ def library_mappings() -> None:
 def workspace_create(
     name: str = typer.Argument(..., help="Workspace name."),
     description: str = typer.Option("", "--description", "-d", help="Workspace description."),
-    paths: Annotated[list[str] | None, typer.Option("--path", "-p", help="Paths to index and add (can repeat).")] = None,
+    paths: Annotated[
+        list[str] | None, typer.Option("--path", "-p", help="Paths to index and add (can repeat).")
+    ] = None,
 ) -> None:
     """Create a workspace, optionally indexing and adding projects.
 
@@ -749,6 +757,7 @@ def workspace_create(
         description: Optional description.
         paths: Paths to index and add to the workspace.
     """
+
     async def _run() -> None:
         from sylvan.config import get_config
         from sylvan.context import SylvanContext, drain_pending_tasks, using_context
@@ -792,6 +801,7 @@ def workspace_create(
 @workspace_app.command("list")
 def workspace_list() -> None:
     """List all workspaces with repo counts."""
+
     async def _run() -> list[dict]:
         from sylvan.config import get_config
         from sylvan.database.backends.sqlite.backend import SQLiteBackend
@@ -829,6 +839,7 @@ def workspace_add(
         name: Workspace name.
         repo: Repository name (as shown in `sylvan status`).
     """
+
     async def _run() -> None:
         from sylvan.config import get_config
         from sylvan.context import SylvanContext, using_context
@@ -871,6 +882,7 @@ def workspace_remove(
     Args:
         name: Workspace name to remove.
     """
+
     async def _run() -> None:
         from sylvan.config import get_config
         from sylvan.database.backends.sqlite.backend import SQLiteBackend
@@ -905,6 +917,7 @@ def workspace_show(
     Args:
         name: Workspace name.
     """
+
     async def _run() -> dict | None:
         from sylvan.config import get_config
         from sylvan.database.backends.sqlite.backend import SQLiteBackend
@@ -965,6 +978,7 @@ def hook(
                 raise typer.Exit(1)
             typer.echo(f"Auto-indexing worktree: {path}")
             from sylvan.hooks import handle_worktree_create
+
             result = asyncio.run(handle_worktree_create(path))
             typer.echo(json.dumps(result, indent=2))
         case "worktree-remove":
@@ -973,6 +987,7 @@ def hook(
                 typer.echo("Error: missing worktreePath in payload.", err=True)
                 raise typer.Exit(1)
             from sylvan.hooks import handle_worktree_remove
+
             handle_worktree_remove(path)
             typer.echo(f"Worktree removed: {path}")
         case _:
@@ -1051,8 +1066,7 @@ def migrate_create(
 
 @migrate_app.command("rollback")
 def migrate_rollback() -> None:
-    """Roll back the most recent migration.
-    """
+    """Roll back the most recent migration."""
     import asyncio
 
     async def _run() -> None:
@@ -1093,9 +1107,11 @@ def main() -> None:
     to avoid any stdout pollution that could corrupt the MCP stdio protocol.
     """
     import sys
+
     if len(sys.argv) <= 1:
         # Direct MCP server -- no Typer overhead
         from sylvan.server.startup import main as serve_main
+
         serve_main()
     else:
         app()

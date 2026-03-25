@@ -83,6 +83,7 @@ def list_ollama_models(endpoint: str) -> tuple[list[tuple[str, str]], list[tuple
     """
     try:
         from ollama import Client
+
         client = Client(host=endpoint)
         resp = client.list()
 
@@ -113,6 +114,7 @@ def detect_embedding_dims(endpoint: str, model: str) -> int:
     """
     try:
         from ollama import Client
+
         client = Client(host=endpoint)
         resp = client.embed(model=model, input="test")
         if resp.embeddings:

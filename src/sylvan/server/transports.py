@@ -97,21 +97,24 @@ async def run_streamable_http(server: object, host: str = "127.0.0.1", port: int
     app = Starlette(routes=[Mount("/mcp", app=handle_mcp)])
 
     async def serve_with_transport() -> None:
-        """Start uvicorn and the MCP session concurrently.
-        """
+        """Start uvicorn and the MCP session concurrently."""
         config = uvicorn.Config(app, host=host, port=port, log_level="info")
         uv_server = uvicorn.Server(config)
 
         async with transport.connect() as (read_stream, write_stream), anyio.create_task_group() as tg:
+
             async def run_mcp() -> None:
-                """Run the MCP server on the transport streams.
-                    """
+                """Run the MCP server on the transport streams."""
                 await server.run(
-                    read_stream, write_stream, server.create_initialization_options(),
+                    read_stream,
+                    write_stream,
+                    server.create_initialization_options(),
                 )
 
             logger.info(
-                "http_server_starting", host=host, port=port,
+                "http_server_starting",
+                host=host,
+                port=port,
                 url=f"http://{host}:{port}/mcp",
             )
             tg.start_soon(run_mcp)

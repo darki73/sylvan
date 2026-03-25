@@ -69,6 +69,7 @@ class SQLiteBackend(BaseBackend):
         """
         if self._connection is not None:
             import contextlib
+
             with contextlib.suppress(Exception):
                 await self._connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             await self._connection.close()
@@ -169,8 +170,7 @@ class SQLiteBackend(BaseBackend):
         await self.connection.commit()
 
     async def rollback(self) -> None:
-        """Roll back the current transaction.
-        """
+        """Roll back the current transaction."""
         await self.connection.rollback()
 
     async def ensure_schema(self, ddl: str) -> None:

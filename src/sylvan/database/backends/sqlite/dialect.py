@@ -76,10 +76,7 @@ class SQLiteDialect:
                 f"INSERT INTO {table} ({cols_str}) VALUES ({placeholders}) "
                 f"ON CONFLICT({conflict_str}) DO UPDATE SET {update_str}"
             )
-        return (
-            f"INSERT INTO {table} ({cols_str}) VALUES ({placeholders}) "
-            f"ON CONFLICT({conflict_str}) DO NOTHING"
-        )
+        return f"INSERT INTO {table} ({cols_str}) VALUES ({placeholders}) ON CONFLICT({conflict_str}) DO NOTHING"
 
     def build_insert_or_ignore(self, table: str, columns: list[str]) -> str:
         """Generate SQLite INSERT OR IGNORE statement.

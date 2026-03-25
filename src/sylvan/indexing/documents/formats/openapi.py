@@ -27,9 +27,7 @@ def sniff_openapi(content: str, ext: str) -> bool:
         True if the content appears to be an OpenAPI/Swagger spec.
     """
     if ext in (".yaml", ".yml"):
-        return bool(
-            re.search(r"^(openapi|swagger)\s*:", content, re.MULTILINE)
-        )
+        return bool(re.search(r"^(openapi|swagger)\s*:", content, re.MULTILINE))
     if ext in (".json", ".jsonc"):
         try:
             data = json.loads(content)

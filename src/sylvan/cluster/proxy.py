@@ -8,18 +8,20 @@ from sylvan.logging import get_logger
 logger = get_logger(__name__)
 
 # Tools that perform writes and need to be proxied
-WRITE_TOOLS = frozenset({
-    "index_folder",
-    "index_file",
-    "index_workspace",
-    "add_library",
-    "remove_library",
-    "add_to_workspace",
-    "pin_library",
-    "remove_repo",
-    "get_quality",
-    "get_quality_report",
-})
+WRITE_TOOLS = frozenset(
+    {
+        "index_folder",
+        "index_file",
+        "index_workspace",
+        "add_library",
+        "remove_library",
+        "add_to_workspace",
+        "pin_library",
+        "remove_repo",
+        "get_quality",
+        "get_quality_report",
+    }
+)
 
 
 def is_write_tool(tool_name: str) -> bool:
@@ -52,11 +54,14 @@ async def proxy_to_leader(tool_name: str, arguments: dict) -> dict:
 
     try:
         async with httpx.AsyncClient(timeout=120) as client:
-            response = await client.post(url, json={
-                "tool": tool_name,
-                "arguments": arguments,
-                "session_id": state.session_id,
-            })
+            response = await client.post(
+                url,
+                json={
+                    "tool": tool_name,
+                    "arguments": arguments,
+                    "session_id": state.session_id,
+                },
+            )
             response.raise_for_status()
             return response.json()
     except httpx.ConnectError:

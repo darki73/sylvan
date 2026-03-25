@@ -1,6 +1,5 @@
 """Document format router -- dispatches to the appropriate parser via the registry."""
 
-
 import sylvan.indexing.documents.formats.asciidoc as _asciidoc  # noqa: F401
 import sylvan.indexing.documents.formats.html as _html  # noqa: F401
 import sylvan.indexing.documents.formats.json_parser as _json  # noqa: F401

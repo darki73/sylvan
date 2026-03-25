@@ -69,75 +69,83 @@ async def detect_code_smells(repo_id: int) -> list[CodeSmell]:
         if sym.kind in ("function", "method"):
             param_count = _count_parameters(sig)
             if param_count > 8:
-                smells.append(CodeSmell(
-                    symbol_id=sym.symbol_id,
-                    name=sym.name,
-                    file=file_path,
-                    line=sym.line_start or 0,
-                    smell_type="too_many_parameters",
-                    severity="medium",
-                    message=f"{sym.name} has {param_count} parameters (max recommended: 8)",
-                ))
+                smells.append(
+                    CodeSmell(
+                        symbol_id=sym.symbol_id,
+                        name=sym.name,
+                        file=file_path,
+                        line=sym.line_start or 0,
+                        smell_type="too_many_parameters",
+                        severity="medium",
+                        message=f"{sym.name} has {param_count} parameters (max recommended: 8)",
+                    )
+                )
 
         # --- Too long ---
         if sym.line_start and sym.line_end:
             length = sym.line_end - sym.line_start
             if length > 200:
-                smells.append(CodeSmell(
+                smells.append(
+                    CodeSmell(
+                        symbol_id=sym.symbol_id,
+                        name=sym.name,
+                        file=file_path,
+                        line=sym.line_start,
+                        smell_type="too_long",
+                        severity="high" if length > 400 else "medium",
+                        message=f"{sym.name} is {length} lines long (max recommended: 200)",
+                    )
+                )
+
+        # --- Missing docstring on public symbols ---
+        if (
+            sym.kind in ("function", "class", "method")
+            and not sym.name.startswith("_")
+            and not (sym.docstring and len(sym.docstring.strip()) > 10)
+        ):
+            smells.append(
+                CodeSmell(
                     symbol_id=sym.symbol_id,
                     name=sym.name,
                     file=file_path,
-                    line=sym.line_start,
-                    smell_type="too_long",
-                    severity="high" if length > 400 else "medium",
-                    message=f"{sym.name} is {length} lines long (max recommended: 200)",
-                ))
-
-        # --- Missing docstring on public symbols ---
-        if sym.kind in ("function", "class", "method") and not sym.name.startswith("_") and not (
-            sym.docstring and len(sym.docstring.strip()) > 10
-        ):
-            smells.append(CodeSmell(
-                symbol_id=sym.symbol_id,
-                name=sym.name,
-                file=file_path,
-                line=sym.line_start or 0,
-                smell_type="missing_docstring",
-                severity="low",
-                message=f"{sym.name} is public but has no docstring",
-            ))
+                    line=sym.line_start or 0,
+                    smell_type="missing_docstring",
+                    severity="low",
+                    message=f"{sym.name} is public but has no docstring",
+                )
+            )
 
         # --- Missing return type annotation ---
         if sym.kind in ("function", "method") and not sym.name.startswith("_") and "->" not in sig:
-            smells.append(CodeSmell(
-                symbol_id=sym.symbol_id,
-                name=sym.name,
-                file=file_path,
-                line=sym.line_start or 0,
-                smell_type="missing_types",
-                severity="low",
-                message=f"{sym.name} has no return type annotation",
-            ))
+            smells.append(
+                CodeSmell(
+                    symbol_id=sym.symbol_id,
+                    name=sym.name,
+                    file=file_path,
+                    line=sym.line_start or 0,
+                    smell_type="missing_types",
+                    severity="low",
+                    message=f"{sym.name} has no return type annotation",
+                )
+            )
 
     # --- Too many methods per class ---
     class_symbols = [s for s in symbols if s.kind == "class"]
     for cls in class_symbols:
-        method_count = sum(
-            1
-            for s in symbols
-            if s.parent_symbol_id == cls.symbol_id and s.kind == "method"
-        )
+        method_count = sum(1 for s in symbols if s.parent_symbol_id == cls.symbol_id and s.kind == "method")
         if method_count > 20:
             file_path = getattr(cls, "file_path", "") or ""
-            smells.append(CodeSmell(
-                symbol_id=cls.symbol_id,
-                name=cls.name,
-                file=file_path,
-                line=cls.line_start or 0,
-                smell_type="too_many_methods",
-                severity="medium",
-                message=f"Class {cls.name} has {method_count} methods (max recommended: 20)",
-            ))
+            smells.append(
+                CodeSmell(
+                    symbol_id=cls.symbol_id,
+                    name=cls.name,
+                    file=file_path,
+                    line=cls.line_start or 0,
+                    smell_type="too_many_methods",
+                    severity="medium",
+                    message=f"Class {cls.name} has {method_count} methods (max recommended: 20)",
+                )
+            )
 
     return smells
 

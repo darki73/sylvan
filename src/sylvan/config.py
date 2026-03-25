@@ -98,8 +98,7 @@ class DatabaseConfig:
     pool_size: int = 1
 
     def __post_init__(self) -> None:
-        """Set default path if empty.
-        """
+        """Set default path if empty."""
         if not self.path:
             self.path = str(_sylvan_home() / "sylvan.db")
 
@@ -260,8 +259,7 @@ class LibraryConfig:
     overrides: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Set default path if empty.
-        """
+        """Set default path if empty."""
         if not self.path:
             self.path = str(_sylvan_home() / "libraries")
 
@@ -507,6 +505,7 @@ def _dataclass_to_dict(obj: object) -> dict:
         Dict with non-empty field values.
     """
     from dataclasses import fields as dc_fields
+
     result = {}
     for f in dc_fields(obj):
         val = getattr(obj, f.name)
@@ -531,6 +530,7 @@ def load_config() -> Config:
             raw = yaml.safe_load(f) or {}
     except Exception as exc:
         from sylvan.logging import get_logger
+
         get_logger(__name__).warning("config_parse_failed", error=str(exc), path=str(config_path))
         return Config()
 
@@ -549,6 +549,7 @@ def _parse_section(raw: dict, cls: type, defaults: object | None = None) -> obje
         A populated dataclass instance.
     """
     from dataclasses import fields as dc_fields
+
     kwargs = {}
     for f in dc_fields(cls):
         if f.name in raw:
@@ -607,11 +608,11 @@ def get_config() -> Config:
 
 
 def reset_config() -> None:
-    """Reset config singleton and ORM connection state (for testing).
-    """
+    """Reset config singleton and ORM connection state (for testing)."""
     get_config.cache_clear()
     try:
         from sylvan.tools.support.response import reset_orm
+
         reset_orm()
     except ImportError:
         pass

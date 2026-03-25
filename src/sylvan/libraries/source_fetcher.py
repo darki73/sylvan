@@ -13,7 +13,7 @@ from sylvan.logging import get_logger
 
 logger = get_logger(__name__)
 
-_SAFE_TAG = re.compile(r'^[a-zA-Z0-9._\-/]+$')
+_SAFE_TAG = re.compile(r"^[a-zA-Z0-9._\-/]+$")
 
 
 def _validate_tag(tag: str) -> str:
@@ -112,11 +112,15 @@ def _git_clone(repo_url: str, tag: str, dest: Path, timeout: int) -> bool:
 
         proc = subprocess.Popen(
             [
-                "git", "clone",
-                "--depth", "1",
-                "--branch", tag,
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--branch",
+                tag,
                 "--single-branch",
-                "--", repo_url,
+                "--",
+                repo_url,
                 str(dest),
             ],
             stdin=subprocess.DEVNULL,
@@ -130,8 +134,12 @@ def _git_clone(repo_url: str, tag: str, dest: Path, timeout: int) -> bool:
             logger.info("git_cloned", repo_url=repo_url, tag=tag)
             return True
 
-        logger.debug("clone_failed", repo_url=repo_url, tag=tag,
-                     stderr=stderr.decode("utf-8", errors="replace").strip() if stderr else "")
+        logger.debug(
+            "clone_failed",
+            repo_url=repo_url,
+            tag=tag,
+            stderr=stderr.decode("utf-8", errors="replace").strip() if stderr else "",
+        )
         return False
 
     except subprocess.TimeoutExpired:
@@ -192,7 +200,7 @@ def _download_github_tarball(repo_url: str, tag: str, dest: Path, timeout: int) 
     match = None
     for prefix in ("https://github.com/", "http://github.com/"):
         if repo_url.startswith(prefix):
-            match = repo_url[len(prefix):].rstrip("/")
+            match = repo_url[len(prefix) :].rstrip("/")
             break
 
     if match is None:
@@ -212,13 +220,14 @@ def _download_github_tarball(repo_url: str, tag: str, dest: Path, timeout: int) 
                     tmp.write(chunk)
 
         import tarfile
+
         with tarfile.open(tmp_path, "r:gz") as tar:
             members = tar.getmembers()
             if members:
                 top_dir = members[0].name.split("/")[0]
                 for member in members:
                     if "/" in member.name:
-                        member.name = member.name[len(top_dir) + 1:]
+                        member.name = member.name[len(top_dir) + 1 :]
                         if not member.name:
                             continue
                         if member.issym() or member.islnk():
@@ -255,6 +264,7 @@ def get_library_path(manager: str, name: str, version: str) -> Path:
         Absolute path to the library's source directory.
     """
     from sylvan.config import get_config
+
     base = get_config().library_path
     safe_name = name.replace("/", "--")
     return base / manager / safe_name / version

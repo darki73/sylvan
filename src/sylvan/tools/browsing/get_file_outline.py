@@ -60,17 +60,11 @@ async def get_file_outline(repo: str, file_path: str) -> dict:
     if repo_obj is None:
         raise RepoNotFoundError(repo=repo, _meta=meta.build())
 
-    file_rec = await (FileRecord.query()
-                .where(repo_id=repo_obj.id)
-                .where(path=file_path)
-                .first())
+    file_rec = await FileRecord.query().where(repo_id=repo_obj.id).where(path=file_path).first()
     if file_rec is None:
         raise IndexFileNotFoundError(file_path=file_path, repo=repo, _meta=meta.build())
 
-    symbols = await (Symbol.in_repo(repo)
-               .in_file(file_path)
-               .order_by("symbols.line_start")
-               .get())
+    symbols = await Symbol.in_repo(repo).in_file(file_path).order_by("symbols.line_start").get()
 
     items = [
         {
@@ -132,18 +126,12 @@ async def get_file_outlines(repo: str, file_paths: list[str]) -> dict:
     used_tiktoken = False
 
     for fp in file_paths:
-        file_rec = await (FileRecord.query()
-                    .where(repo_id=repo_obj.id)
-                    .where(path=fp)
-                    .first())
+        file_rec = await FileRecord.query().where(repo_id=repo_obj.id).where(path=fp).first()
         if file_rec is None:
             not_found.append(fp)
             continue
 
-        symbols = await (Symbol.in_repo(repo)
-                   .in_file(fp)
-                   .order_by("symbols.line_start")
-                   .get())
+        symbols = await Symbol.in_repo(repo).in_file(fp).order_by("symbols.line_start").get()
 
         items = [
             {
@@ -167,11 +155,13 @@ async def get_file_outlines(repo: str, file_paths: list[str]) -> dict:
         if file_rec.byte_size:
             equivalent_tokens += file_rec.byte_size // 4
 
-        outlines.append({
-            "file": fp,
-            "outline": tree,
-            "symbol_count": len(items),
-        })
+        outlines.append(
+            {
+                "file": fp,
+                "outline": tree,
+                "symbol_count": len(items),
+            }
+        )
 
     if returned_tokens > 0 and equivalent_tokens > 0:
         method = "tiktoken_cl100k" if used_tiktoken else "byte_estimate"

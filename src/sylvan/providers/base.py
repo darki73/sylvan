@@ -55,10 +55,7 @@ def build_summary_prompt(
     Returns:
         A formatted prompt string for the summary provider.
     """
-    parts = [
-        "Generate a single-line summary (max 100 chars) of this code. "
-        "Return ONLY the summary, nothing else.\n"
-    ]
+    parts = ["Generate a single-line summary (max 100 chars) of this code. Return ONLY the summary, nothing else.\n"]
     if signature:
         parts.append(f"Signature: {signature}")
     if docstring:

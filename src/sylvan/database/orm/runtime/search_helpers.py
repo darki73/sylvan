@@ -41,12 +41,14 @@ def embed_text(text: str) -> list[float] | None:
     """
     try:
         from sylvan.search.embeddings import get_embedding_provider
+
         provider = get_embedding_provider()
         if provider is None:
             return None
         return provider.embed_one(text)
     except Exception as e:
         from sylvan.logging import get_logger
+
         get_logger(__name__).debug("embed_text_failed", error=str(e))
         return None
 

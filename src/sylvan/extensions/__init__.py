@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _registered_tools: dict[str, dict[str, Any]] = {}
 
@@ -22,6 +25,7 @@ def register_tool(
     Returns:
         Decorator that registers the function as a tool handler.
     """
+
     def decorator(func: Callable) -> Callable:
         _registered_tools[name] = {
             "name": name,
@@ -30,6 +34,7 @@ def register_tool(
             "handler": func,
         }
         return func
+
     return decorator
 
 
