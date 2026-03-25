@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.2
+
+- Added CI workflow (lint + tests on Ubuntu and Windows, Python 3.12/3.13/3.14)
+- Applied ruff format across entire codebase
+- Switched pre-commit to local ruff via uv
+- Updated .gitignore for IDE and AI assistant config directories
+- Handle missing `enable_load_extension` on restricted Python builds
+
 ## 1.3.1
 
 - Configure tools now return instructions by default instead of writing files directly
