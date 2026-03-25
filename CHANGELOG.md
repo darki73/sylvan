@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.3
+
+- Version check on startup, notifies agent when a newer version is available
+- Detects install method (pip, uv pip, uv tool, editable) for correct upgrade command
+- Update info surfaced in gate response, configure tools, and get_workflow_guide
+
 ## 1.3.2
 
 - Added CI workflow (lint + tests on Ubuntu and Windows, Python 3.12/3.13/3.14)
