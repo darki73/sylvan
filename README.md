@@ -6,6 +6,7 @@
 [![Downloads](https://img.shields.io/pypi/dm/sylvan)](https://pypi.org/project/sylvan/)
 [![License](https://img.shields.io/pypi/l/sylvan)](https://github.com/darki73/sylvan/blob/main/LICENSE)
 [![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![Docs](https://github.com/darki73/sylvan/actions/workflows/docs.yml/badge.svg)](https://darki73.github.io/sylvan/)
 [![MCP](https://img.shields.io/badge/MCP-compatible-blue)](https://modelcontextprotocol.io)
 
 Code intelligence platform for AI agents. Search, analyze, and navigate codebases through MCP tools - returning exactly the code your agent needs at a fraction of the token cost.
