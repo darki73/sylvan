@@ -53,7 +53,10 @@ class SQLiteBackend(BaseBackend):
 
             def _load_vec_extension(conn: object) -> None:
                 """Load sqlite-vec inside aiosqlite's background thread."""
-                conn.enable_load_extension(True)
+                import contextlib
+
+                with contextlib.suppress(AttributeError):
+                    conn.enable_load_extension(True)
                 sqlite_vec.load(conn)
 
             await self._connection._execute(_load_vec_extension, self._connection._connection)
