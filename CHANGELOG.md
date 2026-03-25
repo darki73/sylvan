@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.5
+
+- Bumped claude-agent-sdk to 0.1.50
+- Widened constraints: starlette <2.0.0, pathspec <2.0.0, tree-sitter-language-pack <2.0.0, uv-build <0.12.0
+- Updated GitHub Actions: checkout v6, setup-python v6, setup-uv v7
+- Added branch protection (CI required, review required, enforce admins)
+- Added dependabot auto-merge for patch/minor updates
+- Switched CI to PR-only triggers (no redundant runs on merge)
+- Removed release drafter (manual releases for now)
+
 ## 1.3.4
 
 - Added CI lint for tests/ directory
