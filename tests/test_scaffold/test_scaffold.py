@@ -17,6 +17,7 @@ from sylvan.session.tracker import SessionTracker, reset_session
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 async def scaffold_ctx(tmp_path):
     """Set up a SylvanContext with an indexed repo for scaffold tests."""
@@ -40,12 +41,7 @@ async def scaffold_ctx(tmp_path):
     proj = tmp_path / "myproject"
     proj.mkdir()
     (proj / "main.py").write_text(
-        'def main():\n'
-        '    """Entry point."""\n'
-        '    pass\n'
-        '\n'
-        'def cli():\n'
-        '    pass\n',
+        'def main():\n    """Entry point."""\n    pass\n\ndef cli():\n    pass\n',
         encoding="utf-8",
     )
     (proj / "pyproject.toml").write_text(
@@ -55,24 +51,23 @@ async def scaffold_ctx(tmp_path):
     src = proj / "src"
     src.mkdir()
     (src / "model.py").write_text(
-        'class UserModel:\n'
+        "class UserModel:\n"
         '    """A user model."""\n'
-        '    pass\n'
-        '\n'
+        "    pass\n"
+        "\n"
         'def get_user(id: int) -> "UserModel":\n'
         '    """Get a user by ID."""\n'
-        '    pass\n',
+        "    pass\n",
         encoding="utf-8",
     )
     (src / "util.py").write_text(
-        'def helper():\n'
-        '    """A helper function."""\n'
-        '    pass\n',
+        'def helper():\n    """A helper function."""\n    pass\n',
         encoding="utf-8",
     )
 
     # Index it
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="myproject")
     await backend.commit()
 
@@ -93,15 +88,18 @@ async def scaffold_ctx(tmp_path):
 # directory_structure.py
 # ---------------------------------------------------------------------------
 
+
 class TestDirectoryStructure:
     """Tests for the STRUCTURE constant and _create_structure helper."""
 
     def test_structure_has_sylvan_key(self):
         from sylvan.scaffold.directory_structure import STRUCTURE
+
         assert "sylvan" in STRUCTURE
 
     def test_structure_has_expected_subdirs(self):
         from sylvan.scaffold.directory_structure import STRUCTURE
+
         sylvan = STRUCTURE["sylvan"]
         assert "architecture" in sylvan
         assert "dependencies" in sylvan
@@ -113,6 +111,7 @@ class TestDirectoryStructure:
 
     def test_structure_plans_has_workflow_dirs(self):
         from sylvan.scaffold.directory_structure import STRUCTURE
+
         plans = STRUCTURE["sylvan"]["plans"]
         assert "future" in plans
         assert "working" in plans
@@ -120,6 +119,7 @@ class TestDirectoryStructure:
 
     def test_conventions_has_placeholder_content(self):
         from sylvan.scaffold.directory_structure import STRUCTURE
+
         conventions = STRUCTURE["sylvan"]["architecture"]["conventions.md"]
         assert isinstance(conventions, str)
         assert "Conventions" in conventions
@@ -166,41 +166,50 @@ class TestDirectoryStructure:
 # agent_config.py
 # ---------------------------------------------------------------------------
 
+
 class TestAgentConfig:
     """Tests for agent configuration generation."""
 
     def test_get_agent_filename_claude(self):
         from sylvan.scaffold.agent_config import get_agent_filename
+
         assert get_agent_filename("claude") == "CLAUDE.md"
 
     def test_get_agent_filename_cursor(self):
         from sylvan.scaffold.agent_config import get_agent_filename
+
         assert get_agent_filename("cursor") == ".cursorrules"
 
     def test_get_agent_filename_copilot(self):
         from sylvan.scaffold.agent_config import get_agent_filename
+
         assert get_agent_filename("copilot") == ".github/copilot-instructions.md"
 
     def test_get_agent_filename_generic(self):
         from sylvan.scaffold.agent_config import get_agent_filename
+
         assert get_agent_filename("generic") == ".ai-instructions.md"
 
     def test_get_agent_filename_unknown_defaults_to_generic(self):
         from sylvan.scaffold.agent_config import get_agent_filename
+
         assert get_agent_filename("unknown") == ".ai-instructions.md"
 
     def test_agent_formats_constant(self):
         from sylvan.scaffold.agent_config import AGENT_FORMATS
+
         assert len(AGENT_FORMATS) == 4
         assert all(isinstance(v, str) for v in AGENT_FORMATS.values())
 
     async def test_async_generate_agent_config_repo_not_found(self, scaffold_ctx):
         from sylvan.scaffold.agent_config import async_generate_agent_config
+
         result = await async_generate_agent_config("nonexistent")
         assert "not indexed" in result.lower() or "Not indexed" in result
 
     async def test_async_generate_agent_config_contains_project_info(self, scaffold_ctx):
         from sylvan.scaffold.agent_config import async_generate_agent_config
+
         result = await async_generate_agent_config("myproject")
 
         assert "myproject" in result
@@ -210,6 +219,7 @@ class TestAgentConfig:
 
     async def test_async_generate_agent_config_detects_python_test_cmd(self, scaffold_ctx):
         from sylvan.scaffold.agent_config import async_generate_agent_config
+
         result = await async_generate_agent_config("myproject")
 
         # pyproject.toml is present, so test cmd should be detected
@@ -217,6 +227,7 @@ class TestAgentConfig:
 
     async def test_async_generate_agent_config_includes_tool_docs(self, scaffold_ctx):
         from sylvan.scaffold.agent_config import async_generate_agent_config
+
         result = await async_generate_agent_config("myproject")
 
         assert "search_symbols" in result
@@ -225,6 +236,7 @@ class TestAgentConfig:
 
     async def test_build_instructions_contains_sylvan_table(self, scaffold_ctx):
         from sylvan.scaffold.agent_config import _build_instructions
+
         content = _build_instructions(
             repo_name="test",
             primary_lang="python",
@@ -309,16 +321,19 @@ class TestAgentConfig:
 # auto_docs.py
 # ---------------------------------------------------------------------------
 
+
 class TestAutoDocs:
     """Tests for auto-generated documentation."""
 
     async def test_generate_project_md_repo_not_found(self, scaffold_ctx):
         from sylvan.scaffold.auto_docs import async_generate_project_md
+
         result = await async_generate_project_md("nonexistent")
         assert "Not indexed" in result or "not indexed" in result.lower()
 
     async def test_generate_project_md_contains_repo_info(self, scaffold_ctx):
         from sylvan.scaffold.auto_docs import async_generate_project_md
+
         result = await async_generate_project_md("myproject")
 
         assert "myproject" in result
@@ -329,11 +344,13 @@ class TestAutoDocs:
 
     async def test_generate_architecture_overview_repo_not_found(self, scaffold_ctx):
         from sylvan.scaffold.auto_docs import async_generate_architecture_overview
+
         result = await async_generate_architecture_overview("nonexistent")
         assert result == ""
 
     async def test_generate_architecture_overview_contains_modules(self, scaffold_ctx):
         from sylvan.scaffold.auto_docs import async_generate_architecture_overview
+
         result = await async_generate_architecture_overview("myproject")
 
         assert "Architecture Overview" in result
@@ -343,11 +360,13 @@ class TestAutoDocs:
 
     async def test_generate_module_doc_repo_not_found(self, scaffold_ctx):
         from sylvan.scaffold.auto_docs import async_generate_module_doc
+
         result = await async_generate_module_doc("nonexistent", "src")
         assert result == ""
 
     async def test_generate_module_doc_lists_symbols(self, scaffold_ctx):
         from sylvan.scaffold.auto_docs import async_generate_module_doc
+
         result = await async_generate_module_doc("myproject", "src")
 
         assert "Module:" in result
@@ -357,11 +376,13 @@ class TestAutoDocs:
 
     async def test_generate_patterns_md_repo_not_found(self, scaffold_ctx):
         from sylvan.scaffold.auto_docs import async_generate_patterns_md
+
         result = await async_generate_patterns_md("nonexistent")
         assert result == ""
 
     async def test_generate_patterns_md_detects_patterns(self, scaffold_ctx):
         from sylvan.scaffold.auto_docs import async_generate_patterns_md
+
         result = await async_generate_patterns_md("myproject")
 
         assert "Detected Patterns" in result
@@ -373,36 +394,43 @@ class TestAutoDocs:
 # auto_reports.py
 # ---------------------------------------------------------------------------
 
+
 class TestAutoReports:
     """Tests for auto-generated reports."""
 
     async def test_generate_dependencies_internal_repo_not_found(self, scaffold_ctx):
         from sylvan.scaffold.auto_reports import async_generate_dependencies_internal
+
         result = await async_generate_dependencies_internal("nonexistent")
         assert result == ""
 
     async def test_generate_dependencies_internal_has_header(self, scaffold_ctx):
         from sylvan.scaffold.auto_reports import async_generate_dependencies_internal
+
         result = await async_generate_dependencies_internal("myproject")
         assert "Internal Dependencies" in result
 
     async def test_generate_dependencies_external_no_source_path(self, scaffold_ctx):
         from sylvan.scaffold.auto_reports import async_generate_dependencies_external
+
         result = await async_generate_dependencies_external("nonexistent")
         assert "External Dependencies" in result
 
     async def test_generate_dependencies_external_has_header(self, scaffold_ctx):
         from sylvan.scaffold.auto_reports import async_generate_dependencies_external
+
         result = await async_generate_dependencies_external("myproject")
         assert "External Dependencies" in result
 
     async def test_generate_quality_report_repo_not_found(self, scaffold_ctx):
         from sylvan.scaffold.auto_reports import async_generate_quality_report
+
         result = await async_generate_quality_report("nonexistent")
         assert result == ""
 
     async def test_generate_quality_report_contains_metrics(self, scaffold_ctx):
         from sylvan.scaffold.auto_reports import async_generate_quality_report
+
         result = await async_generate_quality_report("myproject")
 
         assert "Quality Report" in result
@@ -413,11 +441,13 @@ class TestAutoReports:
 
     async def test_generate_entry_points_repo_not_found(self, scaffold_ctx):
         from sylvan.scaffold.auto_reports import async_generate_entry_points
+
         result = await async_generate_entry_points("nonexistent")
         assert result == ""
 
     async def test_generate_entry_points_finds_main(self, scaffold_ctx):
         from sylvan.scaffold.auto_reports import async_generate_entry_points
+
         result = await async_generate_entry_points("myproject")
 
         assert "Entry Points" in result
@@ -426,21 +456,25 @@ class TestAutoReports:
 
     async def test_generate_recent_changes_no_source_path(self, scaffold_ctx):
         from sylvan.scaffold.auto_reports import async_generate_recent_changes
+
         result = await async_generate_recent_changes("nonexistent")
         assert "Recent Changes" in result
 
     async def test_generate_recent_changes_has_header(self, scaffold_ctx):
         from sylvan.scaffold.auto_reports import async_generate_recent_changes
+
         result = await async_generate_recent_changes("myproject")
         assert "Recent Changes" in result
 
     async def test_generate_hot_files_no_source_path(self, scaffold_ctx):
         from sylvan.scaffold.auto_reports import async_generate_hot_files
+
         result = await async_generate_hot_files("nonexistent")
         assert "Hot Files" in result
 
     async def test_generate_hot_files_has_header(self, scaffold_ctx):
         from sylvan.scaffold.auto_reports import async_generate_hot_files
+
         result = await async_generate_hot_files("myproject")
         assert "Hot Files" in result
 
@@ -449,16 +483,19 @@ class TestAutoReports:
 # generator.py (async_scaffold_project)
 # ---------------------------------------------------------------------------
 
+
 class TestScaffoldGenerator:
     """Tests for the main scaffold generator."""
 
     async def test_scaffold_repo_not_found(self, scaffold_ctx):
         from sylvan.scaffold.generator import async_scaffold_project
+
         result = await async_scaffold_project("nonexistent")
         assert "error" in result
 
     async def test_scaffold_creates_sylvan_dir(self, scaffold_ctx):
         from sylvan.scaffold.generator import async_scaffold_project
+
         root = scaffold_ctx["project_root"]
         result = await async_scaffold_project("myproject", project_root=root)
 
@@ -468,6 +505,7 @@ class TestScaffoldGenerator:
 
     async def test_scaffold_creates_agent_config_file(self, scaffold_ctx):
         from sylvan.scaffold.generator import async_scaffold_project
+
         root = scaffold_ctx["project_root"]
         result = await async_scaffold_project("myproject", agent="claude", project_root=root)
 
@@ -479,6 +517,7 @@ class TestScaffoldGenerator:
 
     async def test_scaffold_creates_auto_docs(self, scaffold_ctx):
         from sylvan.scaffold.generator import async_scaffold_project
+
         root = scaffold_ctx["project_root"]
         await async_scaffold_project("myproject", project_root=root)
 
@@ -489,6 +528,7 @@ class TestScaffoldGenerator:
 
     async def test_scaffold_creates_quality_report(self, scaffold_ctx):
         from sylvan.scaffold.generator import async_scaffold_project
+
         root = scaffold_ctx["project_root"]
         await async_scaffold_project("myproject", project_root=root)
 
@@ -499,6 +539,7 @@ class TestScaffoldGenerator:
 
     async def test_scaffold_creates_module_docs(self, scaffold_ctx):
         from sylvan.scaffold.generator import async_scaffold_project
+
         root = scaffold_ctx["project_root"]
         await async_scaffold_project("myproject", project_root=root)
 
@@ -510,6 +551,7 @@ class TestScaffoldGenerator:
 
     async def test_scaffold_cursor_format(self, scaffold_ctx):
         from sylvan.scaffold.generator import async_scaffold_project
+
         root = scaffold_ctx["project_root"]
         result = await async_scaffold_project("myproject", agent="cursor", project_root=root)
 
@@ -519,6 +561,7 @@ class TestScaffoldGenerator:
 
     async def test_scaffold_returns_summary_dict(self, scaffold_ctx):
         from sylvan.scaffold.generator import async_scaffold_project
+
         root = scaffold_ctx["project_root"]
         result = await async_scaffold_project("myproject", project_root=root)
 
@@ -531,5 +574,6 @@ class TestScaffoldGenerator:
 
     async def test_scaffold_nonexistent_root(self, scaffold_ctx):
         from sylvan.scaffold.generator import async_scaffold_project
+
         result = await async_scaffold_project("myproject", project_root="/nonexistent/path")
         assert "error" in result

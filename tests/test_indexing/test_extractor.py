@@ -38,11 +38,11 @@ class MyClass:
         assert methods[0].parent_symbol_id is not None
 
     def test_extracts_constants(self):
-        code = '''
+        code = """
 MAX_RETRIES = 3
 DEFAULT_TIMEOUT = 30
 regular_var = "not a constant"
-'''
+"""
         symbols = parse_file(code, "test.py", "python")
         constants = [s for s in symbols if s.kind == "constant"]
         assert len(constants) == 2
@@ -61,7 +61,7 @@ def documented():
         assert "This is the docstring" in (symbols[0].docstring or "")
 
     def test_extracts_decorators(self):
-        code = '''
+        code = """
 @property
 def my_prop(self):
     return self._val
@@ -69,21 +69,21 @@ def my_prop(self):
 @staticmethod
 def static_method():
     pass
-'''
+"""
         symbols = parse_file(code, "test.py", "python")
         assert any("@property" in (s.decorators or []) for s in symbols if s.name == "my_prop")
 
     def test_byte_offsets_are_correct(self):
-        code = '''def first():
+        code = """def first():
     pass
 
 def second():
     pass
-'''
+"""
         symbols = parse_file(code, "test.py", "python")
         source_bytes = code.encode("utf-8")
         for sym in symbols:
-            extracted = source_bytes[sym.byte_offset:sym.byte_offset + sym.byte_length]
+            extracted = source_bytes[sym.byte_offset : sym.byte_offset + sym.byte_length]
             text = extracted.decode("utf-8")
             assert sym.name in text
 
@@ -100,30 +100,30 @@ def second():
 
 class TestTypeScriptExtraction:
     def test_extracts_functions(self):
-        code = '''
+        code = """
 function greet(name: string): string {
     return `Hello, ${name}`;
 }
-'''
+"""
         symbols = parse_file(code, "test.ts", "typescript")
         funcs = [s for s in symbols if s.kind == "function"]
         assert len(funcs) == 1
         assert funcs[0].name == "greet"
 
     def test_extracts_interfaces(self):
-        code = '''
+        code = """
 interface Config {
     apiUrl: string;
     timeout: number;
 }
-'''
+"""
         symbols = parse_file(code, "test.ts", "typescript")
         types = [s for s in symbols if s.kind == "type"]
         assert len(types) == 1
         assert types[0].name == "Config"
 
     def test_extracts_classes_and_methods(self):
-        code = '''
+        code = """
 class ApiClient {
     constructor(private url: string) {}
 
@@ -131,7 +131,7 @@ class ApiClient {
         return fetch(this.url + path);
     }
 }
-'''
+"""
         symbols = parse_file(code, "test.ts", "typescript")
         classes = [s for s in symbols if s.kind == "class"]
         methods = [s for s in symbols if s.kind == "method"]
@@ -139,13 +139,13 @@ class ApiClient {
         assert len(methods) >= 1
 
     def test_extracts_enums(self):
-        code = '''
+        code = """
 enum Color {
     Red = "RED",
     Green = "GREEN",
     Blue = "BLUE",
 }
-'''
+"""
         symbols = parse_file(code, "test.ts", "typescript")
         types = [s for s in symbols if s.kind == "type"]
         assert any(t.name == "Color" for t in types)
@@ -153,19 +153,19 @@ enum Color {
 
 class TestGoExtraction:
     def test_extracts_functions(self):
-        code = '''package main
+        code = """package main
 
 func Hello(name string) string {
     return "Hello, " + name
 }
-'''
+"""
         symbols = parse_file(code, "test.go", "go")
         funcs = [s for s in symbols if s.kind == "function"]
         assert len(funcs) == 1
         assert funcs[0].name == "Hello"
 
     def test_extracts_types(self):
-        code = '''package main
+        code = """package main
 
 type Server struct {
     port int
@@ -175,13 +175,13 @@ type Server struct {
 type Handler interface {
     Handle(r Request) Response
 }
-'''
+"""
         symbols = parse_file(code, "test.go", "go")
         types = [s for s in symbols if s.kind == "type"]
         assert len(types) >= 2
 
     def test_extracts_methods(self):
-        code = '''package main
+        code = """package main
 
 type Server struct {
     port int
@@ -190,20 +190,20 @@ type Server struct {
 func (s *Server) Start() error {
     return nil
 }
-'''
+"""
         symbols = parse_file(code, "test.go", "go")
         methods = [s for s in symbols if s.kind == "method"]
         assert len(methods) == 1
         assert methods[0].name == "Start"
 
     def test_extracts_preceding_comments(self):
-        code = '''package main
+        code = """package main
 
 // Hello greets someone.
 func Hello(name string) string {
     return "Hello, " + name
 }
-'''
+"""
         symbols = parse_file(code, "test.go", "go")
         assert len(symbols) >= 1
         assert symbols[0].docstring and "greets" in symbols[0].docstring

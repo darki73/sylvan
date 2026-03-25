@@ -84,6 +84,7 @@ class TestGetActiveWorktrees:
 class TestHandleWorktreeRemove:
     def test_records_event(self, clean_manifest):
         from sylvan.hooks import handle_worktree_remove
+
         handle_worktree_remove(_WT1)
         entry = json.loads(clean_manifest.read_text(encoding="utf-8").strip())
         assert entry["event"] == "worktree-remove"

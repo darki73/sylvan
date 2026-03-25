@@ -47,19 +47,25 @@ class TestRunMigrations:
         mig_dir.mkdir()
 
         # Use version numbers above 002 (already applied by backend fixture)
-        (mig_dir / "003_create_widgets.py").write_text(textwrap.dedent("""\
+        (mig_dir / "003_create_widgets.py").write_text(
+            textwrap.dedent("""\
             async def up(backend, dialect):
                 await backend.execute("CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT)")
             async def down(backend, dialect):
                 await backend.execute("DROP TABLE widgets")
-        """), encoding="utf-8")
+        """),
+            encoding="utf-8",
+        )
 
-        (mig_dir / "004_add_color.py").write_text(textwrap.dedent("""\
+        (mig_dir / "004_add_color.py").write_text(
+            textwrap.dedent("""\
             async def up(backend, dialect):
                 await backend.execute("ALTER TABLE widgets ADD COLUMN color TEXT")
             async def down(backend, dialect):
                 pass
-        """), encoding="utf-8")
+        """),
+            encoding="utf-8",
+        )
 
         def fake_discover():
             results = []
@@ -79,9 +85,7 @@ class TestRunMigrations:
         assert "003_create_widgets" in applied[0]
         assert await get_current_version(ctx.backend) == 4
 
-        row = await ctx.backend.fetch_one(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='widgets'"
-        )
+        row = await ctx.backend.fetch_one("SELECT name FROM sqlite_master WHERE type='table' AND name='widgets'")
         assert row is not None
 
     async def test_returns_empty_when_nothing_pending(self, ctx):
@@ -113,12 +117,15 @@ class TestRollbackMigration:
 
         mig_dir = tmp_path / "migrations"
         mig_dir.mkdir()
-        (mig_dir / "003_create_gadgets.py").write_text(textwrap.dedent("""\
+        (mig_dir / "003_create_gadgets.py").write_text(
+            textwrap.dedent("""\
             async def up(backend, dialect):
                 await backend.execute("CREATE TABLE gadgets (id INTEGER PRIMARY KEY)")
             async def down(backend, dialect):
                 await backend.execute("DROP TABLE gadgets")
-        """), encoding="utf-8")
+        """),
+            encoding="utf-8",
+        )
 
         def fake_discover():
             results = []
@@ -138,9 +145,7 @@ class TestRollbackMigration:
         assert "003_create_gadgets" in rolled_back
         assert await get_current_version(ctx.backend) == 1
 
-        row = await ctx.backend.fetch_one(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='gadgets'"
-        )
+        row = await ctx.backend.fetch_one("SELECT name FROM sqlite_master WHERE type='table' AND name='gadgets'")
         assert row is None
 
     async def test_rollback_returns_none_at_version_zero(self, ctx):
@@ -163,8 +168,10 @@ class TestCreateMigration:
         Returns:
             None.
         """
-        with patch("sylvan.database.migrations.runner.MIGRATIONS_DIR", tmp_path), \
-             patch("sylvan.database.migrations.runner._discover_migrations", return_value=[]):
+        with (
+            patch("sylvan.database.migrations.runner.MIGRATIONS_DIR", tmp_path),
+            patch("sylvan.database.migrations.runner._discover_migrations", return_value=[]),
+        ):
             filepath = create_migration("add users table")
 
         assert filepath.exists()
@@ -181,8 +188,10 @@ class TestCreateMigration:
             None.
         """
         fake_migrations = [(5, "005_something", None)]
-        with patch("sylvan.database.migrations.runner.MIGRATIONS_DIR", tmp_path), \
-             patch("sylvan.database.migrations.runner._discover_migrations", return_value=fake_migrations):
+        with (
+            patch("sylvan.database.migrations.runner.MIGRATIONS_DIR", tmp_path),
+            patch("sylvan.database.migrations.runner._discover_migrations", return_value=fake_migrations),
+        ):
             filepath = create_migration("next thing")
 
         assert filepath.name.startswith("006_")

@@ -11,12 +11,8 @@ from sylvan.database.orm.models import Repo, Symbol
 async def _seed(ctx):
     """Seed the DB with repos, files, and symbols for query tests."""
     backend = ctx.backend
-    await backend.execute(
-        "INSERT INTO repos (id, name, indexed_at) VALUES (1, 'alpha', '2024-01-01')"
-    )
-    await backend.execute(
-        "INSERT INTO repos (id, name, indexed_at) VALUES (2, 'beta', '2024-02-01')"
-    )
+    await backend.execute("INSERT INTO repos (id, name, indexed_at) VALUES (1, 'alpha', '2024-01-01')")
+    await backend.execute("INSERT INTO repos (id, name, indexed_at) VALUES (2, 'beta', '2024-02-01')")
     await backend.execute(
         "INSERT INTO files (id, repo_id, path, language, content_hash, byte_size) "
         "VALUES (1, 1, 'main.py', 'python', 'h1', 100)"
@@ -31,11 +27,96 @@ async def _seed(ctx):
     )
     # Symbols
     symbols = [
-        (1, 1, "sym-1", "foo", "main.foo", "function", "python", "def foo()", None, None, None, None, None, 0, 50, None),
-        (2, 1, "sym-2", "bar", "main.bar", "function", "python", "def bar()", None, None, None, None, None, 50, 40, None),
-        (3, 1, "sym-3", "MyClass", "main.MyClass", "class", "python", "class MyClass", None, None, None, None, None, 90, 100, None),
-        (4, 2, "sym-4", "helper", "util.helper", "function", "python", "def helper()", None, None, None, None, None, 0, 60, None),
-        (5, 3, "sym-5", "GoFunc", "lib.GoFunc", "function", "go", "func GoFunc()", None, None, None, None, None, 0, 80, None),
+        (
+            1,
+            1,
+            "sym-1",
+            "foo",
+            "main.foo",
+            "function",
+            "python",
+            "def foo()",
+            None,
+            None,
+            None,
+            None,
+            None,
+            0,
+            50,
+            None,
+        ),
+        (
+            2,
+            1,
+            "sym-2",
+            "bar",
+            "main.bar",
+            "function",
+            "python",
+            "def bar()",
+            None,
+            None,
+            None,
+            None,
+            None,
+            50,
+            40,
+            None,
+        ),
+        (
+            3,
+            1,
+            "sym-3",
+            "MyClass",
+            "main.MyClass",
+            "class",
+            "python",
+            "class MyClass",
+            None,
+            None,
+            None,
+            None,
+            None,
+            90,
+            100,
+            None,
+        ),
+        (
+            4,
+            2,
+            "sym-4",
+            "helper",
+            "util.helper",
+            "function",
+            "python",
+            "def helper()",
+            None,
+            None,
+            None,
+            None,
+            None,
+            0,
+            60,
+            None,
+        ),
+        (
+            5,
+            3,
+            "sym-5",
+            "GoFunc",
+            "lib.GoFunc",
+            "function",
+            "go",
+            "func GoFunc()",
+            None,
+            None,
+            None,
+            None,
+            None,
+            0,
+            80,
+            None,
+        ),
     ]
     for s in symbols:
         await backend.execute(
@@ -179,12 +260,7 @@ class TestGroupBy:
 class TestJoin:
     async def test_join(self, orm_ctx):
         await _seed(orm_ctx)
-        results = await (
-            Symbol.query()
-            .join("files", "files.id = symbols.file_id")
-            .where("files.language", "go")
-            .get()
-        )
+        results = await Symbol.query().join("files", "files.id = symbols.file_id").where("files.language", "go").get()
         assert len(results) == 1
         assert results[0].name == "GoFunc"
 

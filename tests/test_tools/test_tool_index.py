@@ -47,6 +47,7 @@ class TestIndexFolder:
         (proj / "README.md").write_text("# Hello\nWorld\n")
 
         from sylvan.tools.indexing.index_folder import index_folder
+
         result = await index_folder(str(proj))
 
         assert "files_indexed" in result
@@ -58,6 +59,7 @@ class TestIndexFolder:
         tmp_path = backend_ctx
         from sylvan.error_codes import IndexNotADirectoryError
         from sylvan.tools.indexing.index_folder import index_folder
+
         with pytest.raises(IndexNotADirectoryError):
             await index_folder(str(tmp_path / "nonexistent"))
 
@@ -68,5 +70,6 @@ class TestIndexFolder:
         (proj / "app.py").write_text("x = 1\n")
 
         from sylvan.tools.indexing.index_folder import index_folder
+
         result = await index_folder(str(proj), name="my-project")
         assert result["repo_name"] == "my-project"

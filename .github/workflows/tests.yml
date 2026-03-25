@@ -19,7 +19,7 @@ jobs:
         run: uv sync --python 3.12
 
       - name: Lint
-        run: uv run ruff check src/sylvan/
+        run: uv run ruff check src/sylvan/ tests/
 
   test:
     needs: lint

@@ -254,9 +254,7 @@ class TestWorkspaceSearchTool:
 
         proj_a = tmp_path / "proj_a"
         proj_a.mkdir()
-        (proj_a / "search_me.py").write_text(
-            "def find_alpha(): pass\n" "def find_beta(): pass\n"
-        )
+        (proj_a / "search_me.py").write_text("def find_alpha(): pass\ndef find_beta(): pass\n")
 
         from sylvan.tools.workspace import index_workspace, workspace_search
 
@@ -290,9 +288,7 @@ class TestWorkspaceBlastRadiusTool:
         proj = tmp_path / "proj"
         proj.mkdir()
         (proj / "core.py").write_text("class Engine:\n    def start(self): pass\n")
-        (proj / "app.py").write_text(
-            "from core import Engine\n\ndef run():\n    e = Engine()\n    e.start()\n"
-        )
+        (proj / "app.py").write_text("from core import Engine\n\ndef run():\n    e = Engine()\n    e.start()\n")
 
         from sylvan.tools.workspace import index_workspace, workspace_blast_radius
 

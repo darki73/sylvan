@@ -62,9 +62,14 @@ class TestParseRequirementsTxt:
 class TestParsePackageJson:
     def test_dependencies(self, tmp_path):
         pkg = tmp_path / "package.json"
-        pkg.write_text(json.dumps({
-            "dependencies": {"react": "^18.0.0", "lodash": "4.17.21"},
-        }), encoding="utf-8")
+        pkg.write_text(
+            json.dumps(
+                {
+                    "dependencies": {"react": "^18.0.0", "lodash": "4.17.21"},
+                }
+            ),
+            encoding="utf-8",
+        )
         deps = _parse_package_json(pkg)
         assert len(deps) == 2
         names = {d["name"] for d in deps}
@@ -74,19 +79,29 @@ class TestParsePackageJson:
 
     def test_dev_dependencies(self, tmp_path):
         pkg = tmp_path / "package.json"
-        pkg.write_text(json.dumps({
-            "devDependencies": {"jest": "^29.0"},
-        }), encoding="utf-8")
+        pkg.write_text(
+            json.dumps(
+                {
+                    "devDependencies": {"jest": "^29.0"},
+                }
+            ),
+            encoding="utf-8",
+        )
         deps = _parse_package_json(pkg)
         assert len(deps) == 1
         assert deps[0]["name"] == "jest"
 
     def test_both_dep_types(self, tmp_path):
         pkg = tmp_path / "package.json"
-        pkg.write_text(json.dumps({
-            "dependencies": {"express": "^4.18"},
-            "devDependencies": {"nodemon": "^3.0"},
-        }), encoding="utf-8")
+        pkg.write_text(
+            json.dumps(
+                {
+                    "dependencies": {"express": "^4.18"},
+                    "devDependencies": {"nodemon": "^3.0"},
+                }
+            ),
+            encoding="utf-8",
+        )
         deps = _parse_package_json(pkg)
         assert len(deps) == 2
 
@@ -130,8 +145,7 @@ class TestParseGoMod:
     def test_single_line_require(self, tmp_path):
         gomod = tmp_path / "go.mod"
         gomod.write_text(
-            "module example.com/app\n\n"
-            "require github.com/pkg/errors v0.9.1\n",
+            "module example.com/app\n\nrequire github.com/pkg/errors v0.9.1\n",
             encoding="utf-8",
         )
         deps = _parse_go_mod(gomod)
@@ -153,10 +167,7 @@ class TestParseGoMod:
     def test_versions_captured(self, tmp_path):
         gomod = tmp_path / "go.mod"
         gomod.write_text(
-            "module test\n\n"
-            "require (\n"
-            "\texample.com/foo v1.2.3\n"
-            ")\n",
+            "module test\n\nrequire (\n\texample.com/foo v1.2.3\n)\n",
             encoding="utf-8",
         )
         deps = _parse_go_mod(gomod)
@@ -167,8 +178,7 @@ class TestParseCargoToml:
     def test_dependencies(self, tmp_path):
         cargo = tmp_path / "Cargo.toml"
         cargo.write_text(
-            "[package]\nname = \"myapp\"\nversion = \"0.1.0\"\n\n"
-            "[dependencies]\nserde = \"1.0\"\ntokio = \"1.28\"\n",
+            '[package]\nname = "myapp"\nversion = "0.1.0"\n\n[dependencies]\nserde = "1.0"\ntokio = "1.28"\n',
             encoding="utf-8",
         )
         deps = _parse_cargo_toml(cargo)
@@ -181,7 +191,7 @@ class TestParseCargoToml:
     def test_versions_captured(self, tmp_path):
         cargo = tmp_path / "Cargo.toml"
         cargo.write_text(
-            "[dependencies]\nserde = \"1.0\"\n",
+            '[dependencies]\nserde = "1.0"\n',
             encoding="utf-8",
         )
         deps = _parse_cargo_toml(cargo)
@@ -190,7 +200,7 @@ class TestParseCargoToml:
     def test_no_dependencies_section(self, tmp_path):
         cargo = tmp_path / "Cargo.toml"
         cargo.write_text(
-            "[package]\nname = \"myapp\"\nversion = \"0.1.0\"\n",
+            '[package]\nname = "myapp"\nversion = "0.1.0"\n',
             encoding="utf-8",
         )
         deps = _parse_cargo_toml(cargo)
@@ -199,8 +209,7 @@ class TestParseCargoToml:
     def test_stops_at_next_section(self, tmp_path):
         cargo = tmp_path / "Cargo.toml"
         cargo.write_text(
-            "[dependencies]\nserde = \"1.0\"\n\n"
-            "[dev-dependencies]\ncriterion = \"0.5\"\n",
+            '[dependencies]\nserde = "1.0"\n\n[dev-dependencies]\ncriterion = "0.5"\n',
             encoding="utf-8",
         )
         deps = _parse_cargo_toml(cargo)

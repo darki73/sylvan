@@ -38,24 +38,23 @@ async def indexed_repo(tmp_path):
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "main.py").write_text(
-        'def hello():\n'
+        "def hello():\n"
         '    """Say hello."""\n'
         '    return "hello"\n'
-        '\n'
-        'class Greeter:\n'
+        "\n"
+        "class Greeter:\n"
         '    """A greeter class."""\n'
-        '    def greet(self):\n'
-        '        return hello()\n',
+        "    def greet(self):\n"
+        "        return hello()\n",
         encoding="utf-8",
     )
     (proj / "util.py").write_text(
-        'def helper():\n'
-        '    """A helper function."""\n'
-        '    pass\n',
+        'def helper():\n    """A helper function."""\n    pass\n',
         encoding="utf-8",
     )
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="test-repo")
     await backend.commit()
     assert result.symbols_extracted >= 3
@@ -70,6 +69,7 @@ async def indexed_repo(tmp_path):
 class TestRemoveRepoBasic:
     async def test_removes_repo_and_returns_counts(self, indexed_repo):
         from sylvan.tools.meta.remove_repo import remove_repo
+
         resp = await remove_repo(repo="test-repo")
 
         assert "_meta" in resp
@@ -101,9 +101,9 @@ class TestRemoveRepoBasic:
         file_count_before = await FileRecord.where(repo_id=repo_id).count()
         assert file_count_before >= 2
 
-        symbol_count_before = await Symbol.query().join(
-            "files", "files.id = symbols.file_id"
-        ).where("files.repo_id", repo_id).count()
+        symbol_count_before = (
+            await Symbol.query().join("files", "files.id = symbols.file_id").where("files.repo_id", repo_id).count()
+        )
         assert symbol_count_before >= 3
 
         # Remove the repo

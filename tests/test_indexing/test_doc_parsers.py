@@ -385,35 +385,35 @@ class TestAsciiDocParser:
 
 class TestNotebookParser:
     def _make_notebook(self, cells, language="python"):
-        return json.dumps({
-            "metadata": {
-                "kernelspec": {"language": language},
-            },
-            "cells": cells,
-        })
+        return json.dumps(
+            {
+                "metadata": {
+                    "kernelspec": {"language": language},
+                },
+                "cells": cells,
+            }
+        )
 
     def test_markdown_cell(self):
-        nb = self._make_notebook([
-            {"cell_type": "markdown", "source": ["# Introduction\n", "Some text"]}
-        ])
+        nb = self._make_notebook([{"cell_type": "markdown", "source": ["# Introduction\n", "Some text"]}])
         sections = parse_notebook(nb, "test.ipynb", "repo")
         assert len(sections) >= 1
         assert sections[0].title == "Introduction"
 
     def test_code_cell(self):
-        nb = self._make_notebook([
-            {"cell_type": "code", "source": ["print('hello')"]}
-        ])
+        nb = self._make_notebook([{"cell_type": "code", "source": ["print('hello')"]}])
         sections = parse_notebook(nb, "test.ipynb", "repo")
         assert len(sections) == 1
         assert "Code cell" in sections[0].title
 
     def test_mixed_cells(self):
-        nb = self._make_notebook([
-            {"cell_type": "markdown", "source": ["# Title\n"]},
-            {"cell_type": "code", "source": ["x = 1"]},
-            {"cell_type": "markdown", "source": ["## Section\n"]},
-        ])
+        nb = self._make_notebook(
+            [
+                {"cell_type": "markdown", "source": ["# Title\n"]},
+                {"cell_type": "code", "source": ["x = 1"]},
+                {"cell_type": "markdown", "source": ["## Section\n"]},
+            ]
+        )
         sections = parse_notebook(nb, "test.ipynb", "repo")
         assert len(sections) == 3
 
@@ -422,18 +422,23 @@ class TestNotebookParser:
         assert sections == []
 
     def test_empty_cells_skipped(self):
-        nb = self._make_notebook([
-            {"cell_type": "code", "source": [""]},
-            {"cell_type": "markdown", "source": ["# Real\n"]},
-        ])
+        nb = self._make_notebook(
+            [
+                {"cell_type": "code", "source": [""]},
+                {"cell_type": "markdown", "source": ["# Real\n"]},
+            ]
+        )
         sections = parse_notebook(nb, "test.ipynb", "repo")
         assert len(sections) == 1
         assert sections[0].title == "Real"
 
     def test_kernel_language_detected(self):
-        nb = self._make_notebook([
-            {"cell_type": "code", "source": ["val x = 1"]},
-        ], language="scala")
+        nb = self._make_notebook(
+            [
+                {"cell_type": "code", "source": ["val x = 1"]},
+            ],
+            language="scala",
+        )
         sections = parse_notebook(nb, "test.ipynb", "repo")
         # The code cell body should contain the language tag
         assert sections[0].content_hash  # non-empty
@@ -596,10 +601,12 @@ class TestParserRouter:
         assert any(s.title == "Title" for s in sections)
 
     def test_notebook_dispatch(self):
-        nb = json.dumps({
-            "metadata": {"kernelspec": {"language": "python"}},
-            "cells": [{"cell_type": "markdown", "source": ["# NB Title\n"]}],
-        })
+        nb = json.dumps(
+            {
+                "metadata": {"kernelspec": {"language": "python"}},
+                "cells": [{"cell_type": "markdown", "source": ["# NB Title\n"]}],
+            }
+        )
         sections = parse_document(nb, "test.ipynb", "repo")
         assert any(s.title == "NB Title" for s in sections)
 

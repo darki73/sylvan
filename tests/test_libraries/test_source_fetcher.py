@@ -22,6 +22,7 @@ from sylvan.libraries.source_fetcher import (
 # _validate_tag
 # ---------------------------------------------------------------------------
 
+
 class TestValidateTag:
     def test_simple_version(self):
         assert _validate_tag("v1.2.3") == "v1.2.3"
@@ -63,10 +64,12 @@ class TestValidateTag:
 # get_library_path
 # ---------------------------------------------------------------------------
 
+
 class TestGetLibraryPath:
     def test_basic_path(self, tmp_path):
         os.environ["SYLVAN_HOME"] = str(tmp_path)
         from sylvan.config import reset_config
+
         reset_config()
 
         try:
@@ -79,6 +82,7 @@ class TestGetLibraryPath:
     def test_scoped_npm_package(self, tmp_path):
         os.environ["SYLVAN_HOME"] = str(tmp_path)
         from sylvan.config import reset_config
+
         reset_config()
 
         try:
@@ -94,10 +98,12 @@ class TestGetLibraryPath:
 # remove_library_source
 # ---------------------------------------------------------------------------
 
+
 class TestRemoveLibrarySource:
     def test_removes_existing_directory(self, tmp_path):
         os.environ["SYLVAN_HOME"] = str(tmp_path)
         from sylvan.config import reset_config
+
         reset_config()
 
         try:
@@ -115,6 +121,7 @@ class TestRemoveLibrarySource:
     def test_returns_false_for_nonexistent(self, tmp_path):
         os.environ["SYLVAN_HOME"] = str(tmp_path)
         from sylvan.config import reset_config
+
         reset_config()
 
         try:
@@ -129,6 +136,7 @@ class TestRemoveLibrarySource:
 # fetch_source (mock git / httpx)
 # ---------------------------------------------------------------------------
 
+
 class TestFetchSource:
     def test_success_on_first_clone(self, tmp_path):
         from sylvan.libraries.source_fetcher import fetch_source
@@ -140,9 +148,7 @@ class TestFetchSource:
             result = fetch_source("https://github.com/org/repo", "v1.0.0", dest)
 
         assert result == dest
-        mock_clone.assert_called_once_with(
-            "https://github.com/org/repo", "v1.0.0", dest, 120
-        )
+        mock_clone.assert_called_once_with("https://github.com/org/repo", "v1.0.0", dest, 120)
 
     def test_fallback_to_alt_tag(self, tmp_path):
         from sylvan.libraries.source_fetcher import fetch_source
@@ -228,6 +234,7 @@ class TestFetchSource:
 # _download_github_tarball
 # ---------------------------------------------------------------------------
 
+
 class TestDownloadGithubTarball:
     def test_non_github_url_returns_false(self, tmp_path):
         from sylvan.libraries.source_fetcher import _download_github_tarball
@@ -244,24 +251,21 @@ class TestDownloadGithubTarball:
         mock_stream_response.__exit__ = MagicMock(return_value=False)
 
         with patch("sylvan.libraries.source_fetcher.httpx.stream", return_value=mock_stream_response):
-            result = _download_github_tarball(
-                "https://github.com/org/repo", "v1.0", tmp_path, 30
-            )
+            result = _download_github_tarball("https://github.com/org/repo", "v1.0", tmp_path, 30)
         assert result is False
 
     def test_exception_returns_false(self, tmp_path):
         from sylvan.libraries.source_fetcher import _download_github_tarball
 
         with patch("sylvan.libraries.source_fetcher.httpx.stream", side_effect=Exception("network")):
-            result = _download_github_tarball(
-                "https://github.com/org/repo", "v1.0", tmp_path, 30
-            )
+            result = _download_github_tarball("https://github.com/org/repo", "v1.0", tmp_path, 30)
         assert result is False
 
 
 # ---------------------------------------------------------------------------
 # _git_clone
 # ---------------------------------------------------------------------------
+
 
 class TestGitClone:
     def test_invalid_tag_returns_false(self, tmp_path):

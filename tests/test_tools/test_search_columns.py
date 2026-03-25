@@ -36,9 +36,10 @@ async def indexed_repo(tmp_path):
 
     proj = tmp_path / "project"
     proj.mkdir()
-    (proj / "model.py").write_text('x = 1\n', encoding="utf-8")
+    (proj / "model.py").write_text("x = 1\n", encoding="utf-8")
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     await index_folder(str(proj), name="col-repo")
     await backend.commit()
 
@@ -139,19 +140,23 @@ class TestSearchColumns:
 class TestMatchScore:
     def test_exact_match(self):
         from sylvan.tools.analysis.search_columns import _match_score
+
         assert _match_score("foo", "foo") == 1.0
 
     def test_substring_match(self):
         from sylvan.tools.analysis.search_columns import _match_score
+
         score = _match_score("cust", "customer_id")
         assert score == 0.8
 
     def test_no_match(self):
         from sylvan.tools.analysis.search_columns import _match_score
+
         score = _match_score("zzz", "abc")
         assert score == 0.0
 
     def test_partial_word_match(self):
         from sylvan.tools.analysis.search_columns import _match_score
+
         score = _match_score("customer email", "Customer email address")
         assert score > 0.0

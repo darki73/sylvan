@@ -87,7 +87,7 @@ def _internal_helper():
 @pytest.fixture
 def sample_ts_file(tmp_path):
     """Create a sample TypeScript file for testing."""
-    code = '''
+    code = """
 interface Config {
     apiUrl: string;
     timeout: number;
@@ -115,7 +115,7 @@ export const DEFAULT_CONFIG: Config = {
     apiUrl: "https://api.example.com",
     timeout: 5000,
 };
-'''
+"""
     f = tmp_path / "api.ts"
     f.write_text(code, encoding="utf-8")
     return f
@@ -124,7 +124,7 @@ export const DEFAULT_CONFIG: Config = {
 @pytest.fixture
 def sample_go_file(tmp_path):
     """Create a sample Go file for testing."""
-    code = '''package main
+    code = """package main
 
 import (
     "fmt"
@@ -147,7 +147,7 @@ func NewHandler(prefix string) *Handler {
 }
 
 const MaxConnections = 100
-'''
+"""
     f = tmp_path / "main.go"
     f.write_text(code, encoding="utf-8")
     return f

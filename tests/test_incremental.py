@@ -23,7 +23,9 @@ class TestIncremental:
             await run_migrations(backend)
 
             context = SylvanContext(
-                backend=backend, session=SessionTracker(), cache=QueryCache(),
+                backend=backend,
+                session=SessionTracker(),
+                cache=QueryCache(),
             )
             token = set_context(context)
 
@@ -75,7 +77,9 @@ class TestIncremental:
             await run_migrations(backend)
 
             context = SylvanContext(
-                backend=backend, session=SessionTracker(), cache=QueryCache(),
+                backend=backend,
+                session=SessionTracker(),
+                cache=QueryCache(),
             )
             token = set_context(context)
 
@@ -109,7 +113,9 @@ class TestIncremental:
             await run_migrations(backend)
 
             context = SylvanContext(
-                backend=backend, session=SessionTracker(), cache=QueryCache(),
+                backend=backend,
+                session=SessionTracker(),
+                cache=QueryCache(),
             )
             token = set_context(context)
 

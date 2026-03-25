@@ -28,9 +28,11 @@ def _fake_config(tmp_path: Path) -> MagicMock:
 
 def _closing_run(return_value=None):
     """Return a side_effect for asyncio.run that closes the coroutine."""
+
     def _side_effect(coro):
         coro.close()
         return return_value
+
     return _side_effect
 
 
@@ -104,8 +106,11 @@ class TestIndex:
 class TestLibraryAdd:
     def test_library_add_indexed(self):
         mock_result = {
-            "status": "indexed", "name": "django@4.2",
-            "files_indexed": 100, "symbols_extracted": 500, "sections_extracted": 50,
+            "status": "indexed",
+            "name": "django@4.2",
+            "files_indexed": 100,
+            "symbols_extracted": 500,
+            "sections_extracted": 50,
         }
         with patch("sylvan.libraries.manager.add_library", return_value=mock_result):
             result = runner.invoke(app, ["library", "add", "pip/django@4.2"])
@@ -121,8 +126,13 @@ class TestLibraryAdd:
             assert "already indexed" in result.output
 
     def test_library_add_with_timeout(self):
-        mock_result = {"status": "indexed", "name": "flask", "files_indexed": 10,
-                       "symbols_extracted": 30, "sections_extracted": 5}
+        mock_result = {
+            "status": "indexed",
+            "name": "flask",
+            "files_indexed": 10,
+            "symbols_extracted": 30,
+            "sections_extracted": 5,
+        }
         with patch("sylvan.libraries.manager.add_library", return_value=mock_result) as mock_add:
             result = runner.invoke(app, ["library", "add", "pip/flask", "--timeout", "60"])
             assert result.exit_code == 0
@@ -177,9 +187,15 @@ class TestLibraryUpdate:
 class TestLibraryMap:
     def test_library_map(self):
         with patch("sylvan.libraries.resolution.package_registry.save_override") as mock_save:
-            result = runner.invoke(app, [
-                "library", "map", "pip/tiktoken", "https://github.com/openai/tiktoken",
-            ])
+            result = runner.invoke(
+                app,
+                [
+                    "library",
+                    "map",
+                    "pip/tiktoken",
+                    "https://github.com/openai/tiktoken",
+                ],
+            )
             assert result.exit_code == 0
             assert "Mapped pip/tiktoken" in result.output
             mock_save.assert_called_once_with("pip/tiktoken", "https://github.com/openai/tiktoken")
@@ -217,8 +233,10 @@ class TestLibraryMappings:
 class TestScaffold:
     def test_scaffold_success(self, tmp_path):
         mock_result = {
-            "files_created": 5, "sylvan_dir": str(tmp_path / "sylvan"),
-            "config_file": str(tmp_path / "CLAUDE.md"), "agent": "claude",
+            "files_created": 5,
+            "sylvan_dir": str(tmp_path / "sylvan"),
+            "config_file": str(tmp_path / "CLAUDE.md"),
+            "agent": "claude",
         }
         with patch("sylvan.scaffold.scaffold_project", return_value=mock_result):
             result = runner.invoke(app, ["scaffold", "my-repo"])
@@ -227,8 +245,10 @@ class TestScaffold:
 
     def test_scaffold_with_agent(self, tmp_path):
         mock_result = {
-            "files_created": 3, "sylvan_dir": str(tmp_path / "sylvan"),
-            "config_file": str(tmp_path / ".cursorrules"), "agent": "cursor",
+            "files_created": 3,
+            "sylvan_dir": str(tmp_path / "sylvan"),
+            "config_file": str(tmp_path / ".cursorrules"),
+            "agent": "cursor",
         }
         with patch("sylvan.scaffold.scaffold_project", return_value=mock_result) as mock_scaffold:
             result = runner.invoke(app, ["scaffold", "my-repo", "--agent", "cursor"])
@@ -237,8 +257,10 @@ class TestScaffold:
 
     def test_scaffold_with_root(self, tmp_path):
         mock_result = {
-            "files_created": 2, "sylvan_dir": str(tmp_path / "sylvan"),
-            "config_file": str(tmp_path / "CLAUDE.md"), "agent": "claude",
+            "files_created": 2,
+            "sylvan_dir": str(tmp_path / "sylvan"),
+            "config_file": str(tmp_path / "CLAUDE.md"),
+            "agent": "claude",
         }
         with patch("sylvan.scaffold.scaffold_project", return_value=mock_result) as mock_scaffold:
             result = runner.invoke(app, ["scaffold", "my-repo", "--root", str(tmp_path)])
@@ -341,6 +363,7 @@ class TestMainEntrypoint:
             patch("sylvan.server.startup.main") as mock_serve,
         ):
             from sylvan.cli import main
+
             main()
             mock_serve.assert_called_once_with()
 
@@ -350,5 +373,6 @@ class TestMainEntrypoint:
             patch("sylvan.cli.app") as mock_app,
         ):
             from sylvan.cli import main
+
             main()
             mock_app.assert_called_once()

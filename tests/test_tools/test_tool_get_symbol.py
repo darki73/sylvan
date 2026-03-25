@@ -36,18 +36,19 @@ async def indexed_repo(tmp_path):
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "main.py").write_text(
-        'def hello():\n'
+        "def hello():\n"
         '    """Say hello."""\n'
         '    return "hello"\n'
-        '\n'
-        'class Foo:\n'
+        "\n"
+        "class Foo:\n"
         '    """A foo class."""\n'
-        '    def bar(self):\n'
-        '        pass\n',
+        "    def bar(self):\n"
+        "        pass\n",
         encoding="utf-8",
     )
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="test-repo")
     await backend.commit()
     assert result.symbols_extracted >= 2
@@ -62,6 +63,7 @@ async def indexed_repo(tmp_path):
 async def _find_symbol_id(name):
     """Helper to find a symbol ID by name via search."""
     from sylvan.tools.search.search_symbols import search_symbols
+
     resp = await search_symbols(query=name)
     for s in resp["symbols"]:
         if s["name"] == name:
@@ -72,6 +74,7 @@ async def _find_symbol_id(name):
 class TestGetSymbol:
     async def test_returns_source_code(self, indexed_repo):
         from sylvan.tools.browsing.get_symbol import get_symbol
+
         sid = await _find_symbol_id("hello")
         resp = await get_symbol(sid)
 
@@ -90,6 +93,7 @@ class TestGetSymbol:
 
     async def test_get_symbol_with_verify(self, indexed_repo):
         from sylvan.tools.browsing.get_symbol import get_symbol
+
         sid = await _find_symbol_id("hello")
         resp = await get_symbol(sid, verify=True)
 
@@ -109,6 +113,7 @@ class TestGetSymbol:
 
     async def test_response_has_meta_with_savings(self, indexed_repo):
         from sylvan.tools.browsing.get_symbol import get_symbol
+
         sid = await _find_symbol_id("hello")
         resp = await get_symbol(sid)
 
@@ -123,6 +128,7 @@ class TestGetSymbol:
 
     async def test_response_has_hints(self, indexed_repo):
         from sylvan.tools.browsing.get_symbol import get_symbol
+
         sid = await _find_symbol_id("hello")
 
         # First access to seed the session
@@ -138,6 +144,7 @@ class TestGetSymbol:
 class TestGetSymbolsBatch:
     async def test_batch_returns_multiple(self, indexed_repo):
         from sylvan.tools.browsing.get_symbol import get_symbols
+
         sid_hello = await _find_symbol_id("hello")
         sid_foo = await _find_symbol_id("Foo")
 
@@ -161,6 +168,7 @@ class TestGetSymbolsBatch:
 
     async def test_batch_with_not_found(self, indexed_repo):
         from sylvan.tools.browsing.get_symbol import get_symbols
+
         sid_hello = await _find_symbol_id("hello")
         fake_id = "nonexistent::symbol#function"
 
@@ -173,6 +181,7 @@ class TestGetSymbolsBatch:
 
     async def test_batch_empty_list(self, indexed_repo):
         from sylvan.tools.browsing.get_symbol import get_symbols
+
         resp = await get_symbols([])
 
         assert "symbols" in resp

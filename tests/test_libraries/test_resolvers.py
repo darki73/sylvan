@@ -25,6 +25,7 @@ from sylvan.libraries.resolution.package_registry import (
 # parse_package_spec
 # ---------------------------------------------------------------------------
 
+
 class TestParsePackageSpec:
     def test_pip_with_version(self):
         manager, name, version = parse_package_spec("pip/django@4.2")
@@ -39,17 +40,13 @@ class TestParsePackageSpec:
         assert version == "latest"
 
     def test_go_module_with_version(self):
-        manager, name, version = parse_package_spec(
-            "go/github.com/gin-gonic/gin@v1.9.1"
-        )
+        manager, name, version = parse_package_spec("go/github.com/gin-gonic/gin@v1.9.1")
         assert manager == "go"
         assert name == "github.com/gin-gonic/gin"
         assert version == "v1.9.1"
 
     def test_go_module_without_version(self):
-        manager, name, version = parse_package_spec(
-            "go/github.com/gin-gonic/gin"
-        )
+        manager, name, version = parse_package_spec("go/github.com/gin-gonic/gin")
         assert manager == "go"
         assert name == "github.com/gin-gonic/gin"
         assert version == "latest"
@@ -72,6 +69,7 @@ class TestParsePackageSpec:
 # ---------------------------------------------------------------------------
 # validate_repo_url
 # ---------------------------------------------------------------------------
+
 
 class TestValidateRepoUrl:
     def test_valid_https(self):
@@ -103,6 +101,7 @@ class TestValidateRepoUrl:
 # guess_tag
 # ---------------------------------------------------------------------------
 
+
 class TestGuessTag:
     def test_returns_version(self):
         assert guess_tag("1.2.3", "https://github.com/org/repo") == "1.2.3"
@@ -115,12 +114,16 @@ class TestGuessTag:
 # resolve (with overrides and dispatch)
 # ---------------------------------------------------------------------------
 
+
 class TestResolve:
     def test_unknown_manager_raises(self):
-        with patch(
-            "sylvan.libraries.resolution.package_registry.load_overrides",
-            return_value={},
-        ), pytest.raises(ValueError, match="Unknown package manager"):
+        with (
+            patch(
+                "sylvan.libraries.resolution.package_registry.load_overrides",
+                return_value={},
+            ),
+            pytest.raises(ValueError, match="Unknown package manager"),
+        ):
             resolve("maven", "junit", "5.0")
 
     def test_uses_override_when_present(self):
@@ -172,6 +175,7 @@ class TestResolve:
 # ---------------------------------------------------------------------------
 # resolve_pypi
 # ---------------------------------------------------------------------------
+
 
 class TestResolvePyPI:
     def test_success(self):
@@ -231,7 +235,10 @@ class TestResolvePyPI:
             }
         }
 
-        with patch("sylvan.libraries.resolution.package_resolvers.httpx.get", return_value=mock_response), pytest.raises(ValueError, match="Cannot find source repository"):
+        with (
+            patch("sylvan.libraries.resolution.package_resolvers.httpx.get", return_value=mock_response),
+            pytest.raises(ValueError, match="Cannot find source repository"),
+        ):
             resolve_pypi("obscure-pkg", "latest")
 
     def test_http_error_propagates(self):
@@ -241,7 +248,10 @@ class TestResolvePyPI:
         mock_response.status_code = 404
         mock_response.raise_for_status.side_effect = Exception("404 Not Found")
 
-        with patch("sylvan.libraries.resolution.package_resolvers.httpx.get", return_value=mock_response), pytest.raises(Exception, match="404"):
+        with (
+            patch("sylvan.libraries.resolution.package_resolvers.httpx.get", return_value=mock_response),
+            pytest.raises(Exception, match="404"),
+        ):
             resolve_pypi("nonexistent", "latest")
 
     def test_extracts_from_homepage(self):
@@ -264,6 +274,7 @@ class TestResolvePyPI:
 # ---------------------------------------------------------------------------
 # resolve_npm
 # ---------------------------------------------------------------------------
+
 
 class TestResolveNpm:
     def test_success(self):
@@ -307,7 +318,10 @@ class TestResolveNpm:
             "repository": {},
         }
 
-        with patch("sylvan.libraries.resolution.package_resolvers.httpx.get", return_value=mock_response), pytest.raises(ValueError, match="Cannot find source repository"):
+        with (
+            patch("sylvan.libraries.resolution.package_resolvers.httpx.get", return_value=mock_response),
+            pytest.raises(ValueError, match="Cannot find source repository"),
+        ):
             resolve_npm("no-repo", "latest")
 
     def test_strips_git_prefix(self):
@@ -327,6 +341,7 @@ class TestResolveNpm:
 # ---------------------------------------------------------------------------
 # resolve_cargo
 # ---------------------------------------------------------------------------
+
 
 class TestResolveCargo:
     def test_success_latest(self):
@@ -368,17 +383,19 @@ class TestResolveCargo:
         from sylvan.libraries.resolution.package_resolvers import resolve_cargo
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "crate": {"repository": ""}
-        }
+        mock_response.json.return_value = {"crate": {"repository": ""}}
 
-        with patch("sylvan.libraries.resolution.package_resolvers.httpx.get", return_value=mock_response), pytest.raises(ValueError, match="Cannot find source repository"):
+        with (
+            patch("sylvan.libraries.resolution.package_resolvers.httpx.get", return_value=mock_response),
+            pytest.raises(ValueError, match="Cannot find source repository"),
+        ):
             resolve_cargo("no-repo", "latest")
 
 
 # ---------------------------------------------------------------------------
 # resolve_go
 # ---------------------------------------------------------------------------
+
 
 class TestResolveGo:
     def test_github_module(self):
@@ -443,6 +460,7 @@ class TestResolveGo:
 # ---------------------------------------------------------------------------
 # _extract_repo_url / _clean_repo_url (internal helpers via resolve_pypi)
 # ---------------------------------------------------------------------------
+
 
 class TestExtractRepoUrl:
     def test_source_key(self):
@@ -510,6 +528,7 @@ class TestExtractRepoUrl:
 # RESOLVERS registry
 # ---------------------------------------------------------------------------
 
+
 class TestResolversRegistry:
     def test_all_resolvers_registered(self):
         from sylvan.libraries.resolution.package_resolvers import RESOLVERS
@@ -524,14 +543,17 @@ class TestResolversRegistry:
 # url_overrides
 # ---------------------------------------------------------------------------
 
+
 class TestUrlOverrides:
     def test_load_overrides(self, tmp_path):
         os.environ["SYLVAN_HOME"] = str(tmp_path)
         from sylvan.config import reset_config
+
         reset_config()
 
         try:
             from sylvan.libraries.resolution.url_overrides import load_overrides
+
             result = load_overrides()
             assert isinstance(result, dict)
         finally:
@@ -541,6 +563,7 @@ class TestUrlOverrides:
     def test_save_and_load_override(self, tmp_path):
         os.environ["SYLVAN_HOME"] = str(tmp_path)
         from sylvan.config import reset_config
+
         reset_config()
 
         try:
@@ -548,6 +571,7 @@ class TestUrlOverrides:
                 load_overrides,
                 save_override,
             )
+
             save_override("pip/tiktoken", "https://github.com/openai/tiktoken")
             overrides = load_overrides()
             assert overrides["pip/tiktoken"] == "https://github.com/openai/tiktoken"
@@ -558,6 +582,7 @@ class TestUrlOverrides:
     def test_remove_override(self, tmp_path):
         os.environ["SYLVAN_HOME"] = str(tmp_path)
         from sylvan.config import reset_config
+
         reset_config()
 
         try:
@@ -566,6 +591,7 @@ class TestUrlOverrides:
                 remove_override,
                 save_override,
             )
+
             save_override("pip/test", "https://github.com/org/test")
             assert remove_override("pip/test") is True
             assert "pip/test" not in load_overrides()
@@ -576,10 +602,12 @@ class TestUrlOverrides:
     def test_remove_nonexistent_override(self, tmp_path):
         os.environ["SYLVAN_HOME"] = str(tmp_path)
         from sylvan.config import reset_config
+
         reset_config()
 
         try:
             from sylvan.libraries.resolution.url_overrides import remove_override
+
             assert remove_override("pip/nonexistent") is False
         finally:
             os.environ.pop("SYLVAN_HOME", None)
@@ -588,6 +616,7 @@ class TestUrlOverrides:
     def test_list_overrides_same_as_load(self, tmp_path):
         os.environ["SYLVAN_HOME"] = str(tmp_path)
         from sylvan.config import reset_config
+
         reset_config()
 
         try:
@@ -595,6 +624,7 @@ class TestUrlOverrides:
                 list_overrides,
                 load_overrides,
             )
+
             assert list_overrides() == load_overrides()
         finally:
             os.environ.pop("SYLVAN_HOME", None)

@@ -38,22 +38,20 @@ async def indexed_repo(tmp_path):
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "models.py").write_text(
-        'class UserAccount:\n'
-        '    """A user account."""\n'
-        '    def get_name(self):\n'
-        '        return self.name\n',
+        'class UserAccount:\n    """A user account."""\n    def get_name(self):\n        return self.name\n',
         encoding="utf-8",
     )
     (proj / "views.py").write_text(
-        'from models import UserAccount\n'
-        '\n'
-        'def show_user():\n'
-        '    account = UserAccount()\n'
-        '    return account.get_name()\n',
+        "from models import UserAccount\n"
+        "\n"
+        "def show_user():\n"
+        "    account = UserAccount()\n"
+        "    return account.get_name()\n",
         encoding="utf-8",
     )
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="test-repo")
     await backend.commit()
     assert result.symbols_extracted >= 3
@@ -68,6 +66,7 @@ async def indexed_repo(tmp_path):
 async def _find_symbol_id(name: str) -> str:
     """Find a symbol ID by name."""
     from sylvan.tools.search.search_symbols import search_symbols
+
     resp = await search_symbols(query=name)
     for s in resp["symbols"]:
         if s["name"] == name:
@@ -78,6 +77,7 @@ async def _find_symbol_id(name: str) -> str:
 class TestRenameSymbolBasic:
     async def test_returns_edits_for_target_file(self, indexed_repo):
         from sylvan.tools.analysis.rename_symbol import rename_symbol
+
         sid = await _find_symbol_id("UserAccount")
         resp = await rename_symbol(symbol_id=sid, new_name="CustomerAccount")
 
@@ -104,6 +104,7 @@ class TestRenameSymbolBasic:
 
     async def test_rename_finds_edits_in_defining_file(self, indexed_repo):
         from sylvan.tools.analysis.rename_symbol import rename_symbol
+
         sid = await _find_symbol_id("UserAccount")
         resp = await rename_symbol(symbol_id=sid, new_name="CustomerAccount")
 
@@ -121,6 +122,7 @@ class TestRenameSymbolBasic:
 
     async def test_symbol_info_in_response(self, indexed_repo):
         from sylvan.tools.analysis.rename_symbol import rename_symbol
+
         sid = await _find_symbol_id("UserAccount")
         resp = await rename_symbol(symbol_id=sid, new_name="CustomerAccount")
 
@@ -136,6 +138,7 @@ class TestRenameSymbolBasic:
 class TestRenameSymbolErrors:
     async def test_symbol_not_found(self, indexed_repo):
         from sylvan.tools.analysis.rename_symbol import rename_symbol
+
         resp = await rename_symbol(
             symbol_id="nonexistent::sym#function",
             new_name="new_name",
@@ -146,6 +149,7 @@ class TestRenameSymbolErrors:
 
     async def test_same_name_returns_error(self, indexed_repo):
         from sylvan.tools.analysis.rename_symbol import rename_symbol
+
         sid = await _find_symbol_id("UserAccount")
         resp = await rename_symbol(symbol_id=sid, new_name="UserAccount")
 
@@ -154,6 +158,7 @@ class TestRenameSymbolErrors:
 
     async def test_invalid_identifier_returns_error(self, indexed_repo):
         from sylvan.tools.analysis.rename_symbol import rename_symbol
+
         sid = await _find_symbol_id("UserAccount")
         resp = await rename_symbol(symbol_id=sid, new_name="123bad")
 
@@ -162,6 +167,7 @@ class TestRenameSymbolErrors:
 
     async def test_empty_name_returns_error(self, indexed_repo):
         from sylvan.tools.analysis.rename_symbol import rename_symbol
+
         sid = await _find_symbol_id("UserAccount")
         resp = await rename_symbol(symbol_id=sid, new_name="")
 

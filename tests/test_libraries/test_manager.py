@@ -47,8 +47,7 @@ async def mgr_ctx(tmp_path):
     reset_config()
 
 
-async def _insert_library_repo(backend, name, *, manager="pip", package="pkg",
-                                version="1.0.0"):
+async def _insert_library_repo(backend, name, *, manager="pip", package="pkg", version="1.0.0"):
     """Insert a library-type repo directly into the DB."""
     await backend.execute(
         "INSERT INTO repos (name, source_path, indexed_at, repo_type, "
@@ -64,6 +63,7 @@ async def _insert_library_repo(backend, name, *, manager="pip", package="pkg",
 # ---------------------------------------------------------------------------
 # async_add_library
 # ---------------------------------------------------------------------------
+
 
 class TestAsyncAddLibrary:
     async def test_success(self, mgr_ctx, tmp_path):
@@ -124,14 +124,13 @@ class TestAsyncAddLibrary:
 # async_remove_library
 # ---------------------------------------------------------------------------
 
+
 class TestAsyncRemoveLibrary:
     async def test_remove_existing(self, mgr_ctx):
         from sylvan.libraries.manager import async_remove_library
 
         backend = mgr_ctx
-        await _insert_library_repo(
-            backend, "django@4.2", manager="pip", package="django", version="4.2"
-        )
+        await _insert_library_repo(backend, "django@4.2", manager="pip", package="django", version="4.2")
 
         with patch("sylvan.libraries.manager.remove_library_source"):
             result = await async_remove_library("django@4.2")
@@ -149,9 +148,7 @@ class TestAsyncRemoveLibrary:
         from sylvan.libraries.manager import async_remove_library
 
         backend = mgr_ctx
-        await _insert_library_repo(
-            backend, "django@4.2", manager="pip", package="django", version="4.2"
-        )
+        await _insert_library_repo(backend, "django@4.2", manager="pip", package="django", version="4.2")
 
         with patch("sylvan.libraries.manager.remove_library_source"):
             result = await async_remove_library("django")
@@ -164,8 +161,7 @@ class TestAsyncRemoveLibrary:
 
         backend = mgr_ctx
         await backend.execute(
-            "INSERT INTO repos (name, source_path, indexed_at, repo_type) "
-            "VALUES (?, ?, datetime('now'), 'library')",
+            "INSERT INTO repos (name, source_path, indexed_at, repo_type) VALUES (?, ?, datetime('now'), 'library')",
             ["orphan-lib", None],
         )
         await backend.commit()
@@ -181,6 +177,7 @@ class TestAsyncRemoveLibrary:
 # async_list_libraries
 # ---------------------------------------------------------------------------
 
+
 class TestAsyncListLibraries:
     async def test_empty_list(self, mgr_ctx):
         from sylvan.libraries.manager import async_list_libraries
@@ -192,12 +189,8 @@ class TestAsyncListLibraries:
         from sylvan.libraries.manager import async_list_libraries
 
         backend = mgr_ctx
-        await _insert_library_repo(
-            backend, "numpy@1.25", manager="pip", package="numpy", version="1.25"
-        )
-        await _insert_library_repo(
-            backend, "pandas@2.0", manager="pip", package="pandas", version="2.0"
-        )
+        await _insert_library_repo(backend, "numpy@1.25", manager="pip", package="numpy", version="1.25")
+        await _insert_library_repo(backend, "pandas@2.0", manager="pip", package="pandas", version="2.0")
 
         result = await async_list_libraries()
         assert len(result) == 2
@@ -209,9 +202,7 @@ class TestAsyncListLibraries:
         from sylvan.libraries.manager import async_list_libraries
 
         backend = mgr_ctx
-        repo_id = await _insert_library_repo(
-            backend, "django@4.2", manager="pip", package="django", version="4.2"
-        )
+        repo_id = await _insert_library_repo(backend, "django@4.2", manager="pip", package="django", version="4.2")
 
         # Add a file and symbol to verify counts
         await backend.execute(
@@ -220,9 +211,7 @@ class TestAsyncListLibraries:
             [repo_id],
         )
         await backend.commit()
-        file_row = await backend.fetch_one(
-            "SELECT id FROM files WHERE repo_id = ?", [repo_id]
-        )
+        file_row = await backend.fetch_one("SELECT id FROM files WHERE repo_id = ?", [repo_id])
         await backend.execute(
             "INSERT INTO symbols (file_id, symbol_id, name, qualified_name, kind, "
             "language, signature, line_start, line_end, byte_offset, byte_length) "

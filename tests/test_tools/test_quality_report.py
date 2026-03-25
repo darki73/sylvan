@@ -36,29 +36,29 @@ async def indexed_project(tmp_path):
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "main.py").write_text(
-        'def greet(name: str) -> str:\n'
+        "def greet(name: str) -> str:\n"
         '    """Greet someone."""\n'
         '    return f"Hello {name}"\n'
-        '\n'
-        'def farewell(name):\n'
+        "\n"
+        "def farewell(name):\n"
         '    return f"Goodbye {name}"\n'
-        '\n'
-        'class Calculator:\n'
+        "\n"
+        "class Calculator:\n"
         '    """A calculator class."""\n'
-        '    def add(self, a: int, b: int) -> int:\n'
+        "    def add(self, a: int, b: int) -> int:\n"
         '        """Add two numbers."""\n'
-        '        return a + b\n',
+        "        return a + b\n",
         encoding="utf-8",
     )
     (proj / "test_main.py").write_text(
-        'from main import greet, Calculator\n'
-        '\n'
-        'def test_greet():\n'
+        "from main import greet, Calculator\n"
+        "\n"
+        "def test_greet():\n"
         '    assert greet("world") == "Hello world"\n'
-        '\n'
-        'def test_calculator():\n'
-        '    calc = Calculator()\n'
-        '    assert calc.add(1, 2) == 3\n',
+        "\n"
+        "def test_calculator():\n"
+        "    calc = Calculator()\n"
+        "    assert calc.add(1, 2) == 3\n",
         encoding="utf-8",
     )
 

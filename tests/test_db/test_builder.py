@@ -167,6 +167,7 @@ class TestSchema:
     @pytest.fixture
     def mock_backend(self):
         """A minimal mock backend that records executed SQL."""
+
         class MockBackend:
             def __init__(self):
                 self.executed = []
@@ -187,10 +188,13 @@ class TestSchema:
     @pytest.mark.asyncio
     async def test_create_table(self, mock_backend):
         schema = Schema(mock_backend)
-        await schema.create("repos", lambda t: (
-            t.id(),
-            t.text("name"),
-        ))
+        await schema.create(
+            "repos",
+            lambda t: (
+                t.id(),
+                t.text("name"),
+            ),
+        )
 
         assert len(mock_backend.schemas) >= 1
         assert "CREATE TABLE IF NOT EXISTS repos" in mock_backend.schemas[0]
@@ -198,11 +202,14 @@ class TestSchema:
     @pytest.mark.asyncio
     async def test_create_with_indexes(self, mock_backend):
         schema = Schema(mock_backend)
-        await schema.create("files", lambda t: (
-            t.id(),
-            t.text("path"),
-            t.index("path"),
-        ))
+        await schema.create(
+            "files",
+            lambda t: (
+                t.id(),
+                t.text("path"),
+                t.index("path"),
+            ),
+        )
 
         # First schema call is CREATE TABLE, second is CREATE INDEX
         assert len(mock_backend.schemas) == 2
@@ -230,7 +237,8 @@ class TestSchema:
     @pytest.mark.asyncio
     async def test_fts_creates_table_and_triggers(self, mock_backend):
         schema = Schema(mock_backend)
-        await schema.fts("test_fts",
+        await schema.fts(
+            "test_fts",
             columns=["name", "body"],
             content_table="docs",
         )
@@ -263,10 +271,13 @@ class TestSchema:
     @pytest.mark.asyncio
     async def test_table_alter(self, mock_backend):
         schema = Schema(mock_backend)
-        await schema.table("repos", lambda t: (
-            t.text("stars").nullable(),
-            t.index("stars"),
-        ))
+        await schema.table(
+            "repos",
+            lambda t: (
+                t.text("stars").nullable(),
+                t.index("stars"),
+            ),
+        )
 
         assert any("ALTER TABLE" in s for s in mock_backend.executed)
         assert any("CREATE INDEX" in s for s in mock_backend.schemas)
@@ -281,7 +292,8 @@ class TestSchema:
     @pytest.mark.asyncio
     async def test_trigger(self, mock_backend):
         schema = Schema(mock_backend)
-        await schema.trigger("my_trigger",
+        await schema.trigger(
+            "my_trigger",
             table="repos",
             event="AFTER UPDATE",
             body="UPDATE repos SET updated_at = datetime('now') WHERE id = new.id;",

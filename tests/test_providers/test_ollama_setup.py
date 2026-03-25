@@ -129,12 +129,14 @@ class TestConfigureOllama:
 
         config = MagicMock()
 
-        with patch("typer.prompt", return_value="http://localhost:11434"), \
-             patch(
-                 "sylvan.providers.external.ollama.setup.list_ollama_models",
-                 return_value=([], []),
-             ), \
-             pytest.raises(typer.Exit):
+        with (
+            patch("typer.prompt", return_value="http://localhost:11434"),
+            patch(
+                "sylvan.providers.external.ollama.setup.list_ollama_models",
+                return_value=([], []),
+            ),
+            pytest.raises(typer.Exit),
+        ):
             configure_ollama(config)
 
     def test_configures_summary_provider(self):
@@ -145,12 +147,14 @@ class TestConfigureOllama:
         llms = [("llama3:8b", "8B"), ("qwen3:4b", "4B")]
         embeds: list = []
 
-        with patch("typer.prompt", side_effect=["http://localhost:11434", "1"]), \
-             patch("typer.echo"), \
-             patch(
-                 "sylvan.providers.external.ollama.setup.list_ollama_models",
-                 return_value=(llms, embeds),
-             ):
+        with (
+            patch("typer.prompt", side_effect=["http://localhost:11434", "1"]),
+            patch("typer.echo"),
+            patch(
+                "sylvan.providers.external.ollama.setup.list_ollama_models",
+                return_value=(llms, embeds),
+            ),
+        ):
             configure_ollama(config)
 
         assert config.summary is not None
@@ -166,12 +170,14 @@ class TestConfigureOllama:
         llms = [("llama3:8b", "8B")]
         embeds: list = []
 
-        with patch("typer.prompt", side_effect=["http://localhost:11434", "not_a_number"]), \
-             patch("typer.echo"), \
-             patch(
-                 "sylvan.providers.external.ollama.setup.list_ollama_models",
-                 return_value=(llms, embeds),
-             ):
+        with (
+            patch("typer.prompt", side_effect=["http://localhost:11434", "not_a_number"]),
+            patch("typer.echo"),
+            patch(
+                "sylvan.providers.external.ollama.setup.list_ollama_models",
+                return_value=(llms, embeds),
+            ),
+        ):
             configure_ollama(config)
 
         assert config.summary.model == "llama3:8b"

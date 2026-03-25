@@ -94,7 +94,9 @@ class TestGoCandidates:
 
     def test_third_party_generates_suffix_candidates(self):
         candidates = _generate_candidates(
-            "github.com/org/repo/pkg/util", "go", "main.go",
+            "github.com/org/repo/pkg/util",
+            "go",
+            "main.go",
         )
         assert "pkg/util" in candidates
         assert "util" in candidates
@@ -202,7 +204,8 @@ class TestResolveImportsIntegration:
             [repo_id, "src/sylvan/search/embeddings.py", "python", "hash1", 100],
         )
         target_row = await backend.fetch_one(
-            "SELECT id FROM files WHERE path = ?", ["src/sylvan/search/embeddings.py"],
+            "SELECT id FROM files WHERE path = ?",
+            ["src/sylvan/search/embeddings.py"],
         )
         target_id = target_row["id"]
 
@@ -211,7 +214,8 @@ class TestResolveImportsIntegration:
             [repo_id, "src/sylvan/cli.py", "python", "hash2", 200],
         )
         source_row = await backend.fetch_one(
-            "SELECT id FROM files WHERE path = ?", ["src/sylvan/cli.py"],
+            "SELECT id FROM files WHERE path = ?",
+            ["src/sylvan/cli.py"],
         )
         source_id = source_row["id"]
 
@@ -228,7 +232,8 @@ class TestResolveImportsIntegration:
 
         # Verify the resolved_file_id is set correctly.
         row = await backend.fetch_one(
-            "SELECT resolved_file_id FROM file_imports WHERE file_id = ?", [source_id],
+            "SELECT resolved_file_id FROM file_imports WHERE file_id = ?",
+            [source_id],
         )
         assert row["resolved_file_id"] == target_id
 
@@ -248,7 +253,8 @@ class TestResolveImportsIntegration:
             [repo_id, "src/main.py", "python", "hash3", 100],
         )
         source_row = await backend.fetch_one(
-            "SELECT id FROM files WHERE path = ?", ["src/main.py"],
+            "SELECT id FROM files WHERE path = ?",
+            ["src/main.py"],
         )
         source_id = source_row["id"]
 
@@ -262,7 +268,8 @@ class TestResolveImportsIntegration:
         assert resolved == 0
 
         row = await backend.fetch_one(
-            "SELECT resolved_file_id FROM file_imports WHERE file_id = ?", [source_id],
+            "SELECT resolved_file_id FROM file_imports WHERE file_id = ?",
+            [source_id],
         )
         assert row["resolved_file_id"] is None
 
@@ -282,7 +289,8 @@ class TestResolveImportsIntegration:
             [repo_id, "src/utils.ts", "typescript", "hash4", 100],
         )
         target_row = await backend.fetch_one(
-            "SELECT id FROM files WHERE path = ?", ["src/utils.ts"],
+            "SELECT id FROM files WHERE path = ?",
+            ["src/utils.ts"],
         )
         target_id = target_row["id"]
 
@@ -291,7 +299,8 @@ class TestResolveImportsIntegration:
             [repo_id, "src/app.ts", "typescript", "hash5", 200],
         )
         source_row = await backend.fetch_one(
-            "SELECT id FROM files WHERE path = ?", ["src/app.ts"],
+            "SELECT id FROM files WHERE path = ?",
+            ["src/app.ts"],
         )
         source_id = source_row["id"]
 
@@ -305,7 +314,8 @@ class TestResolveImportsIntegration:
         assert resolved == 1
 
         row = await backend.fetch_one(
-            "SELECT resolved_file_id FROM file_imports WHERE file_id = ?", [source_id],
+            "SELECT resolved_file_id FROM file_imports WHERE file_id = ?",
+            [source_id],
         )
         assert row["resolved_file_id"] == target_id
 
@@ -325,7 +335,8 @@ class TestResolveImportsIntegration:
             [repo_id, "src/app.js", "javascript", "hash6", 100],
         )
         source_row = await backend.fetch_one(
-            "SELECT id FROM files WHERE path = ?", ["src/app.js"],
+            "SELECT id FROM files WHERE path = ?",
+            ["src/app.js"],
         )
         source_id = source_row["id"]
 
@@ -365,7 +376,8 @@ class TestResolveImportsIntegration:
             [repo_id, "src/sylvan/cli.py", "python", "hash8", 200],
         )
         source_row = await backend.fetch_one(
-            "SELECT id FROM files WHERE path = ?", ["src/sylvan/cli.py"],
+            "SELECT id FROM files WHERE path = ?",
+            ["src/sylvan/cli.py"],
         )
         source_id = source_row["id"]
 
@@ -379,6 +391,7 @@ class TestResolveImportsIntegration:
         assert resolved == 1
 
         row = await backend.fetch_one(
-            "SELECT resolved_file_id FROM file_imports WHERE file_id = ?", [source_id],
+            "SELECT resolved_file_id FROM file_imports WHERE file_id = ?",
+            [source_id],
         )
         assert row["resolved_file_id"] == target_id

@@ -556,23 +556,51 @@ class TestDetectDuplicates:
         await _store_blob(backend, long_hash, long_body.encode())
 
         await _insert_symbol(
-            backend, file_id=1, symbol_id="s1.py::s#function", name="s", kind="function",
-            line_start=1, line_end=7, byte_offset=0, byte_length=len(short_body.encode()),
+            backend,
+            file_id=1,
+            symbol_id="s1.py::s#function",
+            name="s",
+            kind="function",
+            line_start=1,
+            line_end=7,
+            byte_offset=0,
+            byte_length=len(short_body.encode()),
             content_hash=short_hash,
         )
         await _insert_symbol(
-            backend, file_id=2, symbol_id="s2.py::s#function", name="s", kind="function",
-            line_start=1, line_end=7, byte_offset=0, byte_length=len(short_body.encode()),
+            backend,
+            file_id=2,
+            symbol_id="s2.py::s#function",
+            name="s",
+            kind="function",
+            line_start=1,
+            line_end=7,
+            byte_offset=0,
+            byte_length=len(short_body.encode()),
             content_hash=short_hash,
         )
         await _insert_symbol(
-            backend, file_id=3, symbol_id="l1.py::l#function", name="l", kind="function",
-            line_start=1, line_end=17, byte_offset=0, byte_length=len(long_body.encode()),
+            backend,
+            file_id=3,
+            symbol_id="l1.py::l#function",
+            name="l",
+            kind="function",
+            line_start=1,
+            line_end=17,
+            byte_offset=0,
+            byte_length=len(long_body.encode()),
             content_hash=long_hash,
         )
         await _insert_symbol(
-            backend, file_id=4, symbol_id="l2.py::l#function", name="l", kind="function",
-            line_start=1, line_end=17, byte_offset=0, byte_length=len(long_body.encode()),
+            backend,
+            file_id=4,
+            symbol_id="l2.py::l#function",
+            name="l",
+            kind="function",
+            line_start=1,
+            line_end=17,
+            byte_offset=0,
+            byte_length=len(long_body.encode()),
             content_hash=long_hash,
         )
         await backend.commit()
@@ -603,9 +631,7 @@ class TestScanSecurity:
 
     async def _setup_file_with_blob(self, backend, file_id, path, content, language="python"):
         content_hash = hashlib.sha256(content.encode()).hexdigest()
-        await _insert_file(
-            backend, file_id=file_id, path=path, content_hash=content_hash, language=language
-        )
+        await _insert_file(backend, file_id=file_id, path=path, content_hash=content_hash, language=language)
         await _store_blob(backend, content_hash, content.encode())
         await backend.commit()
 
@@ -629,7 +655,7 @@ class TestScanSecurity:
 
     async def test_detects_shell_injection(self, analysis_ctx):
         backend = analysis_ctx
-        code = 'subprocess.run(cmd, shell=True)\n'
+        code = "subprocess.run(cmd, shell=True)\n"
         await self._setup_file_with_blob(backend, 1, "src/danger.py", code)
 
         findings = await scan_security(repo_id=1)
@@ -772,8 +798,7 @@ class TestAnalyzeTestCoverage:
 
         # Insert import record for the test file
         await backend.execute(
-            "INSERT INTO file_imports (file_id, specifier, names) "
-            "VALUES (2, 'src.utils', '[\"compute\"]')"
+            "INSERT INTO file_imports (file_id, specifier, names) VALUES (2, 'src.utils', '[\"compute\"]')"
         )
         await backend.commit()
 
@@ -844,10 +869,7 @@ class TestAnalyzeTestCoverage:
         await _insert_file(backend, file_id=2, path="tests/test_utils.py", content_hash=test_hash)
         await _store_blob(backend, test_hash, test_code.encode())
 
-        await backend.execute(
-            "INSERT INTO file_imports (file_id, specifier, names) "
-            "VALUES (2, 'something_else', '[]')"
-        )
+        await backend.execute("INSERT INTO file_imports (file_id, specifier, names) VALUES (2, 'something_else', '[]')")
         await backend.commit()
 
         result = await analyze_test_coverage(repo_id=1)
@@ -859,12 +881,22 @@ class TestAnalyzeTestCoverage:
         # Two source functions
         await _insert_file(backend, file_id=1, path="src/mod.py", content_hash="mh")
         await _insert_symbol(
-            backend, file_id=1, symbol_id="mod.py::alpha#function", name="alpha", kind="function",
-            line_start=1, line_end=5,
+            backend,
+            file_id=1,
+            symbol_id="mod.py::alpha#function",
+            name="alpha",
+            kind="function",
+            line_start=1,
+            line_end=5,
         )
         await _insert_symbol(
-            backend, file_id=1, symbol_id="mod.py::beta#function", name="beta", kind="function",
-            line_start=6, line_end=10,
+            backend,
+            file_id=1,
+            symbol_id="mod.py::beta#function",
+            name="beta",
+            kind="function",
+            line_start=6,
+            line_end=10,
         )
 
         # Test file imports mod and calls alpha (but not beta)
@@ -874,8 +906,7 @@ class TestAnalyzeTestCoverage:
         await _store_blob(backend, test_hash, test_code.encode())
 
         await backend.execute(
-            "INSERT INTO file_imports (file_id, specifier, names) "
-            "VALUES (2, 'src.mod', '[\"alpha\"]')"
+            "INSERT INTO file_imports (file_id, specifier, names) VALUES (2, 'src.mod', '[\"alpha\"]')"
         )
         await backend.commit()
 
@@ -1149,8 +1180,18 @@ class TestGetLowQualitySymbols:
         assert len(results) >= 1
         r = results[0]
         expected_keys = {
-            "symbol_id", "has_tests", "has_docs", "has_types", "complexity",
-            "change_frequency", "last_changed", "name", "qualified_name",
-            "kind", "language", "signature", "file_path",
+            "symbol_id",
+            "has_tests",
+            "has_docs",
+            "has_types",
+            "complexity",
+            "change_frequency",
+            "last_changed",
+            "name",
+            "qualified_name",
+            "kind",
+            "language",
+            "signature",
+            "file_path",
         }
         assert expected_keys.issubset(r.keys())

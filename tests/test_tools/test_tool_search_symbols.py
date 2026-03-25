@@ -38,19 +38,16 @@ async def indexed_repo(tmp_path):
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "main.py").write_text(
-        'def hello(): pass\n'
-        'class Foo:\n'
-        '    def bar(self): pass\n'
-        '    def baz(self): pass\n',
+        "def hello(): pass\nclass Foo:\n    def bar(self): pass\n    def baz(self): pass\n",
         encoding="utf-8",
     )
     (proj / "util.py").write_text(
-        'def helper(): pass\n'
-        'def hello_world(): pass\n',
+        "def helper(): pass\ndef hello_world(): pass\n",
         encoding="utf-8",
     )
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="test-repo")
     await backend.commit()
     assert result.symbols_extracted >= 4
@@ -65,6 +62,7 @@ async def indexed_repo(tmp_path):
 class TestSearchSymbolsBasic:
     async def test_returns_correct_structure(self, indexed_repo):
         from sylvan.tools.search.search_symbols import search_symbols
+
         resp = await search_symbols(query="hello")
 
         assert "symbols" in resp
@@ -83,6 +81,7 @@ class TestSearchSymbolsBasic:
 
     async def test_meta_has_results_count(self, indexed_repo):
         from sylvan.tools.search.search_symbols import search_symbols
+
         resp = await search_symbols(query="hello")
         meta = resp["_meta"]
         assert "results_count" in meta
@@ -92,6 +91,7 @@ class TestSearchSymbolsBasic:
 
     async def test_returns_multiple_matches(self, indexed_repo):
         from sylvan.tools.search.search_symbols import search_symbols
+
         resp = await search_symbols(query="hello")
         # Should match both 'hello' and 'hello_world'
         names = [s["name"] for s in resp["symbols"]]
@@ -112,6 +112,7 @@ class TestSearchSymbolsEmpty:
 
     async def test_no_match_returns_empty(self, indexed_repo):
         from sylvan.tools.search.search_symbols import search_symbols
+
         resp = await search_symbols(query="zzzznonexistent")
         assert "symbols" in resp
         assert len(resp["symbols"]) == 0
@@ -137,9 +138,7 @@ class TestSearchSymbolsSession:
 
         # If there are multiple results, the seen one should be at the end
         if len(resp2["symbols"]) > 1:
-            seen_entries = [
-                s for s in resp2["symbols"] if s.get("_already_retrieved")
-            ]
+            seen_entries = [s for s in resp2["symbols"] if s.get("_already_retrieved")]
             assert len(seen_entries) >= 1
 
 
@@ -161,6 +160,7 @@ class TestSearchSymbolsFilter:
 class TestSearchSymbolsTokenBudget:
     async def test_token_budget_limits_results(self, indexed_repo):
         from sylvan.tools.search.search_symbols import search_symbols
+
         # Without budget
         resp_all = await search_symbols(query="hello")
         # With tight budget
@@ -172,11 +172,13 @@ class TestSearchSymbolsTokenBudget:
 
     async def test_token_budget_always_includes_one(self, indexed_repo):
         from sylvan.tools.search.search_symbols import search_symbols
+
         resp = await search_symbols(query="hello", token_budget=1)
         assert resp["_meta"]["results_count"] >= 1
 
     async def test_no_token_budget_omits_token_meta(self, indexed_repo):
         from sylvan.tools.search.search_symbols import search_symbols
+
         resp = await search_symbols(query="hello")
         assert "tokens_used" not in resp["_meta"]
         assert "tokens_remaining" not in resp["_meta"]

@@ -38,21 +38,22 @@ async def indexed_repo(tmp_path):
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "utils.py").write_text(
-        'def fetch_data(url: str) -> dict:\n'
+        "def fetch_data(url: str) -> dict:\n"
         '    """Fetch data from a URL."""\n'
-        '    pass\n'
-        '\n'
-        'def get_data(endpoint: str) -> dict:\n'
+        "    pass\n"
+        "\n"
+        "def get_data(endpoint: str) -> dict:\n"
         '    """Get data from an endpoint."""\n'
-        '    pass\n'
-        '\n'
-        'def process_items(items: list) -> list:\n'
+        "    pass\n"
+        "\n"
+        "def process_items(items: list) -> list:\n"
         '    """Process a list of items."""\n'
-        '    pass\n',
+        "    pass\n",
         encoding="utf-8",
     )
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="test-repo")
     await backend.commit()
     assert result.symbols_extracted >= 3
@@ -67,6 +68,7 @@ async def indexed_repo(tmp_path):
 async def _find_symbol_id(name: str) -> str:
     """Find a symbol ID by name."""
     from sylvan.tools.search.search_symbols import search_symbols
+
     resp = await search_symbols(query=name)
     for s in resp["symbols"]:
         if s["name"] == name:
@@ -77,6 +79,7 @@ async def _find_symbol_id(name: str) -> str:
 class TestSearchSimilarBasic:
     async def test_returns_correct_structure(self, indexed_repo):
         from sylvan.tools.search.search_similar import search_similar_symbols
+
         sid = await _find_symbol_id("fetch_data")
         resp = await search_similar_symbols(symbol_id=sid)
 
@@ -91,6 +94,7 @@ class TestSearchSimilarBasic:
 
     async def test_source_summary_in_response(self, indexed_repo):
         from sylvan.tools.search.search_similar import search_similar_symbols
+
         sid = await _find_symbol_id("fetch_data")
         resp = await search_similar_symbols(symbol_id=sid)
 
@@ -101,6 +105,7 @@ class TestSearchSimilarBasic:
 
     async def test_similar_results_exclude_source(self, indexed_repo):
         from sylvan.tools.search.search_similar import search_similar_symbols
+
         sid = await _find_symbol_id("fetch_data")
         resp = await search_similar_symbols(symbol_id=sid)
 
@@ -137,6 +142,7 @@ class TestSearchSimilarErrors:
 class TestSearchSimilarWithRepoFilter:
     async def test_filter_by_existing_repo(self, indexed_repo):
         from sylvan.tools.search.search_similar import search_similar_symbols
+
         sid = await _find_symbol_id("fetch_data")
         resp = await search_similar_symbols(symbol_id=sid, repo="test-repo")
 

@@ -101,11 +101,13 @@ class TestHeuristicSummaryProvider:
 
     def test_first_sentence_strips_comment_markers(self):
         from sylvan.providers.builtin.heuristic import _first_sentence
+
         result = _first_sentence("/// Compute the hash value.")
         assert result == "Compute the hash value."
 
     def test_first_sentence_python_docstring_markers(self):
         from sylvan.providers.builtin.heuristic import _first_sentence
+
         result = _first_sentence('"""Return the count."""')
         assert result == "Return the count."
 

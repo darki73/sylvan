@@ -23,20 +23,14 @@ class TestSummarizeSectionHeuristic:
         assert result == "Run pip install sylvan to get started."
 
     def test_strips_markdown_formatting(self):
-        content = (
-            "Use the sylvan `CLI` command to index your project. "
-            "See [the docs](https://example.com) for details."
-        )
+        content = "Use the sylvan `CLI` command to index your project. See [the docs](https://example.com) for details."
         result = self.provider.summarize_section(title="Usage", content=content)
         assert "`" not in result
         assert "](https" not in result
         assert "sylvan" in result
 
     def test_strips_code_blocks(self):
-        content = (
-            "```python\nimport sylvan\n```\n\n"
-            "After importing, call the main function. More details below."
-        )
+        content = "```python\nimport sylvan\n```\n\nAfter importing, call the main function. More details below."
         result = self.provider.summarize_section(title="Quick Start", content=content)
         assert "```" not in result
         assert "import sylvan" not in result
@@ -211,25 +205,19 @@ class TestGenerateSectionSummaries:
             assert len(sec.summary) > 5, f"Section {sec.section_id} summary too short"
 
     @pytest.mark.asyncio
-    async def test_skips_sections_with_existing_summary(
-        self, seeded_repo, backend, ctx
-    ):
+    async def test_skips_sections_with_existing_summary(self, seeded_repo, backend, ctx):
         from sylvan.database.orm import Section
         from sylvan.indexing.post_processing.summarizer import (
             generate_section_summaries,
         )
 
         # Set a summary on one section
-        sec = await Section.where(
-            section_id="test-repo::README.md::introduction#1"
-        ).first()
+        sec = await Section.where(section_id="test-repo::README.md::introduction#1").first()
         await sec.update(summary="Already summarized content here.")
         await backend.commit()
 
         await generate_section_summaries(seeded_repo.id)
 
         # The pre-existing summary should not be overwritten
-        sec = await Section.where(
-            section_id="test-repo::README.md::introduction#1"
-        ).first()
+        sec = await Section.where(section_id="test-repo::README.md::introduction#1").first()
         assert sec.summary == "Already summarized content here."

@@ -29,6 +29,7 @@ async def migration_backend(tmp_path):
 # _discover_migrations
 # ---------------------------------------------------------------------------
 
+
 class TestDiscoverMigrations:
     def test_discovers_at_least_one_migration(self):
         migrations = _discover_migrations()
@@ -54,6 +55,7 @@ class TestDiscoverMigrations:
 # get_current_version
 # ---------------------------------------------------------------------------
 
+
 class TestGetCurrentVersion:
     async def test_returns_zero_on_fresh_db(self, migration_backend):
         version = await get_current_version(migration_backend)
@@ -68,6 +70,7 @@ class TestGetCurrentVersion:
 # ---------------------------------------------------------------------------
 # get_pending_migrations
 # ---------------------------------------------------------------------------
+
 
 class TestGetPendingMigrations:
     async def test_all_pending_on_fresh_db(self, migration_backend):
@@ -85,6 +88,7 @@ class TestGetPendingMigrations:
 # run_migrations
 # ---------------------------------------------------------------------------
 
+
 class TestRunMigrations:
     async def test_applies_all_migrations(self, migration_backend):
         applied = await run_migrations(migration_backend)
@@ -93,9 +97,7 @@ class TestRunMigrations:
 
     async def test_creates_migration_table(self, migration_backend):
         await run_migrations(migration_backend)
-        row = await migration_backend.fetch_value(
-            "SELECT COUNT(*) FROM _migrations"
-        )
+        row = await migration_backend.fetch_value("SELECT COUNT(*) FROM _migrations")
         assert row >= 1
 
     async def test_idempotent_second_run(self, migration_backend):
@@ -106,9 +108,7 @@ class TestRunMigrations:
 
     async def test_creates_expected_tables(self, migration_backend):
         await run_migrations(migration_backend)
-        tables_rows = await migration_backend.fetch_all(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )
+        tables_rows = await migration_backend.fetch_all("SELECT name FROM sqlite_master WHERE type='table'")
         tables = {row["name"] for row in tables_rows}
         assert "repos" in tables
         assert "files" in tables
@@ -118,9 +118,7 @@ class TestRunMigrations:
 
     async def test_migration_version_tracked(self, migration_backend):
         await run_migrations(migration_backend)
-        row = await migration_backend.fetch_one(
-            "SELECT version, name FROM _migrations WHERE version = 1"
-        )
+        row = await migration_backend.fetch_one("SELECT version, name FROM _migrations WHERE version = 1")
         assert row is not None
         assert row["name"] == "001_initial_schema"
         assert row["version"] == 1
@@ -129,6 +127,7 @@ class TestRunMigrations:
 # ---------------------------------------------------------------------------
 # rollback_migration
 # ---------------------------------------------------------------------------
+
 
 class TestRollbackMigration:
     async def test_rollback_on_empty_db_returns_none(self, migration_backend):
@@ -176,9 +175,11 @@ class TestRollbackMigration:
 # create_migration
 # ---------------------------------------------------------------------------
 
+
 class TestCreateMigration:
     def test_creates_migration_file(self, tmp_path, monkeypatch):
         from sylvan.database.migrations import runner
+
         monkeypatch.setattr(runner, "MIGRATIONS_DIR", tmp_path)
 
         filepath = create_migration("add user roles")
@@ -194,6 +195,7 @@ class TestCreateMigration:
 
     def test_sanitizes_description(self, tmp_path, monkeypatch):
         from sylvan.database.migrations import runner
+
         monkeypatch.setattr(runner, "MIGRATIONS_DIR", tmp_path)
 
         filepath = create_migration("Add User-Roles & Perms!")

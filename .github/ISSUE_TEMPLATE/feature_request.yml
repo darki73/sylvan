@@ -1,0 +1,70 @@
+name: Feature Request
+description: Suggest a new tool, language, or capability
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea that would make sylvan more useful? We'd love to hear it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the workflow or use case that's currently painful, slow, or impossible.
+      placeholder: |
+        When I'm working on a Django project, I need to trace which views call which serializers,
+        but find_importers only shows file-level imports, not the specific symbols used.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How you'd like it to work. Be specific about tool names, parameters, and expected output if possible.
+      placeholder: |
+        A `find_usages` tool that shows every call site of a specific symbol, not just file-level imports.
+        Input: symbol_id, repo. Output: list of files + line numbers where the symbol is called.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you've tried or thought about.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - New MCP tool
+        - New language support
+        - Dashboard improvement
+        - Search / ranking improvement
+        - Extension system
+        - Performance
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: editor
+    attributes:
+      label: Editor / Agent
+      description: Which editor are you using sylvan with?
+      options:
+        - Claude Code
+        - Cursor
+        - Windsurf
+        - GitHub Copilot
+        - Claude Agent SDK
+        - Multiple / All
+        - Other
+    validations:
+      required: false

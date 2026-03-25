@@ -126,7 +126,7 @@ class TestJavaImports:
 
 class TestCImports:
     def test_angle_bracket_include(self):
-        code = '#include <stdio.h>\n'
+        code = "#include <stdio.h>\n"
         result = extract_imports(code, "main.c", "c")
         assert len(result) == 1
         assert result[0]["specifier"] == "stdio.h"
@@ -153,10 +153,7 @@ class TestJavaScriptDynamicImports:
         assert "./Foo.vue" in specifiers
 
     def test_dynamic_import_deduped_with_static(self):
-        code = (
-            "import Foo from './Foo'\n"
-            "const lazy = () => import('./Foo')\n"
-        )
+        code = "import Foo from './Foo'\nconst lazy = () => import('./Foo')\n"
         result = extract_imports(code, "app.js", "javascript")
         foo_entries = [r for r in result if r["specifier"] == "./Foo"]
         assert len(foo_entries) == 1  # deduped

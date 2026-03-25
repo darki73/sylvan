@@ -40,12 +40,14 @@ async def indexed_project(tmp_path):
     (proj / "main.py").write_text("def hello(): pass\n", encoding="utf-8")
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="test-repo")
     await backend.commit()
 
     yield proj, result
 
     from sylvan.tools.support.response import _staleness_cache
+
     _staleness_cache.clear()
     reset_context(token)
     await backend.disconnect()
@@ -58,11 +60,13 @@ class TestStalenessDetection:
         _proj, result = indexed_project
         from sylvan.context import get_context
         from sylvan.tools.support.response import _staleness_cache, check_staleness
+
         _staleness_cache.clear()
 
         backend = get_context().backend
         await backend.execute(
-            "UPDATE repos SET git_head = 'aaa111' WHERE id = ?", [result.repo_id],
+            "UPDATE repos SET git_head = 'aaa111' WHERE id = ?",
+            [result.repo_id],
         )
         await backend.commit()
 
@@ -75,11 +79,13 @@ class TestStalenessDetection:
         _proj, result = indexed_project
         from sylvan.context import get_context
         from sylvan.tools.support.response import _staleness_cache, check_staleness
+
         _staleness_cache.clear()
 
         backend = get_context().backend
         await backend.execute(
-            "UPDATE repos SET git_head = 'aaa111' WHERE id = ?", [result.repo_id],
+            "UPDATE repos SET git_head = 'aaa111' WHERE id = ?",
+            [result.repo_id],
         )
         await backend.commit()
 
@@ -92,11 +98,13 @@ class TestStalenessDetection:
         _proj, result = indexed_project
         from sylvan.context import get_context
         from sylvan.tools.support.response import _staleness_cache, check_staleness
+
         _staleness_cache.clear()
 
         backend = get_context().backend
         await backend.execute(
-            "UPDATE repos SET git_head = NULL WHERE id = ?", [result.repo_id],
+            "UPDATE repos SET git_head = NULL WHERE id = ?",
+            [result.repo_id],
         )
         await backend.commit()
 
@@ -111,6 +119,7 @@ class TestStalenessDetection:
         _staleness_cache[result.repo_id] = True
 
         from sylvan.tools.indexing.index_folder import index_folder
+
         await index_folder(str(proj), name="test-repo")
 
         assert result.repo_id not in _staleness_cache
@@ -119,11 +128,13 @@ class TestStalenessDetection:
         _proj, result = indexed_project
         from sylvan.context import get_context
         from sylvan.tools.support.response import _staleness_cache, check_staleness
+
         _staleness_cache.clear()
 
         backend = get_context().backend
         await backend.execute(
-            "UPDATE repos SET git_head = 'aaa111' WHERE id = ?", [result.repo_id],
+            "UPDATE repos SET git_head = 'aaa111' WHERE id = ?",
+            [result.repo_id],
         )
         await backend.commit()
 

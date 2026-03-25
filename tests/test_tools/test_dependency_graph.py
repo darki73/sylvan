@@ -36,27 +36,20 @@ async def indexed_repo(tmp_path):
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "base.py").write_text(
-        'class Animal:\n'
-        '    """Base animal class."""\n'
-        '    pass\n',
+        'class Animal:\n    """Base animal class."""\n    pass\n',
         encoding="utf-8",
     )
     (proj / "dog.py").write_text(
-        'from base import Animal\n'
-        '\n'
-        'class Dog(Animal):\n'
-        '    pass\n',
+        "from base import Animal\n\nclass Dog(Animal):\n    pass\n",
         encoding="utf-8",
     )
     (proj / "app.py").write_text(
-        'from dog import Dog\n'
-        '\n'
-        'def main():\n'
-        '    d = Dog()\n',
+        "from dog import Dog\n\ndef main():\n    d = Dog()\n",
         encoding="utf-8",
     )
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="graph-repo")
     await backend.commit()
     assert result.symbols_extracted >= 3
@@ -97,7 +90,9 @@ class TestGetDependencyGraph:
         from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
 
         resp = await get_dependency_graph(
-            repo="graph-repo", file_path="dog.py", direction="imports",
+            repo="graph-repo",
+            file_path="dog.py",
+            direction="imports",
         )
 
         assert "_meta" in resp
@@ -107,7 +102,9 @@ class TestGetDependencyGraph:
         from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
 
         resp = await get_dependency_graph(
-            repo="graph-repo", file_path="dog.py", direction="importers",
+            repo="graph-repo",
+            file_path="dog.py",
+            direction="importers",
         )
 
         assert "_meta" in resp
@@ -131,7 +128,9 @@ class TestGetDependencyGraph:
         from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
 
         resp = await get_dependency_graph(
-            repo="graph-repo", file_path="dog.py", depth=10,
+            repo="graph-repo",
+            file_path="dog.py",
+            depth=10,
         )
 
         assert resp["_meta"]["depth"] == 3

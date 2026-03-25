@@ -22,6 +22,7 @@ def claude_fixtures():
 
 def _mock_query(response_text: str):
     """Create an async generator that yields a result message with given text."""
+
     async def fake_query(**kwargs):
         msg = MagicMock()
         msg.result = response_text
@@ -33,6 +34,7 @@ def _mock_query(response_text: str):
 class TestClaudeCodeSummaryProvider:
     def test_summarize_with_docstring(self, claude_fixtures):
         from sylvan.providers.external.claude_code import ClaudeCodeSummaryProvider
+
         real = claude_fixtures["responses"][0]
         tc = claude_fixtures["test_cases"][0]
 
@@ -44,6 +46,7 @@ class TestClaudeCodeSummaryProvider:
 
     def test_summarize_without_docstring(self, claude_fixtures):
         from sylvan.providers.external.claude_code import ClaudeCodeSummaryProvider
+
         real = claude_fixtures["responses"][1]
         tc = claude_fixtures["test_cases"][1]
 
@@ -55,6 +58,7 @@ class TestClaudeCodeSummaryProvider:
 
     def test_summarize_class(self, claude_fixtures):
         from sylvan.providers.external.claude_code import ClaudeCodeSummaryProvider
+
         real = claude_fixtures["responses"][2]
         tc = claude_fixtures["test_cases"][2]
 
@@ -66,6 +70,7 @@ class TestClaudeCodeSummaryProvider:
 
     def test_summarize_batch(self, claude_fixtures):
         from sylvan.providers.external.claude_code import ClaudeCodeSummaryProvider
+
         responses = claude_fixtures["responses"]
         idx = [0]
 
@@ -85,12 +90,14 @@ class TestClaudeCodeSummaryProvider:
 
     def test_available_with_sdk(self):
         from sylvan.providers.external.claude_code import ClaudeCodeSummaryProvider
+
         # SDK is installed in our test env
         p = ClaudeCodeSummaryProvider()
         assert p.available() is True
 
     def test_unavailable_without_sdk(self):
         from sylvan.providers.external.claude_code import ClaudeCodeSummaryProvider
+
         with patch.dict("sys.modules", {"claude_agent_sdk": None}):
             p = ClaudeCodeSummaryProvider()
             # This checks import, which we've broken
@@ -114,6 +121,7 @@ class TestClaudeCodeSummaryProvider:
 
     def test_name(self):
         from sylvan.providers.external.claude_code import ClaudeCodeSummaryProvider
+
         assert ClaudeCodeSummaryProvider().name == "claude-code"
 
     def test_no_session_persistence_flag(self):
@@ -121,16 +129,19 @@ class TestClaudeCodeSummaryProvider:
         import inspect
 
         from sylvan.providers.external.claude_code import ClaudeCodeSummaryProvider
+
         src = inspect.getsource(ClaudeCodeSummaryProvider._async_generate)
         assert "no-session-persistence" in src
 
     def test_uses_haiku_by_default(self):
         from sylvan.providers.external.claude_code import ClaudeCodeSummaryProvider
+
         p = ClaudeCodeSummaryProvider()
         assert "haiku" in p._model
 
     def test_custom_model(self):
         from sylvan.providers.external.claude_code import ClaudeCodeSummaryProvider
+
         p = ClaudeCodeSummaryProvider(model="claude-sonnet-4-6")
         assert p._model == "claude-sonnet-4-6"
 

@@ -37,19 +37,20 @@ async def indexed_repo(tmp_path):
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "math.py").write_text(
-        'def add(a, b):\n'
+        "def add(a, b):\n"
         '    """Add two numbers."""\n'
-        '    return a + b\n'
-        '\n'
-        'def subtract(a, b):\n'
-        '    return a - b\n'
-        '\n'
-        'class Calculator:\n'
-        '    pass\n',
+        "    return a + b\n"
+        "\n"
+        "def subtract(a, b):\n"
+        "    return a - b\n"
+        "\n"
+        "class Calculator:\n"
+        "    pass\n",
         encoding="utf-8",
     )
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="diff-repo")
     await backend.commit()
     assert result.symbols_extracted >= 3
@@ -110,17 +111,17 @@ class TestGetSymbolDiff:
         from sylvan.tools.analysis.get_symbol_diff import get_symbol_diff
 
         old_content = (
-            'def add(a, b):\n'
-            '    return a + b\n'
-            '\n'
-            'def subtract(a, b):\n'
-            '    return a - b\n'
-            '\n'
-            'class Calculator:\n'
-            '    pass\n'
-            '\n'
-            'def old_function():\n'
-            '    pass\n'
+            "def add(a, b):\n"
+            "    return a + b\n"
+            "\n"
+            "def subtract(a, b):\n"
+            "    return a - b\n"
+            "\n"
+            "class Calculator:\n"
+            "    pass\n"
+            "\n"
+            "def old_function():\n"
+            "    pass\n"
         )
 
         with patch("sylvan.git.run_git", return_value=old_content):
@@ -153,6 +154,7 @@ class TestGetSymbolDiff:
 class TestDiffSymbols:
     def test_empty_both(self):
         from sylvan.tools.analysis.get_symbol_diff import _diff_symbols
+
         result = _diff_symbols([], [])
         assert result["added"] == []
         assert result["removed"] == []
@@ -161,6 +163,7 @@ class TestDiffSymbols:
 
     def test_all_added(self):
         from sylvan.tools.analysis.get_symbol_diff import _diff_symbols
+
         new = [{"qualified_name": "foo", "kind": "function", "signature": "foo()", "content_hash": "abc"}]
         result = _diff_symbols([], new)
         assert len(result["added"]) == 1
@@ -168,12 +171,14 @@ class TestDiffSymbols:
 
     def test_all_removed(self):
         from sylvan.tools.analysis.get_symbol_diff import _diff_symbols
+
         old = [{"qualified_name": "bar", "kind": "function", "signature": "bar()", "content_hash": "xyz"}]
         result = _diff_symbols(old, [])
         assert len(result["removed"]) == 1
 
     def test_changed_signature(self):
         from sylvan.tools.analysis.get_symbol_diff import _diff_symbols
+
         old = [{"qualified_name": "f", "kind": "function", "signature": "f(a)", "content_hash": "111"}]
         new = [{"qualified_name": "f", "kind": "function", "signature": "f(a, b)", "content_hash": "222"}]
         result = _diff_symbols(old, new)

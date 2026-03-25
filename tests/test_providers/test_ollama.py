@@ -54,6 +54,7 @@ def _mock_client(generate_response=None, embed_response=None, list_response=None
 class TestOllamaSummaryProvider:
     def test_summarize_with_docstring(self, ollama_fixtures):
         from sylvan.providers.external.ollama.provider import OllamaSummaryProvider
+
         real = ollama_fixtures["summary_responses"][0]
         tc = ollama_fixtures["summary_test_cases"][0]
 
@@ -66,6 +67,7 @@ class TestOllamaSummaryProvider:
 
     def test_summarize_without_docstring(self, ollama_fixtures):
         from sylvan.providers.external.ollama.provider import OllamaSummaryProvider
+
         real = ollama_fixtures["summary_responses"][1]
         tc = ollama_fixtures["summary_test_cases"][1]
 
@@ -77,6 +79,7 @@ class TestOllamaSummaryProvider:
 
     def test_summarize_class(self, ollama_fixtures):
         from sylvan.providers.external.ollama.provider import OllamaSummaryProvider
+
         real = ollama_fixtures["summary_responses"][2]
         tc = ollama_fixtures["summary_test_cases"][2]
 
@@ -88,6 +91,7 @@ class TestOllamaSummaryProvider:
 
     def test_summarize_batch(self, ollama_fixtures):
         from sylvan.providers.external.ollama.provider import OllamaSummaryProvider
+
         responses = ollama_fixtures["summary_responses"]
         idx = [0]
 
@@ -108,17 +112,20 @@ class TestOllamaSummaryProvider:
 
     def test_available_when_server_up(self):
         from sylvan.providers.external.ollama.provider import OllamaSummaryProvider
+
         mock = _mock_client(list_response=["qwen3:4b"])
         with patch("sylvan.providers.external.ollama.provider._get_client", return_value=mock):
             assert OllamaSummaryProvider().available() is True
 
     def test_unavailable_when_server_down(self):
         from sylvan.providers.external.ollama.provider import OllamaSummaryProvider
+
         with patch("sylvan.providers.external.ollama.provider._get_client", side_effect=Exception("refused")):
             assert OllamaSummaryProvider().available() is False
 
     def test_fallback_on_timeout(self):
         from sylvan.providers.external.ollama.provider import OllamaSummaryProvider
+
         mock = _mock_client()
         mock.generate.side_effect = Exception("timeout")
         with patch("sylvan.providers.external.ollama.provider._get_client", return_value=mock):
@@ -128,12 +135,14 @@ class TestOllamaSummaryProvider:
 
     def test_name(self):
         from sylvan.providers.external.ollama.provider import OllamaSummaryProvider
+
         assert OllamaSummaryProvider().name == "ollama"
 
 
 class TestOllamaEmbeddingProvider:
     def test_embed_returns_real_vectors(self, ollama_fixtures):
         from sylvan.providers.external.ollama.provider import OllamaEmbeddingProvider
+
         real = ollama_fixtures["embeddings"]
 
         mock = _mock_client(embed_response=real)
@@ -149,6 +158,7 @@ class TestOllamaEmbeddingProvider:
 
     def test_embed_one(self, ollama_fixtures):
         from sylvan.providers.external.ollama.provider import OllamaEmbeddingProvider
+
         real = ollama_fixtures["embeddings"]
 
         mock = _mock_client(embed_response=[real[0]])
@@ -175,6 +185,7 @@ class TestOllamaEmbeddingProvider:
 
     def test_available_with_model(self):
         from sylvan.providers.external.ollama.provider import OllamaEmbeddingProvider
+
         mock = _mock_client(list_response=["embeddinggemma:300m"])
         with patch("sylvan.providers.external.ollama.provider._get_client", return_value=mock):
             p = OllamaEmbeddingProvider(model="embeddinggemma:300m")
@@ -182,6 +193,7 @@ class TestOllamaEmbeddingProvider:
 
     def test_unavailable_without_model(self):
         from sylvan.providers.external.ollama.provider import OllamaEmbeddingProvider
+
         mock = _mock_client(list_response=["qwen3:4b"])
         with patch("sylvan.providers.external.ollama.provider._get_client", return_value=mock):
             p = OllamaEmbeddingProvider(model="embeddinggemma:300m")
@@ -189,6 +201,7 @@ class TestOllamaEmbeddingProvider:
 
     def test_fallback_zero_vector(self):
         from sylvan.providers.external.ollama.provider import OllamaEmbeddingProvider
+
         mock = _mock_client()
         mock.embed.side_effect = Exception("timeout")
         with patch("sylvan.providers.external.ollama.provider._get_client", return_value=mock):
@@ -200,8 +213,10 @@ class TestOllamaEmbeddingProvider:
 
     def test_dimensions_property(self):
         from sylvan.providers.external.ollama.provider import OllamaEmbeddingProvider
+
         assert OllamaEmbeddingProvider(dims=768).dimensions == 768
 
     def test_name(self):
         from sylvan.providers.external.ollama.provider import OllamaEmbeddingProvider
+
         assert OllamaEmbeddingProvider().name == "ollama"

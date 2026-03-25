@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from sylvan.error_codes import (
-    SylvanError,
     ContentNotAvailableError,
     EmptyQueryError,
     IndexFileNotFoundError,
@@ -16,6 +15,7 @@ from sylvan.error_codes import (
     RepoNotFoundError,
     SectionNotFoundError,
     SourceNotAvailableError,
+    SylvanError,
     SymbolNotFoundError,
     WorkspaceNotFoundError,
     _LegacyError,

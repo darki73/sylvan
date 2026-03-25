@@ -37,6 +37,7 @@ def _inject_fake_watchfiles():
     sys.modules["watchfiles"] = _fake_watchfiles
     # Reload so the function picks up the fake module
     import sylvan.indexing.post_processing.file_watcher as fw
+
     importlib.reload(fw)
     yield
     # Restore
@@ -129,6 +130,7 @@ class TestWatchFolder:
         old = sys.modules.pop("watchfiles", None)
         try:
             import sylvan.indexing.post_processing.file_watcher as fw
+
             importlib.reload(fw)
 
             # Should not raise — the except ImportError block handles it
@@ -180,6 +182,7 @@ class TestStartWatcherBackground:
 
             # Give the thread a moment to start
             import time
+
             time.sleep(0.1)
 
             mock_run.assert_called_once()

@@ -38,32 +38,28 @@ async def indexed_repo(tmp_path):
     sub = proj / "pkg"
     sub.mkdir()
     (proj / "main.py").write_text(
-        'def main():\n'
+        "def main():\n"
         '    """Entry point."""\n'
-        '    pass\n'
-        '\n'
-        'class App:\n'
-        '    def run(self):\n'
-        '        pass\n'
-        '    def stop(self):\n'
-        '        pass\n',
+        "    pass\n"
+        "\n"
+        "class App:\n"
+        "    def run(self):\n"
+        "        pass\n"
+        "    def stop(self):\n"
+        "        pass\n",
         encoding="utf-8",
     )
     (sub / "util.py").write_text(
-        'def helper():\n'
-        '    pass\n'
-        '\n'
-        'def format_output(data):\n'
-        '    pass\n',
+        "def helper():\n    pass\n\ndef format_output(data):\n    pass\n",
         encoding="utf-8",
     )
     (proj / "README.md").write_text(
-        '# Test Project\n\nA test project.\n\n'
-        '## Setup\n\nRun setup.\n',
+        "# Test Project\n\nA test project.\n\n## Setup\n\nRun setup.\n",
         encoding="utf-8",
     )
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="test-repo")
     await backend.commit()
     assert result.files_indexed >= 2
@@ -78,6 +74,7 @@ async def indexed_repo(tmp_path):
 class TestGetFileOutline:
     async def test_returns_hierarchical_structure(self, indexed_repo):
         from sylvan.tools.browsing.get_file_outline import get_file_outline
+
         resp = await get_file_outline(repo="test-repo", file_path="main.py")
 
         assert "outline" in resp
@@ -116,6 +113,7 @@ class TestGetFileOutline:
 class TestGetFileTree:
     async def test_returns_directory_tree(self, indexed_repo):
         from sylvan.tools.browsing.get_file_tree import get_file_tree
+
         resp = await get_file_tree(repo="test-repo")
 
         assert "tree" in resp
@@ -132,6 +130,7 @@ class TestGetFileTree:
 class TestListRepos:
     async def test_returns_indexed_repos(self, indexed_repo):
         from sylvan.tools.meta.list_repos import list_repos
+
         resp = await list_repos()
 
         assert "repos" in resp
@@ -150,6 +149,7 @@ class TestListRepos:
 class TestGetRepoOutline:
     async def test_shows_languages_and_kinds(self, indexed_repo):
         from sylvan.tools.browsing.get_repo_outline import get_repo_outline
+
         resp = await get_repo_outline(repo="test-repo")
 
         assert "_meta" in resp
@@ -171,6 +171,7 @@ class TestGetRepoOutline:
     async def test_repo_not_found(self, indexed_repo):
         from sylvan.error_codes import RepoNotFoundError
         from sylvan.tools.browsing.get_repo_outline import get_repo_outline
+
         with pytest.raises(RepoNotFoundError):
             await get_repo_outline(repo="nonexistent-repo")
 
@@ -178,6 +179,7 @@ class TestGetRepoOutline:
 class TestSuggestQueries:
     async def test_returns_suggestions(self, indexed_repo):
         from sylvan.tools.meta.suggest_queries import suggest_queries
+
         resp = await suggest_queries(repo="test-repo")
 
         assert "suggestions" in resp
@@ -196,5 +198,6 @@ class TestSuggestQueries:
     async def test_repo_not_found(self, indexed_repo):
         from sylvan.error_codes import RepoNotFoundError
         from sylvan.tools.meta.suggest_queries import suggest_queries
+
         with pytest.raises(RepoNotFoundError):
             await suggest_queries(repo="nonexistent-repo")

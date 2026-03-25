@@ -17,8 +17,11 @@ async def _make_repo(ctx, name="test-repo"):
 async def _make_file(ctx, repo_id, path="main.py"):
     """Insert a file via ORM and return its id."""
     f = await FileRecord.create(
-        repo_id=repo_id, path=path, language="python",
-        content_hash="abc123", byte_size=100,
+        repo_id=repo_id,
+        path=path,
+        language="python",
+        content_hash="abc123",
+        byte_size=100,
     )
     return f.id
 
@@ -98,8 +101,11 @@ class TestUpsert:
         repo_id = await _make_repo(orm_ctx)
         f = await FileRecord.upsert(
             conflict_columns=["repo_id", "path"],
-            repo_id=repo_id, path="new.py", language="python",
-            content_hash="hash1", byte_size=50,
+            repo_id=repo_id,
+            path="new.py",
+            language="python",
+            content_hash="hash1",
+            byte_size=50,
         )
         assert f.id is not None
         assert f._persisted is True
@@ -108,14 +114,20 @@ class TestUpsert:
         repo_id = await _make_repo(orm_ctx)
         await FileRecord.upsert(
             conflict_columns=["repo_id", "path"],
-            repo_id=repo_id, path="same.py", language="python",
-            content_hash="hash1", byte_size=50,
+            repo_id=repo_id,
+            path="same.py",
+            language="python",
+            content_hash="hash1",
+            byte_size=50,
         )
         f2 = await FileRecord.upsert(
             conflict_columns=["repo_id", "path"],
             update_columns=["content_hash", "byte_size"],
-            repo_id=repo_id, path="same.py", language="python",
-            content_hash="hash2", byte_size=200,
+            repo_id=repo_id,
+            path="same.py",
+            language="python",
+            content_hash="hash2",
+            byte_size=200,
         )
         found = await FileRecord.where(repo_id=repo_id, path="same.py").first()
         assert found.content_hash == "hash2"
@@ -145,7 +157,9 @@ class TestInsertOrReplace:
     async def test_insert_or_replace_replaces_existing(self, orm_ctx):
         await Repo.create(name="orig", indexed_at="2024-01-01", source_path="/replace/path")
         await Repo.insert_or_replace(
-            name="replaced", indexed_at="2024-02-01", source_path="/replace/path",
+            name="replaced",
+            indexed_at="2024-02-01",
+            source_path="/replace/path",
         )
         found = await Repo.where(source_path="/replace/path").first()
         assert found.name == "replaced"
@@ -153,14 +167,16 @@ class TestInsertOrReplace:
 
 class TestFromRow:
     async def test_from_row_creates_instance(self, orm_ctx):
-        repo = Repo._from_row({
-            "id": 42,
-            "name": "from-row",
-            "indexed_at": "2024-01-01",
-            "source_path": None,
-            "github_url": None,
-            "git_head": None,
-        })
+        repo = Repo._from_row(
+            {
+                "id": 42,
+                "name": "from-row",
+                "indexed_at": "2024-01-01",
+                "source_path": None,
+                "github_url": None,
+                "git_head": None,
+            }
+        )
         assert repo.id == 42
         assert repo.name == "from-row"
         assert repo._persisted is True
@@ -181,7 +197,8 @@ class TestRefresh:
         # Directly update via backend
         backend = orm_ctx.backend
         await backend.execute(
-            "UPDATE repos SET name = 'after-refresh' WHERE id = ?", [repo.id],
+            "UPDATE repos SET name = 'after-refresh' WHERE id = ?",
+            [repo.id],
         )
         await backend.commit()
         await repo.refresh()

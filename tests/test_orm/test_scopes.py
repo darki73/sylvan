@@ -80,9 +80,7 @@ class TestScopeChaining:
         from sylvan.database.orm.models import Symbol
 
         backend = orm_ctx.backend
-        await backend.execute(
-            "INSERT INTO repos (id, name, indexed_at) VALUES (1, 'myrepo', '2024-01-01')"
-        )
+        await backend.execute("INSERT INTO repos (id, name, indexed_at) VALUES (1, 'myrepo', '2024-01-01')")
         await backend.execute(
             "INSERT INTO files (id, repo_id, path, language, content_hash, byte_size) "
             "VALUES (1, 1, 'main.py', 'python', 'h1', 100)"

@@ -38,13 +38,12 @@ async def indexed_repo(tmp_path):
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "main.py").write_text(
-        'def hello():\n'
-        '    """Say hello."""\n'
-        '    return "hello"\n',
+        'def hello():\n    """Say hello."""\n    return "hello"\n',
         encoding="utf-8",
     )
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="test-repo")
     await backend.commit()
     assert result.symbols_extracted >= 1

@@ -36,23 +36,23 @@ async def indexed_repo(tmp_path):
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "main.py").write_text(
-        'def hello(): pass\n',
+        "def hello(): pass\n",
         encoding="utf-8",
     )
     (proj / "README.md").write_text(
-        '# My Project\n\nA great project.\n\n'
-        '## Installation\n\nRun pip install.\n\n'
-        '## Usage\n\nImport and use the library.\n\n'
-        '### Advanced Usage\n\nFor power users.\n',
+        "# My Project\n\nA great project.\n\n"
+        "## Installation\n\nRun pip install.\n\n"
+        "## Usage\n\nImport and use the library.\n\n"
+        "### Advanced Usage\n\nFor power users.\n",
         encoding="utf-8",
     )
     (proj / "docs.md").write_text(
-        '# API Reference\n\nAPI docs here.\n\n'
-        '## Endpoints\n\nList of endpoints.\n',
+        "# API Reference\n\nAPI docs here.\n\n## Endpoints\n\nList of endpoints.\n",
         encoding="utf-8",
     )
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="test-repo")
     await backend.commit()
     assert result.sections_extracted >= 3
@@ -67,6 +67,7 @@ async def indexed_repo(tmp_path):
 async def _get_section_ids():
     """Helper: get available section IDs via get_toc."""
     from sylvan.tools.browsing.get_toc import get_toc
+
     resp = await get_toc(repo="test-repo")
     return [entry["section_id"] for entry in resp["toc"]]
 
@@ -74,6 +75,7 @@ async def _get_section_ids():
 class TestSearchSections:
     async def test_returns_results(self, indexed_repo):
         from sylvan.tools.search.search_sections import search_sections
+
         resp = await search_sections(query="Installation")
 
         assert "sections" in resp
@@ -99,6 +101,7 @@ class TestSearchSections:
 
     async def test_meta_has_results_count(self, indexed_repo):
         from sylvan.tools.search.search_sections import search_sections
+
         resp = await search_sections(query="Usage")
         meta = resp["_meta"]
         assert "results_count" in meta
@@ -111,6 +114,7 @@ class TestGetSection:
         assert len(section_ids) >= 1
 
         from sylvan.tools.browsing.get_section import get_section
+
         resp = await get_section(section_ids[0])
 
         assert "content" in resp
@@ -145,6 +149,7 @@ class TestGetSectionsBatch:
         assert len(section_ids) >= 2
 
         from sylvan.tools.browsing.get_section import get_sections
+
         resp = await get_sections(section_ids[:2])
 
         assert "sections" in resp
@@ -163,6 +168,7 @@ class TestGetSectionsBatch:
         fake_id = "fake-section-abc"
 
         from sylvan.tools.browsing.get_section import get_sections
+
         resp = await get_sections([section_ids[0], fake_id])
 
         assert resp["_meta"]["found"] == 1
@@ -173,6 +179,7 @@ class TestGetSectionsBatch:
 class TestGetToc:
     async def test_returns_hierarchy(self, indexed_repo):
         from sylvan.tools.browsing.get_toc import get_toc
+
         resp = await get_toc(repo="test-repo")
 
         assert "toc" in resp
@@ -192,6 +199,7 @@ class TestGetToc:
 
     async def test_toc_with_doc_path_filter(self, indexed_repo):
         from sylvan.tools.browsing.get_toc import get_toc
+
         resp = await get_toc(repo="test-repo", doc_path="README.md")
 
         assert "toc" in resp
@@ -202,6 +210,7 @@ class TestGetToc:
 class TestGetTocTree:
     async def test_returns_nested_structure(self, indexed_repo):
         from sylvan.tools.browsing.get_toc import get_toc_tree
+
         resp = await get_toc_tree(repo="test-repo")
 
         assert "tree" in resp

@@ -50,8 +50,7 @@ async def lib_ctx(tmp_path):
     os.environ.pop("SYLVAN_HOME", None)
 
 
-async def _insert_library_repo(backend, name, *, manager="pip", package="pkg",
-                                version="1.0.0", source_path=None):
+async def _insert_library_repo(backend, name, *, manager="pip", package="pkg", version="1.0.0", source_path=None):
     """Helper to insert a library-type repo directly into the DB."""
     await backend.execute(
         "INSERT INTO repos (name, source_path, indexed_at, repo_type, "
@@ -67,8 +66,7 @@ async def _insert_library_repo(backend, name, *, manager="pip", package="pkg",
 async def _insert_local_repo(backend, name, source_path=None):
     """Helper to insert a local-type repo."""
     await backend.execute(
-        "INSERT INTO repos (name, source_path, indexed_at, repo_type) "
-        "VALUES (?, ?, datetime('now'), 'local')",
+        "INSERT INTO repos (name, source_path, indexed_at, repo_type) VALUES (?, ?, datetime('now'), 'local')",
         [name, source_path],
     )
     await backend.commit()
@@ -76,8 +74,7 @@ async def _insert_local_repo(backend, name, source_path=None):
     return row["id"]
 
 
-async def _insert_symbol(backend, file_id, symbol_id, name, qualified_name,
-                          kind="function", signature=""):
+async def _insert_symbol(backend, file_id, symbol_id, name, qualified_name, kind="function", signature=""):
     """Helper to insert a symbol."""
     await backend.execute(
         "INSERT INTO symbols (file_id, symbol_id, name, qualified_name, kind, "
@@ -91,20 +88,18 @@ async def _insert_symbol(backend, file_id, symbol_id, name, qualified_name,
 async def _insert_file(backend, repo_id, path="mod.py", language="python"):
     """Helper to insert a file record."""
     await backend.execute(
-        "INSERT INTO files (repo_id, path, language, content_hash, byte_size) "
-        "VALUES (?, ?, ?, 'abc123', 100)",
+        "INSERT INTO files (repo_id, path, language, content_hash, byte_size) VALUES (?, ?, ?, 'abc123', 100)",
         [repo_id, path, language],
     )
     await backend.commit()
-    row = await backend.fetch_one(
-        "SELECT id FROM files WHERE repo_id = ? AND path = ?", [repo_id, path]
-    )
+    row = await backend.fetch_one("SELECT id FROM files WHERE repo_id = ? AND path = ?", [repo_id, path])
     return row["id"]
 
 
 # ---------------------------------------------------------------------------
 # add_library
 # ---------------------------------------------------------------------------
+
 
 class TestAddLibrary:
     async def test_success_delegates_to_manager(self, lib_ctx):
@@ -152,6 +147,7 @@ class TestAddLibrary:
 # list_libraries
 # ---------------------------------------------------------------------------
 
+
 class TestListLibraries:
     async def test_empty_list(self, lib_ctx):
         from sylvan.tools.library.list import list_libraries
@@ -179,6 +175,7 @@ class TestListLibraries:
 # remove_library
 # ---------------------------------------------------------------------------
 
+
 class TestRemoveLibrary:
     async def test_remove_existing(self, lib_ctx):
         backend = lib_ctx
@@ -202,6 +199,7 @@ class TestRemoveLibrary:
 # ---------------------------------------------------------------------------
 # check_library_versions
 # ---------------------------------------------------------------------------
+
 
 class TestCheckLibraryVersions:
     async def test_repo_not_found(self, lib_ctx):
@@ -240,14 +238,13 @@ class TestCheckLibraryVersions:
         # requirements.txt.  The check tool compares dep["version"] against
         # indexed Repo.version values, so we need to match the parsed format.
         from sylvan.git.dependency_files import parse_dependencies
+
         parsed = parse_dependencies(proj)
         numpy_ver = next(d["version"] for d in parsed if d["name"] == "numpy")
 
         # Index numpy at matching version, pandas at different version
-        await _insert_library_repo(backend, f"numpy@{numpy_ver}", package="numpy",
-                                   version=numpy_ver, manager="pip")
-        await _insert_library_repo(backend, "pandas@1.5.0", package="pandas",
-                                   version="1.5.0", manager="pip")
+        await _insert_library_repo(backend, f"numpy@{numpy_ver}", package="numpy", version=numpy_ver, manager="pip")
+        await _insert_library_repo(backend, "pandas@1.5.0", package="pandas", version="1.5.0", manager="pip")
 
         from sylvan.tools.library.check import check_library_versions
 
@@ -269,13 +266,12 @@ class TestCheckLibraryVersions:
 # compare_library_versions
 # ---------------------------------------------------------------------------
 
+
 class TestCompareLibraryVersions:
     async def test_old_version_not_indexed(self, lib_ctx):
         from sylvan.tools.library.compare import compare_library_versions
 
-        resp = await compare_library_versions(
-            package="numpy", from_version="1.0", to_version="2.0"
-        )
+        resp = await compare_library_versions(package="numpy", from_version="1.0", to_version="2.0")
         assert "error" in resp
         assert "numpy@1.0" in resp["error"]
 
@@ -285,9 +281,7 @@ class TestCompareLibraryVersions:
 
         from sylvan.tools.library.compare import compare_library_versions
 
-        resp = await compare_library_versions(
-            package="numpy", from_version="1.0", to_version="2.0"
-        )
+        resp = await compare_library_versions(package="numpy", from_version="1.0", to_version="2.0")
         assert "error" in resp
         assert "numpy@2.0" in resp["error"]
 
@@ -301,22 +295,42 @@ class TestCompareLibraryVersions:
         new_file = await _insert_file(backend, new_id, "lib.py")
 
         # Old version has: func_a (will be removed), func_b (will change sig)
-        await _insert_symbol(backend, old_file, "old::func_a#function", "func_a",
-                             "lib.func_a", kind="function", signature="def func_a(x)")
-        await _insert_symbol(backend, old_file, "old::func_b#function", "func_b",
-                             "lib.func_b", kind="function", signature="def func_b(x)")
+        await _insert_symbol(
+            backend,
+            old_file,
+            "old::func_a#function",
+            "func_a",
+            "lib.func_a",
+            kind="function",
+            signature="def func_a(x)",
+        )
+        await _insert_symbol(
+            backend,
+            old_file,
+            "old::func_b#function",
+            "func_b",
+            "lib.func_b",
+            kind="function",
+            signature="def func_b(x)",
+        )
 
         # New version has: func_b (changed sig), func_c (added)
-        await _insert_symbol(backend, new_file, "new::func_b#function", "func_b",
-                             "lib.func_b", kind="function", signature="def func_b(x, y)")
-        await _insert_symbol(backend, new_file, "new::func_c#function", "func_c",
-                             "lib.func_c", kind="function", signature="def func_c()")
+        await _insert_symbol(
+            backend,
+            new_file,
+            "new::func_b#function",
+            "func_b",
+            "lib.func_b",
+            kind="function",
+            signature="def func_b(x, y)",
+        )
+        await _insert_symbol(
+            backend, new_file, "new::func_c#function", "func_c", "lib.func_c", kind="function", signature="def func_c()"
+        )
 
         from sylvan.tools.library.compare import compare_library_versions
 
-        resp = await compare_library_versions(
-            package="mylib", from_version="1.0", to_version="2.0"
-        )
+        resp = await compare_library_versions(package="mylib", from_version="1.0", to_version="2.0")
 
         assert resp["package"] == "mylib"
         assert resp["from_version"] == "1.0"
@@ -344,16 +358,12 @@ class TestCompareLibraryVersions:
         f1 = await _insert_file(backend, v1_id, "lib.py")
         f2 = await _insert_file(backend, v2_id, "lib.py")
 
-        await _insert_symbol(backend, f1, "v1::foo#function", "foo",
-                             "lib.foo", kind="function", signature="def foo()")
-        await _insert_symbol(backend, f2, "v2::foo#function", "foo",
-                             "lib.foo", kind="function", signature="def foo()")
+        await _insert_symbol(backend, f1, "v1::foo#function", "foo", "lib.foo", kind="function", signature="def foo()")
+        await _insert_symbol(backend, f2, "v2::foo#function", "foo", "lib.foo", kind="function", signature="def foo()")
 
         from sylvan.tools.library.compare import compare_library_versions
 
-        resp = await compare_library_versions(
-            package="same", from_version="1.0", to_version="2.0"
-        )
+        resp = await compare_library_versions(package="same", from_version="1.0", to_version="2.0")
 
         assert resp["added"] == []
         assert resp["removed"] == []
@@ -364,6 +374,7 @@ class TestCompareLibraryVersions:
 # ---------------------------------------------------------------------------
 # pin_library (workspace tool)
 # ---------------------------------------------------------------------------
+
 
 class TestPinLibrary:
     async def test_workspace_not_found(self, lib_ctx):
@@ -412,8 +423,7 @@ class TestPinLibrary:
 
         # Verify DB state
         rows = await backend.fetch_all(
-            "SELECT repo_id FROM workspace_repos WHERE workspace_id = "
-            "(SELECT id FROM workspaces WHERE name = 'my-ws')",
+            "SELECT repo_id FROM workspace_repos WHERE workspace_id = (SELECT id FROM workspaces WHERE name = 'my-ws')",
             [],
         )
         assert len(rows) == 1

@@ -107,7 +107,7 @@ class TestFindDeadCode:
         )
 
         await self.backend.execute(
-            "INSERT INTO \"references\" (source_symbol_id, target_symbol_id, target_specifier) "
+            'INSERT INTO "references" (source_symbol_id, target_symbol_id, target_specifier) '
             "VALUES ('utils.py::caller#function', 'utils.py::used_func#function', 'used_func')"
         )
 

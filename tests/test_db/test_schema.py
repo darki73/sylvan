@@ -26,9 +26,7 @@ class TestRunMigrations:
     async def test_creates_repos_table(self, tmp_path):
         backend = await _make_backend(tmp_path)
         try:
-            rows = await backend.fetch_all(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            rows = await backend.fetch_all("SELECT name FROM sqlite_master WHERE type='table'")
             tables = {r["name"] for r in rows}
             assert "repos" in tables
         finally:
@@ -38,9 +36,7 @@ class TestRunMigrations:
     async def test_creates_files_table(self, tmp_path):
         backend = await _make_backend(tmp_path)
         try:
-            rows = await backend.fetch_all(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            rows = await backend.fetch_all("SELECT name FROM sqlite_master WHERE type='table'")
             tables = {r["name"] for r in rows}
             assert "files" in tables
         finally:
@@ -50,9 +46,7 @@ class TestRunMigrations:
     async def test_creates_symbols_table(self, tmp_path):
         backend = await _make_backend(tmp_path)
         try:
-            rows = await backend.fetch_all(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            rows = await backend.fetch_all("SELECT name FROM sqlite_master WHERE type='table'")
             tables = {r["name"] for r in rows}
             assert "symbols" in tables
         finally:
@@ -62,9 +56,7 @@ class TestRunMigrations:
     async def test_creates_blobs_table(self, tmp_path):
         backend = await _make_backend(tmp_path)
         try:
-            rows = await backend.fetch_all(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            rows = await backend.fetch_all("SELECT name FROM sqlite_master WHERE type='table'")
             tables = {r["name"] for r in rows}
             assert "blobs" in tables
         finally:
@@ -74,9 +66,7 @@ class TestRunMigrations:
     async def test_creates_sections_table(self, tmp_path):
         backend = await _make_backend(tmp_path)
         try:
-            rows = await backend.fetch_all(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            rows = await backend.fetch_all("SELECT name FROM sqlite_master WHERE type='table'")
             tables = {r["name"] for r in rows}
             assert "sections" in tables
         finally:
@@ -86,9 +76,7 @@ class TestRunMigrations:
     async def test_creates_usage_stats_table(self, tmp_path):
         backend = await _make_backend(tmp_path)
         try:
-            rows = await backend.fetch_all(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            rows = await backend.fetch_all("SELECT name FROM sqlite_master WHERE type='table'")
             tables = {r["name"] for r in rows}
             assert "usage_stats" in tables
         finally:
@@ -98,9 +86,7 @@ class TestRunMigrations:
     async def test_creates_fts5_symbols_fts(self, tmp_path):
         backend = await _make_backend(tmp_path)
         try:
-            row = await backend.fetch_one(
-                "SELECT name FROM sqlite_master WHERE name='symbols_fts'"
-            )
+            row = await backend.fetch_one("SELECT name FROM sqlite_master WHERE name='symbols_fts'")
             assert row is not None
         finally:
             await backend.disconnect()
@@ -109,9 +95,7 @@ class TestRunMigrations:
     async def test_creates_fts5_sections_fts(self, tmp_path):
         backend = await _make_backend(tmp_path)
         try:
-            row = await backend.fetch_one(
-                "SELECT name FROM sqlite_master WHERE name='sections_fts'"
-            )
+            row = await backend.fetch_one("SELECT name FROM sqlite_master WHERE name='sections_fts'")
             assert row is not None
         finally:
             await backend.disconnect()
@@ -120,13 +104,9 @@ class TestRunMigrations:
     async def test_creates_vec_tables(self, tmp_path):
         backend = await _make_backend(tmp_path)
         try:
-            row = await backend.fetch_one(
-                "SELECT name FROM sqlite_master WHERE name='symbols_vec'"
-            )
+            row = await backend.fetch_one("SELECT name FROM sqlite_master WHERE name='symbols_vec'")
             assert row is not None
-            row2 = await backend.fetch_one(
-                "SELECT name FROM sqlite_master WHERE name='sections_vec'"
-            )
+            row2 = await backend.fetch_one("SELECT name FROM sqlite_master WHERE name='sections_vec'")
             assert row2 is not None
         finally:
             await backend.disconnect()
@@ -155,9 +135,7 @@ class TestRunMigrations:
     async def test_creates_file_imports_table(self, tmp_path):
         backend = await _make_backend(tmp_path)
         try:
-            rows = await backend.fetch_all(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            rows = await backend.fetch_all("SELECT name FROM sqlite_master WHERE type='table'")
             tables = {r["name"] for r in rows}
             assert "file_imports" in tables
         finally:
@@ -167,9 +145,7 @@ class TestRunMigrations:
     async def test_creates_indexes(self, tmp_path):
         backend = await _make_backend(tmp_path)
         try:
-            rows = await backend.fetch_all(
-                "SELECT name FROM sqlite_master WHERE type='index'"
-            )
+            rows = await backend.fetch_all("SELECT name FROM sqlite_master WHERE type='index'")
             indexes = {r["name"] for r in rows}
             assert "idx_symbols_file_id" in indexes
             assert "idx_symbols_kind" in indexes

@@ -102,8 +102,7 @@ class TestGetReferencesTo:
             ["tgt_sym", 2, "target", "b.target", "function", "python", 1, 5, 0, 50],
         )
         await backend.execute(
-            'INSERT INTO "references" (source_symbol_id, target_symbol_id, target_specifier) '
-            "VALUES (?, ?, ?)",
+            'INSERT INTO "references" (source_symbol_id, target_symbol_id, target_specifier) VALUES (?, ?, ?)',
             ["src_sym", "tgt_sym", "b"],
         )
         await backend.commit()
@@ -146,8 +145,7 @@ class TestGetReferencesFrom:
             ["tgt_sym", 2, "target", "b.target", "function", "python", 1, 5, 0, 50],
         )
         await backend.execute(
-            'INSERT INTO "references" (source_symbol_id, target_symbol_id, target_specifier) '
-            "VALUES (?, ?, ?)",
+            'INSERT INTO "references" (source_symbol_id, target_symbol_id, target_specifier) VALUES (?, ?, ?)',
             ["src_sym", "tgt_sym", "b"],
         )
         await backend.commit()

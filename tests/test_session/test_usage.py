@@ -45,11 +45,13 @@ class TestUsageAccumulator:
         (proj / "main.py").write_text("def foo(): pass\n")
 
         from sylvan.indexing.pipeline.orchestrator import index_folder
+
         result = await index_folder(str(proj), name="acc-test")
         await usage_ctx.backend.commit()
         repo_id = result.repo_id
 
         from sylvan.session.usage_stats import UsageAccumulator
+
         acc = UsageAccumulator()
         acc.increment(repo_id, tool_calls=1, tokens_returned=100, tokens_avoided=400)
         acc.increment(repo_id, tool_calls=1, tokens_returned=50, tokens_avoided=200)
@@ -64,9 +66,7 @@ class TestUsageAccumulator:
         assert len(acc._pending) == 0
         assert acc._call_count == 0
 
-        row = await usage_ctx.backend.fetch_one(
-            "SELECT * FROM usage_stats WHERE repo_id = ?", [repo_id]
-        )
+        row = await usage_ctx.backend.fetch_one("SELECT * FROM usage_stats WHERE repo_id = ?", [repo_id])
         assert row is not None
         assert row["tool_calls"] == 2
         assert row["tokens_returned"] == 150
@@ -75,6 +75,7 @@ class TestUsageAccumulator:
     async def test_accumulates_without_auto_flush(self, usage_ctx):
         """Increments accumulate in memory until explicit flush."""
         from sylvan.session.usage_stats import UsageAccumulator
+
         acc = UsageAccumulator()
 
         for _ in range(10):
@@ -93,11 +94,13 @@ class TestUsageAccumulator:
         (proj_b / "b.py").write_text("def b(): pass\n")
 
         from sylvan.indexing.pipeline.orchestrator import index_folder
+
         r_a = await index_folder(str(proj_a), name="repo-a")
         r_b = await index_folder(str(proj_b), name="repo-b")
         await usage_ctx.backend.commit()
 
         from sylvan.session.usage_stats import UsageAccumulator
+
         acc = UsageAccumulator()
         acc.increment(r_a.repo_id, tool_calls=1, symbols_retrieved=3)
         acc.increment(r_b.repo_id, tool_calls=2, sections_retrieved=5)
@@ -105,12 +108,8 @@ class TestUsageAccumulator:
 
         assert len(acc._pending) == 0
 
-        row_a = await usage_ctx.backend.fetch_one(
-            "SELECT * FROM usage_stats WHERE repo_id = ?", [r_a.repo_id]
-        )
-        row_b = await usage_ctx.backend.fetch_one(
-            "SELECT * FROM usage_stats WHERE repo_id = ?", [r_b.repo_id]
-        )
+        row_a = await usage_ctx.backend.fetch_one("SELECT * FROM usage_stats WHERE repo_id = ?", [r_a.repo_id])
+        row_b = await usage_ctx.backend.fetch_one("SELECT * FROM usage_stats WHERE repo_id = ?", [r_b.repo_id])
         assert row_a["symbols_retrieved"] == 3
         assert row_b["sections_retrieved"] == 5
 
@@ -122,21 +121,22 @@ class TestRecordUsage:
         (proj / "main.py").write_text("def x(): pass\n")
 
         from sylvan.indexing.pipeline.orchestrator import index_folder
+
         result = await index_folder(str(proj), name="record-test")
         await usage_ctx.backend.commit()
         repo_id = result.repo_id
 
         import sylvan.session.usage_stats as usage_mod
+
         usage_mod._accumulator = None
 
         from sylvan.session.usage_stats import async_flush_usage, record_usage
+
         record_usage(repo_id=repo_id, tokens_returned=100, tokens_avoided=500)
         record_usage(repo_id=repo_id, tokens_returned=200, tokens_avoided=300)
         await async_flush_usage()
 
-        row = await usage_ctx.backend.fetch_one(
-            "SELECT * FROM usage_stats WHERE repo_id = ?", [repo_id]
-        )
+        row = await usage_ctx.backend.fetch_one("SELECT * FROM usage_stats WHERE repo_id = ?", [repo_id])
         assert row is not None
         assert row["tool_calls"] == 2
         assert row["tokens_returned"] == 300
@@ -150,14 +150,17 @@ class TestGetProjectUsage:
         (proj / "main.py").write_text("def y(): pass\n")
 
         from sylvan.indexing.pipeline.orchestrator import index_folder
+
         result = await index_folder(str(proj), name="proj-usage")
         await usage_ctx.backend.commit()
         repo_id = result.repo_id
 
         import sylvan.session.usage_stats as usage_mod
+
         usage_mod._accumulator = None
 
         from sylvan.session.usage_stats import async_get_project_usage, record_usage
+
         record_usage(repo_id=repo_id, tokens_returned=100, symbols_retrieved=2)
         record_usage(repo_id=repo_id, tokens_returned=50, sections_retrieved=1)
 
@@ -170,9 +173,11 @@ class TestGetProjectUsage:
 
     async def test_empty_repo_returns_zeros(self, usage_ctx):
         import sylvan.session.usage_stats as usage_mod
+
         usage_mod._accumulator = None
 
         from sylvan.session.usage_stats import async_get_project_usage
+
         usage = await async_get_project_usage(usage_ctx.backend, 99999)
         assert usage["total_tool_calls"] == 0
         assert usage["total_tokens_returned"] == 0
@@ -189,14 +194,17 @@ class TestGetOverallUsage:
         (proj_b / "b.py").write_text("def b(): pass\n")
 
         from sylvan.indexing.pipeline.orchestrator import index_folder
+
         r_a = await index_folder(str(proj_a), name="overall-a")
         r_b = await index_folder(str(proj_b), name="overall-b")
         await usage_ctx.backend.commit()
 
         import sylvan.session.usage_stats as usage_mod
+
         usage_mod._accumulator = None
 
         from sylvan.session.usage_stats import async_get_overall_usage, record_usage
+
         record_usage(repo_id=r_a.repo_id, tokens_returned=100)
         record_usage(repo_id=r_b.repo_id, tokens_returned=200)
 
@@ -208,9 +216,11 @@ class TestGetOverallUsage:
 
     async def test_empty_overall_returns_zeros(self, usage_ctx):
         import sylvan.session.usage_stats as usage_mod
+
         usage_mod._accumulator = None
 
         from sylvan.session.usage_stats import async_get_overall_usage
+
         usage = await async_get_overall_usage(usage_ctx.backend)
         assert usage["total_tool_calls"] == 0
         assert usage["repos_used"] == 0

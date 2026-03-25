@@ -72,9 +72,7 @@ class TestUsageAccumulatorAsyncFlush:
 
         await acc.async_flush()
 
-        row = await backend.fetch_one(
-            "SELECT * FROM usage_stats WHERE repo_id = ?", [1]
-        )
+        row = await backend.fetch_one("SELECT * FROM usage_stats WHERE repo_id = ?", [1])
         assert row is not None
         assert row["tool_calls"] == 3
         assert row["tokens_returned"] == 100
@@ -96,9 +94,7 @@ class TestUsageAccumulatorAsyncFlush:
         acc.increment(1, tool_calls=3, tokens_returned=200)
         await acc.async_flush()
 
-        row = await backend.fetch_one(
-            "SELECT * FROM usage_stats WHERE repo_id = ?", [1]
-        )
+        row = await backend.fetch_one("SELECT * FROM usage_stats WHERE repo_id = ?", [1])
         assert row["tool_calls"] == 5
         assert row["tokens_returned"] == 300
 
@@ -108,7 +104,10 @@ class TestUsageAccumulatorAsyncFlush:
         acc.increment(1, tool_calls=1)
 
         # Mock get_context to raise
-        with patch("sylvan.session.usage_stats.get_connection", side_effect=Exception("no db")), patch("sylvan.context.get_context", side_effect=Exception("no context")):
+        with (
+            patch("sylvan.session.usage_stats.get_connection", side_effect=Exception("no db")),
+            patch("sylvan.context.get_context", side_effect=Exception("no context")),
+        ):
             await acc.async_flush()
 
         # After failed flush, pending should be cleared (sync flush also failed)
@@ -157,6 +156,7 @@ class TestUsageAccumulatorIncrement:
 class TestFlushAll:
     def test_noop_when_no_accumulator(self):
         import sylvan.session.usage_stats as mod
+
         old = mod._accumulator
         mod._accumulator = None
         flush_all()  # Should not raise
@@ -164,6 +164,7 @@ class TestFlushAll:
 
     def test_flush_all_suppresses_errors(self):
         import sylvan.session.usage_stats as mod
+
         old = mod._accumulator
 
         acc = UsageAccumulator()
@@ -179,6 +180,7 @@ class TestFlushAll:
 class TestGetAccumulator:
     def test_returns_singleton(self):
         import sylvan.session.usage_stats as mod
+
         old = mod._accumulator
         mod._accumulator = None
 

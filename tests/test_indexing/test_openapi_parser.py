@@ -51,13 +51,15 @@ class TestRenderParameters:
         assert _render_parameters([]) == ""
 
     def test_single_param(self):
-        params = [{
-            "name": "user_id",
-            "in": "path",
-            "required": True,
-            "description": "The user ID",
-            "schema": {"type": "integer"},
-        }]
+        params = [
+            {
+                "name": "user_id",
+                "in": "path",
+                "required": True,
+                "description": "The user ID",
+                "schema": {"type": "integer"},
+            }
+        ]
         result = _render_parameters(params)
         assert "user_id" in result
         assert "path" in result
@@ -116,32 +118,34 @@ class TestRenderResponses:
 
 class TestParseOpenapi:
     def test_json_spec(self):
-        spec = json.dumps({
-            "openapi": "3.0.0",
-            "info": {"title": "Pet Store", "version": "1.0.0", "description": "A pet store API"},
-            "paths": {
-                "/pets": {
-                    "get": {
-                        "tags": ["pets"],
-                        "summary": "List all pets",
-                        "operationId": "listPets",
-                        "parameters": [
-                            {"name": "limit", "in": "query", "schema": {"type": "integer"}},
-                        ],
-                        "responses": {
-                            "200": {"description": "A list of pets"},
+        spec = json.dumps(
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "Pet Store", "version": "1.0.0", "description": "A pet store API"},
+                "paths": {
+                    "/pets": {
+                        "get": {
+                            "tags": ["pets"],
+                            "summary": "List all pets",
+                            "operationId": "listPets",
+                            "parameters": [
+                                {"name": "limit", "in": "query", "schema": {"type": "integer"}},
+                            ],
+                            "responses": {
+                                "200": {"description": "A list of pets"},
+                            },
                         },
-                    },
-                    "post": {
-                        "tags": ["pets"],
-                        "summary": "Create a pet",
-                        "responses": {
-                            "201": {"description": "Created"},
+                        "post": {
+                            "tags": ["pets"],
+                            "summary": "Create a pet",
+                            "responses": {
+                                "201": {"description": "Created"},
+                            },
                         },
                     },
                 },
-            },
-        })
+            }
+        )
         sections = parse_openapi(spec, "api.json", "myrepo")
 
         assert len(sections) >= 3  # root + tag + 2 operations
@@ -180,72 +184,80 @@ paths:
         assert sections == []
 
     def test_spec_with_no_paths(self):
-        spec = json.dumps({
-            "openapi": "3.0.0",
-            "info": {"title": "Empty API", "version": "1.0"},
-        })
+        spec = json.dumps(
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "Empty API", "version": "1.0"},
+            }
+        )
         sections = parse_openapi(spec, "api.json", "myrepo")
         # Root section only (no paths)
         assert len(sections) == 1
         assert sections[0].title == "Empty API"
 
     def test_multiple_tags(self):
-        spec = json.dumps({
-            "openapi": "3.0.0",
-            "info": {"title": "API", "version": "1.0"},
-            "paths": {
-                "/users": {
-                    "get": {
-                        "tags": ["users"],
-                        "summary": "List users",
-                        "responses": {"200": {"description": "OK"}},
+        spec = json.dumps(
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "API", "version": "1.0"},
+                "paths": {
+                    "/users": {
+                        "get": {
+                            "tags": ["users"],
+                            "summary": "List users",
+                            "responses": {"200": {"description": "OK"}},
+                        },
+                    },
+                    "/pets": {
+                        "get": {
+                            "tags": ["pets"],
+                            "summary": "List pets",
+                            "responses": {"200": {"description": "OK"}},
+                        },
                     },
                 },
-                "/pets": {
-                    "get": {
-                        "tags": ["pets"],
-                        "summary": "List pets",
-                        "responses": {"200": {"description": "OK"}},
-                    },
-                },
-            },
-        })
+            }
+        )
         sections = parse_openapi(spec, "api.json", "myrepo")
         titles = [s.title for s in sections]
         assert "users" in titles
         assert "pets" in titles
 
     def test_untagged_operations(self):
-        spec = json.dumps({
-            "openapi": "3.0.0",
-            "info": {"title": "API", "version": "1.0"},
-            "paths": {
-                "/health": {
-                    "get": {
-                        "summary": "Health check",
-                        "responses": {"200": {"description": "OK"}},
+        spec = json.dumps(
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "API", "version": "1.0"},
+                "paths": {
+                    "/health": {
+                        "get": {
+                            "summary": "Health check",
+                            "responses": {"200": {"description": "OK"}},
+                        },
                     },
                 },
-            },
-        })
+            }
+        )
         sections = parse_openapi(spec, "api.json", "myrepo")
         titles = [s.title for s in sections]
         assert "Untagged" in titles
 
     def test_sections_have_hierarchy(self):
-        spec = json.dumps({
-            "openapi": "3.0.0",
-            "info": {"title": "API", "version": "1.0"},
-            "paths": {
-                "/items": {
-                    "get": {
-                        "tags": ["items"],
-                        "summary": "List",
-                        "responses": {"200": {"description": "OK"}},
+        spec = json.dumps(
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "API", "version": "1.0"},
+                "paths": {
+                    "/items": {
+                        "get": {
+                            "tags": ["items"],
+                            "summary": "List",
+                            "responses": {"200": {"description": "OK"}},
+                        },
                     },
                 },
-            },
-        })
+            }
+        )
         sections = parse_openapi(spec, "api.json", "myrepo")
         # Root is level 1, tag is level 2, operation is level 3
         levels = [s.level for s in sections]
@@ -254,18 +266,20 @@ paths:
         assert 3 in levels
 
     def test_sections_have_required_fields(self):
-        spec = json.dumps({
-            "openapi": "3.0.0",
-            "info": {"title": "API", "version": "1.0"},
-            "paths": {
-                "/foo": {
-                    "get": {
-                        "tags": ["foo"],
-                        "responses": {"200": {"description": "OK"}},
+        spec = json.dumps(
+            {
+                "openapi": "3.0.0",
+                "info": {"title": "API", "version": "1.0"},
+                "paths": {
+                    "/foo": {
+                        "get": {
+                            "tags": ["foo"],
+                            "responses": {"200": {"description": "OK"}},
+                        },
                     },
                 },
-            },
-        })
+            }
+        )
         sections = parse_openapi(spec, "api.json", "myrepo")
         for s in sections:
             assert s.section_id is not None

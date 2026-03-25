@@ -36,27 +36,23 @@ async def indexed_repo(tmp_path):
     proj = tmp_path / "project"
     proj.mkdir()
     (proj / "main.py").write_text(
-        'from util import helper\n'
-        '\n'
-        'def greet(name):\n'
+        "from util import helper\n"
+        "\n"
+        "def greet(name):\n"
         '    """Greet someone."""\n'
         '    return f"Hello {name}"\n'
-        '\n'
-        'def farewell(name):\n'
+        "\n"
+        "def farewell(name):\n"
         '    return f"Goodbye {name}"\n',
         encoding="utf-8",
     )
     (proj / "util.py").write_text(
-        'def helper():\n'
-        '    """A helpful utility."""\n'
-        '    pass\n'
-        '\n'
-        'def another_helper():\n'
-        '    pass\n',
+        'def helper():\n    """A helpful utility."""\n    pass\n\ndef another_helper():\n    pass\n',
         encoding="utf-8",
     )
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     result = await index_folder(str(proj), name="test-repo")
     await backend.commit()
     assert result.symbols_extracted >= 3
@@ -71,6 +67,7 @@ async def indexed_repo(tmp_path):
 async def _find_symbol_id(name):
     """Find a symbol ID by name."""
     from sylvan.tools.search.search_symbols import search_symbols
+
     resp = await search_symbols(query=name)
     for s in resp["symbols"]:
         if s["name"] == name:
@@ -81,6 +78,7 @@ async def _find_symbol_id(name):
 class TestSearchText:
     async def test_finds_matches(self, indexed_repo):
         from sylvan.tools.search.search_text import search_text
+
         resp = await search_text(query="Hello")
 
         assert "matches" in resp
@@ -101,6 +99,7 @@ class TestSearchText:
 
     async def test_no_matches_returns_empty(self, indexed_repo):
         from sylvan.tools.search.search_text import search_text
+
         resp = await search_text(query="zzzznonexistenttext")
 
         assert "matches" in resp
@@ -109,6 +108,7 @@ class TestSearchText:
 
     async def test_filter_by_repo(self, indexed_repo):
         from sylvan.tools.search.search_text import search_text
+
         resp = await search_text(query="helper", repo="test-repo")
 
         assert "matches" in resp
@@ -120,6 +120,7 @@ class TestSearchText:
 class TestGetContextBundle:
     async def test_returns_symbol_plus_siblings_and_imports(self, indexed_repo):
         from sylvan.tools.browsing.get_context_bundle import get_context_bundle
+
         sid = await _find_symbol_id("greet")
         resp = await get_context_bundle(sid)
 
@@ -156,6 +157,7 @@ class TestGetContextBundle:
 
     async def test_without_imports(self, indexed_repo):
         from sylvan.tools.browsing.get_context_bundle import get_context_bundle
+
         sid = await _find_symbol_id("greet")
         resp = await get_context_bundle(sid, include_imports=False)
 
@@ -167,6 +169,7 @@ class TestGetGitContext:
     async def test_non_git_repo_returns_graceful_error(self, indexed_repo):
         """A non-git indexed folder should return a graceful error."""
         from sylvan.tools.analysis.get_git_context import get_git_context
+
         resp = await get_git_context(repo="test-repo", file_path="main.py")
 
         assert "_meta" in resp
@@ -175,11 +178,13 @@ class TestGetGitContext:
     async def test_repo_not_found(self, indexed_repo):
         from sylvan.error_codes import RepoNotFoundError
         from sylvan.tools.analysis.get_git_context import get_git_context
+
         with pytest.raises(RepoNotFoundError):
             await get_git_context(repo="nonexistent-repo", file_path="main.py")
 
     async def test_no_file_or_symbol_returns_error(self, indexed_repo):
         from sylvan.tools.analysis.get_git_context import get_git_context
+
         resp = await get_git_context(repo="test-repo")
 
         assert "_meta" in resp
@@ -199,19 +204,23 @@ class TestFindImportersHasImporters:
         proj = indexed_repo  # We already have a context; create a new project in it
         # Use a separate tmp dir for this test's project
         import tempfile
+
         with tempfile.TemporaryDirectory() as td:
             from pathlib import Path
+
             proj = Path(td)
             (proj / "a.py").write_text("from b import foo\n", encoding="utf-8")
             (proj / "b.py").write_text("def foo(): pass\n", encoding="utf-8")
             (proj / "c.py").write_text("from a import something\n", encoding="utf-8")
 
             from sylvan.indexing.pipeline.orchestrator import index_folder
+
             await index_folder(str(proj), name="imp-test")
             await backend.commit()
 
             # Resolve imports so resolved_file_id is populated
             from sylvan.database.orm.models import FileImport, FileRecord, Repo
+
             imp_repo = await Repo.where(name="imp-test").first()
             files_list = await FileRecord.where(repo_id=imp_repo.id).get()
             imp_test_files = {f.path: f.id for f in files_list}
@@ -232,6 +241,7 @@ class TestFindImportersHasImporters:
             await backend.commit()
 
             from sylvan.tools.analysis.find_importers import find_importers
+
             resp = await find_importers(repo="imp-test", file_path="b.py")
             assert len(resp["importers"]) >= 1
             for imp in resp["importers"]:
@@ -242,6 +252,7 @@ class TestIndexFolderPathGuard:
     async def test_rejects_broad_path(self, indexed_repo):
         from sylvan.error_codes import PathTooBroadError
         from sylvan.tools.indexing.index_folder import index_folder
+
         with pytest.raises(PathTooBroadError):
             await index_folder("/")
 
@@ -251,5 +262,6 @@ class TestIndexFolderPathGuard:
         (proj / "app.py").write_text("x = 1\n", encoding="utf-8")
 
         from sylvan.tools.indexing.index_folder import index_folder
+
         result = await index_folder(str(proj))
         assert result.get("files_indexed", 0) >= 1

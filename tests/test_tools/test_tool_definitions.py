@@ -55,9 +55,7 @@ class TestAllTools:
     def test_no_duplicate_tool_names(self):
         all_tools = [*CORE_TOOLS, *ANALYSIS_TOOLS, *SUPPORT_TOOLS]
         names = [t.name for t in all_tools]
-        assert len(names) == len(set(names)), (
-            f"Duplicate tool names: {[n for n in names if names.count(n) > 1]}"
-        )
+        assert len(names) == len(set(names)), f"Duplicate tool names: {[n for n in names if names.count(n) > 1]}"
 
     def test_all_tools_have_input_schemas(self):
         for tool in [*CORE_TOOLS, *ANALYSIS_TOOLS, *SUPPORT_TOOLS]:
@@ -75,9 +73,7 @@ class TestAllTools:
             if "required" in schema:
                 properties = schema.get("properties", {})
                 for req in schema["required"]:
-                    assert req in properties, (
-                        f"{tool.name}: required param '{req}' not in properties"
-                    )
+                    assert req in properties, f"{tool.name}: required param '{req}' not in properties"
 
     def test_total_tool_count(self):
         """Sanity check: we should have a reasonable number of tools total."""

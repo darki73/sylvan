@@ -40,6 +40,7 @@ async def indexed_project(tmp_path):
     (proj / "util.py").write_text("def helper(): pass\n", encoding="utf-8")
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     await index_folder(str(proj), name="test-repo")
     await backend.commit()
 
@@ -54,11 +55,10 @@ async def indexed_project(tmp_path):
 class TestIndexFile:
     async def test_reindexes_changed_file(self, indexed_project):
         proj = indexed_project
-        (proj / "main.py").write_text(
-            "def hello(): pass\ndef goodbye(): pass\n", encoding="utf-8"
-        )
+        (proj / "main.py").write_text("def hello(): pass\ndef goodbye(): pass\n", encoding="utf-8")
 
         from sylvan.tools.indexing.index_file import index_file
+
         resp = await index_file(repo="test-repo", file_path="main.py")
 
         assert resp["status"] == "updated"
@@ -66,6 +66,7 @@ class TestIndexFile:
 
     async def test_unchanged_file_returns_unchanged(self, indexed_project):
         from sylvan.tools.indexing.index_file import index_file
+
         resp = await index_file(repo="test-repo", file_path="main.py")
 
         assert resp["status"] == "unchanged"
@@ -74,28 +75,30 @@ class TestIndexFile:
     async def test_repo_not_found(self, indexed_project):
         from sylvan.error_codes import RepoNotFoundError
         from sylvan.tools.indexing.index_file import index_file
+
         with pytest.raises(RepoNotFoundError):
             await index_file(repo="nonexistent", file_path="main.py")
 
     async def test_file_not_found(self, indexed_project):
         from sylvan.error_codes import IndexFileNotFoundError as SylvanFileNotFound
         from sylvan.tools.indexing.index_file import index_file
+
         with pytest.raises(SylvanFileNotFound):
             await index_file(repo="test-repo", file_path="nonexistent.py")
 
     async def test_path_traversal_rejected(self, indexed_project):
         from sylvan.error_codes import IndexFileNotFoundError as SylvanFileNotFound
         from sylvan.tools.indexing.index_file import index_file
+
         with pytest.raises(SylvanFileNotFound):
             await index_file(repo="test-repo", file_path="../../etc/passwd")
 
     async def test_new_file_indexed(self, indexed_project):
         proj = indexed_project
-        (proj / "new_module.py").write_text(
-            "class Widget:\n    def render(self): pass\n", encoding="utf-8"
-        )
+        (proj / "new_module.py").write_text("class Widget:\n    def render(self): pass\n", encoding="utf-8")
 
         from sylvan.tools.indexing.index_file import index_file
+
         resp = await index_file(repo="test-repo", file_path="new_module.py")
 
         assert resp["status"] == "updated"

@@ -36,13 +36,12 @@ async def scaffold_tool_ctx(tmp_path):
     proj = tmp_path / "toolproject"
     proj.mkdir()
     (proj / "app.py").write_text(
-        'def serve():\n'
-        '    """Start the server."""\n'
-        '    pass\n',
+        'def serve():\n    """Start the server."""\n    pass\n',
         encoding="utf-8",
     )
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
+
     await index_folder(str(proj), name="toolproject")
     await backend.commit()
 

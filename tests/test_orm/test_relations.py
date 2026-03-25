@@ -8,9 +8,7 @@ from sylvan.database.orm.models import FileRecord, Quality, Repo, Symbol
 async def _seed_relations(ctx):
     """Seed DB with data for relation tests."""
     backend = ctx.backend
-    await backend.execute(
-        "INSERT INTO repos (id, name, indexed_at) VALUES (1, 'test-repo', '2024-01-01')"
-    )
+    await backend.execute("INSERT INTO repos (id, name, indexed_at) VALUES (1, 'test-repo', '2024-01-01')")
     await backend.execute(
         "INSERT INTO files (id, repo_id, path, language, content_hash, byte_size) "
         "VALUES (1, 1, 'main.py', 'python', 'h1', 100)"
@@ -34,9 +32,7 @@ async def _seed_relations(ctx):
         "language, byte_offset, byte_length) "
         "VALUES (3, 2, 'sym-3', 'helper', 'util.helper', 'function', 'python', 0, 60)"
     )
-    await backend.execute(
-        "INSERT INTO quality (symbol_id, has_tests, has_docs) VALUES ('sym-1', 1, 1)"
-    )
+    await backend.execute("INSERT INTO quality (symbol_id, has_tests, has_docs) VALUES ('sym-1', 1, 1)")
     await backend.commit()
 
 
@@ -65,6 +61,7 @@ class TestBelongsTo:
 
     async def test_class_level_access_returns_descriptor(self, orm_ctx):
         from sylvan.database.orm.primitives.relations import BelongsTo
+
         assert isinstance(Symbol.file, BelongsTo)
 
 
