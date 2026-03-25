@@ -110,7 +110,11 @@ def _check_for_updates() -> None:
         data = json.loads(resp.read())
 
     latest = data["info"]["version"]
-    if latest != current:
+
+    def _version_tuple(v: str) -> tuple[int, ...]:
+        return tuple(int(x) for x in v.split(".") if x.isdigit())
+
+    if _version_tuple(latest) > _version_tuple(current):
         _update_info["current"] = current
         _update_info["latest"] = latest
         if is_editable:
