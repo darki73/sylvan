@@ -1,6 +1,7 @@
 """Public Python API for sylvan.
 
-Usage:
+Usage::
+
     from sylvan import Sylvan
 
     with Sylvan() as s:
@@ -18,14 +19,26 @@ from typing import Any
 
 
 class Sylvan:
-    """High-level Python API for sylvan.
+    """High-level synchronous API for sylvan code intelligence.
 
-    Handles all backend setup, migrations, context, and extension loading
-    internally. All methods are synchronous.
+    Manages backend lifecycle, migrations, context, and extension loading
+    internally. All public methods are synchronous and return plain dicts
+    or lists - no ORM objects leak out.
 
     Args:
-        db_path: Path to the SQLite database. Defaults to ~/.sylvan/sylvan.db.
-        load_extensions: Whether to load native + user extensions. Defaults to True.
+        db_path: Path to the SQLite database file. When ``None``, falls
+            back to the path configured in ``~/.sylvan/config.yaml``
+            (default ``~/.sylvan/sylvan.db``).
+        load_extensions: Whether to discover and load native and user
+            extensions at init time. Pass ``False`` to skip extension
+            loading for faster startup in scripts that don't need it.
+
+    Example::
+
+        with Sylvan() as s:
+            s.index("/code/my-project")
+            for sym in s.search("parse", repo="my-project", kind="function"):
+                print(sym["name"], sym["signature"])
     """
 
     def __init__(
@@ -39,21 +52,18 @@ class Sylvan:
         self._ctx = None
         self._token = None
         self._run(self._setup(db_path, load_extensions))
-        # Set context in the main thread AFTER setup completes
         from sylvan.context import set_context
 
         self._token = set_context(self._ctx)
 
     def _run(self, coro: Any) -> Any:
-        """Run an async coroutine synchronously."""
         return self._loop.run_until_complete(coro)
 
     async def _setup(
         self,
         db_path: str | Path | None,
-        load_extensions: bool,
+        load_ext: bool,
     ) -> None:
-        """Initialize backend, run migrations, set context."""
         from sylvan.config import get_config
         from sylvan.context import SylvanContext
         from sylvan.database.backends.sqlite.backend import SQLiteBackend
@@ -68,23 +78,25 @@ class Sylvan:
         await backend.connect()
         await run_migrations(backend)
 
-        ctx = SylvanContext(
+        self._backend = backend
+        self._ctx = SylvanContext(
             backend=backend,
             config=config,
             session=SessionTracker(),
             cache=QueryCache(),
         )
 
-        self._backend = backend
-        self._ctx = ctx
+        if load_ext:
+            from sylvan.extensions.loader import load_extensions
 
-        if load_extensions:
-            from sylvan.extensions.loader import load_extensions as _load
-
-            _load()
+            load_extensions()
 
     def close(self) -> None:
-        """Close the database connection and clean up."""
+        """Release the database connection and reset the context.
+
+        Called automatically when used as a context manager. Safe to call
+        multiple times.
+        """
         if self._token:
             from sylvan.context import reset_context
 
@@ -101,57 +113,66 @@ class Sylvan:
     def __exit__(self, *args: object) -> None:
         self.close()
 
-    # ── Indexing ──────────────────────────────────────────────
-
     def index(
         self,
         path: str | Path,
         name: str | None = None,
     ) -> dict:
-        """Index a local folder.
+        """Index a local folder into the sylvan database.
+
+        Parses source files with tree-sitter, extracts symbols, resolves
+        imports, and stores everything for search. Incremental - only
+        reprocesses files whose content hash changed.
 
         Args:
-            path: Absolute path to the folder.
-            name: Display name for the repo. Defaults to folder name.
+            path: Absolute path to the folder to index.
+            name: Display name for the repository. Defaults to the
+                folder's basename.
 
         Returns:
-            Dict with files_indexed, symbols_extracted, etc.
+            A dict with keys ``files_indexed``, ``symbols_extracted``,
+            ``sections_extracted``, ``imports_extracted``,
+            ``imports_resolved``, ``files_skipped``, and ``errors``.
         """
 
-        async def _index() -> dict:
+        async def _do() -> dict:
             from sylvan.indexing.pipeline.orchestrator import index_folder
 
-            result = await index_folder(str(path), name or Path(path).name)
+            r = await index_folder(str(path), name or Path(path).name)
             return {
-                "files_indexed": result.files_indexed,
-                "files_skipped": result.files_skipped,
-                "symbols_extracted": result.symbols_extracted,
-                "sections_extracted": result.sections_extracted,
-                "imports_extracted": result.imports_extracted,
-                "imports_resolved": result.imports_resolved,
-                "errors": result.errors,
+                "files_indexed": r.files_indexed,
+                "files_skipped": r.files_skipped,
+                "symbols_extracted": r.symbols_extracted,
+                "sections_extracted": r.sections_extracted,
+                "imports_extracted": r.imports_extracted,
+                "imports_resolved": r.imports_resolved,
+                "errors": r.errors,
             }
 
-        return self._run(_index())
+        return self._run(_do())
 
     def add_library(self, package: str) -> dict:
-        """Index a third-party library.
+        """Fetch and index a third-party library's source code.
+
+        Downloads the package source from a registry (PyPI, npm, crates.io,
+        pkg.go.dev) and indexes it so you can search its symbols.
 
         Args:
-            package: Package spec (e.g. "pip/starlette@1.0.0", "npm/react@18").
+            package: Package specifier in ``manager/name@version`` format.
+                Examples: ``"pip/starlette@1.0.0"``, ``"npm/react@18"``,
+                ``"cargo/serde"``.
 
         Returns:
-            Dict with indexing results.
+            A dict with indexing results including ``symbol_count`` and
+            ``file_count``.
         """
 
-        async def _add() -> dict:
+        async def _do() -> dict:
             from sylvan.libraries.manager import add_library
 
             return await add_library(package)
 
-        return self._run(_add())
-
-    # ── Search ────────────────────────────────────────────────
+        return self._run(_do())
 
     def search(
         self,
@@ -162,20 +183,29 @@ class Sylvan:
         language: str | None = None,
         max_results: int = 20,
     ) -> list[dict]:
-        """Search for symbols by name, signature, or keyword.
+        """Search indexed symbols by name, signature, or keyword.
+
+        Uses FTS5 full-text search with BM25 ranking. Results include
+        symbol metadata but not source code - use :meth:`get_source`
+        to retrieve the actual implementation.
 
         Args:
-            query: Search query.
-            repo: Filter to a specific repository.
-            kind: Filter by symbol kind (function, class, method, constant, type).
-            language: Filter by programming language.
-            max_results: Maximum results to return.
+            query: Search terms. Matched against symbol name, qualified
+                name, signature, docstring, and summary.
+            repo: Restrict results to a single repository name.
+            kind: Filter by symbol kind. One of ``"function"``,
+                ``"class"``, ``"method"``, ``"constant"``, ``"type"``.
+            language: Filter by programming language identifier
+                (e.g. ``"python"``, ``"typescript"``).
+            max_results: Maximum number of results to return.
 
         Returns:
-            List of symbol dicts with id, name, kind, signature, file, line.
+            A list of dicts, each containing ``symbol_id``, ``name``,
+            ``qualified_name``, ``kind``, ``language``, ``file``,
+            ``signature``, and ``line``.
         """
 
-        async def _search() -> list[dict]:
+        async def _do() -> list[dict]:
             from sylvan.database.orm import Symbol
 
             qb = Symbol.search(query)
@@ -185,9 +215,8 @@ class Sylvan:
                 qb = qb.where(kind=kind)
             if language:
                 qb = qb.where(language=language)
-            qb = qb.limit(max_results)
 
-            results = await qb.get()
+            results = await qb.limit(max_results).get()
             return [
                 {
                     "symbol_id": s.symbol_id,
@@ -202,7 +231,7 @@ class Sylvan:
                 for s in results
             ]
 
-        return self._run(_search())
+        return self._run(_do())
 
     def search_text(
         self,
@@ -211,18 +240,23 @@ class Sylvan:
         repo: str | None = None,
         max_results: int = 20,
     ) -> list[dict]:
-        """Full-text search across file content.
+        """Search across raw file content (like grep).
+
+        Searches the stored blob content of all indexed files. Useful
+        for finding string literals, comments, or patterns that aren't
+        captured as symbols.
 
         Args:
-            query: Text to search for.
-            repo: Filter to a specific repository.
-            max_results: Maximum results to return.
+            query: Text to search for (case-insensitive substring match).
+            repo: Restrict results to a single repository name.
+            max_results: Maximum number of matching lines to return.
 
         Returns:
-            List of match dicts with file, line, match, context.
+            A list of match dicts with ``file_path``, ``line``,
+            ``match``, and ``context``.
         """
 
-        async def _search() -> list[dict]:
+        async def _do() -> list[dict]:
             from sylvan.tools.search.search_text import search_text
 
             return await search_text(
@@ -231,22 +265,25 @@ class Sylvan:
                 max_results=max_results,
             )
 
-        result = self._run(_search())
+        result = self._run(_do())
         return result.get("matches", [])
 
-    # ── Symbol retrieval ──────────────────────────────────────
-
     def get_source(self, symbol_id: str) -> str:
-        """Get the source code of a symbol.
+        """Retrieve the source code of a symbol by its ID.
+
+        Extracts the symbol's byte range from the stored file blob.
+        Returns just the symbol's source, not the entire file.
 
         Args:
-            symbol_id: Symbol identifier from search results.
+            symbol_id: The stable symbol identifier, as returned in
+                search results (e.g. ``"src/main.py::main#function"``).
 
         Returns:
-            Source code string.
+            The symbol's source code as a string, or an empty string
+            if the symbol or its blob is not found.
         """
 
-        async def _get() -> str:
+        async def _do() -> str:
             from sylvan.database.orm import Symbol
 
             sym = await Symbol.where(symbol_id=symbol_id).with_("file").first()
@@ -254,20 +291,27 @@ class Sylvan:
                 return ""
             return await sym.get_source() or ""
 
-        return self._run(_get())
+        return self._run(_do())
 
     def get_outline(self, repo: str, file_path: str) -> list[dict]:
-        """Get a hierarchical symbol outline for a file.
+        """Get all symbols in a file, ordered by line number.
+
+        Returns a flat list of every function, class, method, constant,
+        and type defined in the file. Cheaper than reading the file -
+        only returns metadata, not source.
 
         Args:
-            repo: Repository name.
-            file_path: Relative file path.
+            repo: Repository name as shown in :meth:`repos`.
+            file_path: Relative path within the repository
+                (e.g. ``"src/main.py"``).
 
         Returns:
-            List of symbol dicts with id, name, kind, signature, line_start, line_end.
+            A list of dicts with ``symbol_id``, ``name``, ``kind``,
+            ``signature``, ``line_start``, and ``line_end``.
+            Empty list if the file is not indexed.
         """
 
-        async def _outline() -> list[dict]:
+        async def _do() -> list[dict]:
             from sylvan.database.orm import FileRecord, Symbol
 
             file_rec = (
@@ -293,92 +337,109 @@ class Sylvan:
                 for s in symbols
             ]
 
-        return self._run(_outline())
-
-    # ── Analysis ──────────────────────────────────────────────
+        return self._run(_do())
 
     def blast_radius(self, symbol_id: str) -> dict:
-        """Get the blast radius of a symbol.
+        """Determine what files are affected if a symbol changes.
+
+        Traces the import graph outward from the symbol's file to find
+        confirmed references (file imports the module AND mentions the
+        symbol name) and potential references (file imports the module
+        but the symbol name isn't found in the source).
 
         Args:
-            symbol_id: Symbol identifier.
+            symbol_id: The symbol to analyze.
 
         Returns:
-            Dict with confirmed and potential affected files.
+            A dict with ``symbol`` (the target), ``confirmed`` (list of
+            files with direct references), ``potential`` (list of files
+            that import the module), and ``depth_reached``.
         """
 
-        async def _blast() -> dict:
+        async def _do() -> dict:
             from sylvan.tools.analysis.get_blast_radius import get_blast_radius
 
             return await get_blast_radius(symbol_id=symbol_id)
 
-        return self._run(_blast())
+        return self._run(_do())
 
     def importers(self, repo: str, file_path: str) -> list[dict]:
-        """Find files that import a given file.
+        """Find all files that import a given file.
+
+        Uses the resolved import graph built during indexing, not
+        grep-based matching.
 
         Args:
             repo: Repository name.
-            file_path: Relative file path.
+            file_path: Relative path of the file to check.
 
         Returns:
-            List of importer dicts with path, language, symbol_count.
+            A list of dicts with ``path``, ``language``,
+            ``symbol_count``, and ``has_importers`` for each
+            importing file.
         """
 
-        async def _importers() -> list[dict]:
+        async def _do() -> list[dict]:
             from sylvan.tools.analysis.find_importers import find_importers
 
             result = await find_importers(repo=repo, file_path=file_path)
             return result.get("importers", [])
 
-        return self._run(_importers())
+        return self._run(_do())
 
     def dependency_graph(self, repo: str, file_path: str) -> dict:
-        """Get the dependency graph for a file.
+        """Get the dependency graph centered on a file.
+
+        Shows both what the file depends on (outgoing edges) and what
+        depends on it (incoming edges).
 
         Args:
             repo: Repository name.
-            file_path: Relative file path.
+            file_path: Relative path of the file.
 
         Returns:
-            Dict with nodes and edges.
+            A dict with ``nodes`` (file metadata), ``edges`` (directed
+            dependency links), ``node_count``, and ``edge_count``.
         """
 
-        async def _graph() -> dict:
+        async def _do() -> dict:
             from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
 
             return await get_dependency_graph(repo=repo, file_path=file_path)
 
-        return self._run(_graph())
+        return self._run(_do())
 
     def class_hierarchy(self, repo: str, class_name: str) -> dict:
-        """Get the class hierarchy for a class.
+        """Get the inheritance tree for a class.
+
+        Searches the repository for all classes that inherit from the
+        target (descendants) and all classes the target inherits from
+        (ancestors).
 
         Args:
             repo: Repository name.
-            class_name: Class name to look up.
+            class_name: Name of the class to look up.
 
         Returns:
-            Dict with ancestors and descendants.
+            A dict with ``target``, ``ancestors``, and ``descendants``.
         """
 
-        async def _hierarchy() -> dict:
+        async def _do() -> dict:
             from sylvan.tools.analysis.get_class_hierarchy import get_class_hierarchy
 
             return await get_class_hierarchy(repo=repo, class_name=class_name)
 
-        return self._run(_hierarchy())
-
-    # ── Repos ─────────────────────────────────────────────────
+        return self._run(_do())
 
     def repos(self) -> list[dict]:
         """List all indexed repositories.
 
         Returns:
-            List of repo dicts with name, file_count, symbol_count, indexed_at.
+            A list of dicts with ``name``, ``source_path``,
+            ``indexed_at``, and ``git_head`` for each repository.
         """
 
-        async def _repos() -> list[dict]:
+        async def _do() -> list[dict]:
             from sylvan.database.orm import Repo
 
             repos = await Repo.all().get()
@@ -392,21 +453,24 @@ class Sylvan:
                 for r in repos
             ]
 
-        return self._run(_repos())
+        return self._run(_do())
 
     def remove(self, repo: str) -> dict:
-        """Remove an indexed repository and all its data.
+        """Delete an indexed repository and all associated data.
+
+        Removes files, symbols, sections, imports, quality records,
+        and references in FK-safe order inside a transaction.
 
         Args:
-            repo: Repository name.
+            repo: Repository name to delete (as shown in :meth:`repos`).
 
         Returns:
-            Dict with deletion counts.
+            A dict with per-table deletion counts.
         """
 
-        async def _remove() -> dict:
+        async def _do() -> dict:
             from sylvan.tools.meta.remove_repo import remove_repo
 
             return await remove_repo(repo=repo)
 
-        return self._run(_remove())
+        return self._run(_do())
