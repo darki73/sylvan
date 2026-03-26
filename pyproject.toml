@@ -1,6 +1,6 @@
 [project]
 name = "sylvan"
-version = "1.4.1"
+version = "1.4.2"
 description = "Unified code + documentation retrieval MCP server"
 readme = "README.md"
 authors = [
