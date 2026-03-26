@@ -14,11 +14,10 @@ EXTENSION_DIRS = ("languages", "parsers", "providers", "tools")
 
 
 def load_extensions() -> int:
-    """Discover and load all extensions from ~/.sylvan/extensions/.
+    """Load native extensions and user extensions.
 
-    Scans each subdirectory (languages, parsers, providers, tools) for
-    Python files, validates syntax, and imports them. Decorators in the
-    files register themselves into the appropriate registries on import.
+    Native extensions ship with sylvan (e.g. kubernetes support).
+    User extensions live in ~/.sylvan/extensions/.
 
     Returns:
         Number of extension files successfully loaded.
@@ -29,6 +28,11 @@ def load_extensions() -> int:
     if not config.extensions.enabled:
         logger.debug("extensions_disabled")
         return 0
+
+    # Load native extensions first
+    native_count = _load_native_extensions(config)
+
+    # Then user extensions
 
     base = Path.home() / ".sylvan" / "extensions"
     if not base.exists():
@@ -59,9 +63,9 @@ def load_extensions() -> int:
                 loaded += 1
 
     if loaded:
-        logger.info("extensions_loaded", count=loaded)
+        logger.info("user_extensions_loaded", count=loaded)
 
-    return loaded
+    return native_count + loaded
 
 
 def _validate(py_file: Path, relative: str) -> bool:
@@ -106,3 +110,25 @@ def _import(py_file: Path, subdir: str, relative: str) -> bool:
     except Exception as e:
         logger.warning("extension_load_failed", file=relative, error=str(e))
         return False
+
+
+def _load_native_extensions(config) -> int:
+    """Load native extensions that ship with sylvan.
+
+    Returns:
+        Number of native extensions loaded.
+    """
+    count = 0
+
+    try:
+        import sylvan.extensions.native.kubernetes  # noqa: F401
+
+        count += 1
+        logger.info("native_extension_loaded", name="kubernetes")
+    except Exception as e:
+        logger.debug("native_extension_failed", name="kubernetes", error=str(e))
+
+    if count:
+        logger.info("native_extensions_loaded", count=count)
+
+    return count

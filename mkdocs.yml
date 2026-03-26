@@ -47,6 +47,8 @@ nav:
     - The Dashboard: working-with-sylvan/the-dashboard.md
     - Token Efficiency: working-with-sylvan/token-efficiency.md
     - CLI Reference: working-with-sylvan/cli.md
+  - Infrastructure:
+    - Kubernetes: working-with-sylvan/kubernetes.md
   - For Your Agent:
     - Teaching Your Agent: for-your-agent/teaching-your-agent.md
     - Subagent Access: for-your-agent/subagent-access.md

@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.4.0
+
+### Kubernetes support
+
+- Kubernetes YAML files indexed as first-class symbols with cross-references
+- Core k8s: Deployment, StatefulSet, DaemonSet, Job, CronJob, Service, Ingress, ConfigMap, Secret, Namespace, PVC, PV, StorageClass, ServiceAccount, Role, ClusterRole, RoleBinding, HPA, PDB, LimitRange, ResourceQuota, PriorityClass, RuntimeClass, Kustomization
+- ArgoCD: Application (single + multi-source), AppProject, ApplicationSet
+- External Secrets: ExternalSecret with vault paths and target secret refs
+- Traefik: IngressRoute (HTTP/TCP/UDP), Middleware
+- Cert-Manager: Certificate, Issuer, ClusterIssuer
+- Cross-references: Deployments reference Secrets, ConfigMaps, PVCs, ServiceAccounts, images
+- Secret values stripped (data/stringData redacted, key names preserved)
+- Helm templates auto-detected and skipped ({{ }} detection)
+- Multi-document YAML support (--- separators)
+- Unknown CRDs get generic extraction (name, namespace, labels, annotations)
+
+### Native extension system
+
+- Content handler registry: extensions register sniffers to claim file types
+- file_processor routes to registered handlers instead of hardcoded logic
+- Native extensions shipped with sylvan, loaded at startup
+- Pluggable architecture: future content types (Terraform, Docker Compose, etc.) just register a sniffer + handler
+
 ## 1.3.5
 
 - Bumped claude-agent-sdk to 0.1.50
