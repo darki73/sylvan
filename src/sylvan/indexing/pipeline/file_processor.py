@@ -115,15 +115,15 @@ async def process_file(
         result.files_indexed += 1
         return
 
-    if language:
+    # Content handlers (e.g. k8s YAML) take priority over generic language parsing
+    from sylvan.extensions import get_content_handler
+
+    content_handler = get_content_handler(df.relative_path, content_str)
+    if content_handler:
+        await content_handler(file_id, df.relative_path, content_str, result)
+    elif language:
         await _store_code_symbols(file_id, df.relative_path, content_str, language, result)
         await _store_imports(file_id, content_str, df.relative_path, language, result)
-    else:
-        from sylvan.extensions import get_content_handler
-
-        content_handler = get_content_handler(df.relative_path, content_str)
-        if content_handler:
-            await content_handler(file_id, df.relative_path, content_str, result)
 
     await store_doc_sections(file_id, df.relative_path, content_str, repo_name, result)
     result.files_indexed += 1

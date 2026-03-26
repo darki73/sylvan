@@ -310,9 +310,7 @@ async def store_k8s_symbols(
 
         # Store cross-references as imports
         for ref in r.get("references", []):
-            await FileImport.upsert(
-                conflict_columns=["file_id", "specifier"],
-                update_columns=["names"],
+            await FileImport.create(
                 file_id=file_id,
                 specifier=ref,
                 names=[r["name"]],
