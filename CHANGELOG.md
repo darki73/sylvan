@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.2
+
+- Deep keyword extraction for k8s resources (all nested keys and values searchable)
+- Searching for "nvidia", "gpumem", "secretKeyRef", or any nested field now finds the right resource
+
 ## 1.4.1
 
 - Fixed k8s YAML files not being indexed (content handler now runs before language detection)
