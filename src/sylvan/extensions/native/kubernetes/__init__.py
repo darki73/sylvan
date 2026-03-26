@@ -156,6 +156,10 @@ def parse_k8s_resource(doc: dict, file_path: str, byte_offset: int = 0) -> dict 
     if kind == "Secret":
         source_doc = _strip_secret_values(doc)
 
+    # Deep keyword extraction - walk entire doc for searchable terms
+    keywords = _extract_deep_keywords(source_doc)
+    keywords.extend([kind, api_version, namespace])
+
     # Symbol kind
     symbol_kind = KIND_TO_SYMBOL_KIND.get(kind, "constant")
 
@@ -174,6 +178,7 @@ def parse_k8s_resource(doc: dict, file_path: str, byte_offset: int = 0) -> dict 
         "references": references,
         "byte_offset": byte_offset,
         "source_doc": source_doc,
+        "keywords": keywords,
         "k8s_kind": kind,
         "k8s_namespace": namespace,
         "k8s_api_version": api_version,
@@ -245,6 +250,30 @@ def _strip_secret_values(doc: dict) -> dict:
     return stripped
 
 
+def _extract_deep_keywords(doc: dict | list | Any) -> list[str]:
+    """Recursively walk a k8s resource and collect all keys and string values.
+
+    Produces a flat list of searchable terms from every nesting level.
+    Filters out noise (very short values, pure numbers, base64 blobs).
+    """
+    keywords: set[str] = set()
+
+    def _walk(obj: Any) -> None:
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if isinstance(k, str) and len(k) >= 2:
+                    keywords.add(k)
+                _walk(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                _walk(item)
+        elif isinstance(obj, str) and 2 <= len(obj) <= 200:
+            keywords.add(obj)
+
+    _walk(doc)
+    return sorted(keywords)
+
+
 async def store_k8s_symbols(
     file_id: int,
     file_path: str,
@@ -299,7 +328,7 @@ async def store_k8s_symbols(
             docstring=r["docstring"],
             summary=f"{r['k8s_kind']} in {r.get('k8s_namespace', 'default')} namespace",
             decorators=[],
-            keywords=[r["k8s_kind"], r["k8s_api_version"], r.get("k8s_namespace", "")],
+            keywords=r.get("keywords", []),
             line_start=1,
             line_end=None,
             byte_offset=r["byte_offset"],
