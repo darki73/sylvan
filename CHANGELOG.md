@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.1
+
+- Fixed k8s YAML files not being indexed (content handler now runs before language detection)
+- Fixed FileImport crash on k8s cross-references (upsert replaced with create)
+- Added public Python API: `from sylvan import Sylvan` for programmatic use without MCP
+
 ## 1.4.0
 
 ### Kubernetes support
