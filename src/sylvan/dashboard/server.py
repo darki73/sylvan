@@ -37,7 +37,7 @@ async def start_dashboard() -> int | None:
         from sylvan.dashboard.app import create_dashboard_app
 
         cfg = get_config()
-        port = _find_free_port() if cfg.server.dashboard_random_port else cfg.server.dashboard_port
+        port = _find_free_port() if cfg.cluster.random_port else cfg.cluster.port
         app = create_dashboard_app()
 
         config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")

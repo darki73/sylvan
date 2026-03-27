@@ -180,6 +180,46 @@ class ParseError(SylvanError):
     code = "parse_error"
 
 
+class LeaderUnreachableError(SylvanError):
+    """Raised when a follower cannot reach the cluster leader.
+
+    Attributes:
+        code: ``"leader_unreachable"``.
+    """
+
+    code = "leader_unreachable"
+
+
+class ProxyError(SylvanError):
+    """Raised when a proxied tool call fails on the leader.
+
+    Attributes:
+        code: ``"proxy_failed"``.
+    """
+
+    code = "proxy_failed"
+
+
+class ElectionError(SylvanError):
+    """Raised when the leader election process fails unexpectedly.
+
+    Attributes:
+        code: ``"election_failed"``.
+    """
+
+    code = "election_failed"
+
+
+class ClusterNotReadyError(SylvanError):
+    """Raised when a cluster operation is attempted before initialization.
+
+    Attributes:
+        code: ``"cluster_not_ready"``.
+    """
+
+    code = "cluster_not_ready"
+
+
 class _LegacyError:
     """Thin shim that reproduces the old (non-Exception) SylvanError shape.
 

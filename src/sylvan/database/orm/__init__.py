@@ -32,6 +32,8 @@ from sylvan.database.orm.exceptions import ModelNotFoundError, ORMError, QueryEr
 from sylvan.database.orm.model.base import Model
 from sylvan.database.orm.models import (
     Blob,
+    ClusterLock,
+    ClusterNode,
     CodingSession,
     FileImport,
     FileRecord,
@@ -64,6 +66,8 @@ __all__ = [
     "BelongsTo",
     "BelongsToMany",
     "Blob",
+    "ClusterLock",
+    "ClusterNode",
     "CodingSession",
     "Column",
     "Count",

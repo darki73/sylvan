@@ -1,17 +1,12 @@
 """Cluster discovery -- determine leader/follower role on startup."""
 
-import json
 import os
-import socket
 import uuid
 from datetime import UTC, datetime
-from pathlib import Path
 
 from sylvan.logging import get_logger
 
 logger = get_logger(__name__)
-
-_LEADER_FILE = Path.home() / ".sylvan" / "leader.json"
 
 
 def _is_pid_alive(pid: int) -> bool:
@@ -45,110 +40,104 @@ def _is_pid_alive(pid: int) -> bool:
         return False
 
 
-def _port_available(port: int) -> bool:
-    """Check if a TCP port is available for binding.
-
-    Args:
-        port: Port number to check.
+def generate_node_id() -> str:
+    """Generate a unique node identifier.
 
     Returns:
-        True if the port can be bound.
+        A 12-character hex string.
     """
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("127.0.0.1", port))
-            return True
-    except OSError:
-        return False
+    return uuid.uuid4().hex[:12]
 
 
-def discover_role(port: int = 32400) -> tuple[str, str, str, dict | None]:
+def generate_coding_session_id() -> str:
+    """Generate a coding session identifier based on current time.
+
+    Returns:
+        A string like ``cs-20260327-193000``.
+    """
+    return f"cs-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
+
+
+async def discover_role(stale_seconds: int = 10) -> tuple[str, str, str]:
     """Determine whether this instance should be leader or follower.
 
-    Checks for an existing leader by reading ``~/.sylvan/leader.json``
-    and verifying the PID is alive. If no living leader exists and the
-    cluster port is available, this instance becomes leader.
+    Uses the ``cluster_lock`` table in the database for atomic election.
+    If the lock is unclaimed or stale, this instance claims leadership.
+    Otherwise, it reads the existing leader's info and becomes a follower.
 
     Args:
-        port: The cluster port to check.
+        stale_seconds: Seconds before a heartbeat is considered stale.
 
     Returns:
-        Tuple of (role, instance_id, coding_session_id, leader_info).
+        Tuple of (role, node_id, coding_session_id).
         role is ``"leader"`` or ``"follower"``.
-        instance_id is a unique ID for this instance.
-        coding_session_id is the coding session this instance belongs to.
-        leader_info is the leader.json data if follower, None if leader.
     """
-    instance_id = uuid.uuid4().hex[:12]
+    from sylvan.database.orm.models.cluster_lock import ClusterLock
 
-    # Check if leader.json exists with a living leader
-    if _LEADER_FILE.exists():
-        try:
-            data = json.loads(_LEADER_FILE.read_text())
-            leader_pid = data.get("pid")
-            if leader_pid and _is_pid_alive(leader_pid) and leader_pid != os.getpid():
-                coding_session_id = data.get("coding_session_id", "")
-                logger.info(
-                    "follower_mode",
-                    leader_pid=leader_pid,
-                    instance_id=instance_id,
-                    coding_session_id=coding_session_id,
-                )
-                return "follower", instance_id, coding_session_id, data
-        except (json.JSONDecodeError, OSError):
-            pass
+    node_id = generate_node_id()
+    pid = os.getpid()
 
-    # Try to become leader
-    if _port_available(port):
-        coding_session_id = f"cs-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
-        leader_data = {
-            "pid": os.getpid(),
-            "session_id": instance_id,
-            "coding_session_id": coding_session_id,
-            "started_at": datetime.now(UTC).isoformat(),
-            "http_port": port,
-        }
-        _LEADER_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _LEADER_FILE.write_text(json.dumps(leader_data, indent=2))
+    # Try to claim leadership
+    claimed = await ClusterLock.claim(node_id, pid, stale_seconds=stale_seconds)
+
+    if claimed:
+        coding_session_id = generate_coding_session_id()
+        logger.info("leader_mode", node_id=node_id, coding_session_id=coding_session_id)
+        return "leader", node_id, coding_session_id
+
+    # Someone else is leader - read their info
+    holder = await ClusterLock.holder()
+    if holder and holder.holder_id:
+        # Join the existing leader's coding session
+        from sylvan.database.orm.models.cluster_node import ClusterNode
+
+        leader_node = await ClusterNode.where(node_id=holder.holder_id).first()
+        if leader_node:
+            coding_session_id = leader_node.coding_session_id or generate_coding_session_id()
+        else:
+            coding_session_id = generate_coding_session_id()
+
         logger.info(
-            "leader_mode",
-            port=port,
-            instance_id=instance_id,
+            "follower_mode",
+            node_id=node_id,
+            leader_node=holder.holder_id,
             coding_session_id=coding_session_id,
         )
-        return "leader", instance_id, coding_session_id, None
+        return "follower", node_id, coding_session_id
 
-    # Port taken but no leader file or dead PID - read leader info
-    if _LEADER_FILE.exists():
-        try:
-            data = json.loads(_LEADER_FILE.read_text())
-            coding_session_id = data.get("coding_session_id", "")
-            logger.info(
-                "follower_mode_port_taken",
-                instance_id=instance_id,
-                coding_session_id=coding_session_id,
-            )
-            return "follower", instance_id, coding_session_id, data
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    # Can't determine - fallback to standalone (leader without dashboard)
-    coding_session_id = f"cs-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
-    logger.warning("standalone_mode", instance_id=instance_id, coding_session_id=coding_session_id)
-    return "leader", instance_id, coding_session_id, None
+    # Fallback: no holder found (shouldn't happen after claim attempt)
+    coding_session_id = generate_coding_session_id()
+    logger.warning("standalone_mode", node_id=node_id, coding_session_id=coding_session_id)
+    return "leader", node_id, coding_session_id
 
 
-def cleanup_leader() -> None:
-    """Remove leader.json if this process is the leader.
+async def release_leadership() -> None:
+    """Release the cluster lock (graceful step-down).
 
-    Called on shutdown to allow the next instance to claim leadership.
-    Only removes the file if the current PID matches the recorded leader.
+    Called on shutdown to allow other instances to claim leadership.
     """
-    if _LEADER_FILE.exists():
-        try:
-            data = json.loads(_LEADER_FILE.read_text())
-            if data.get("pid") == os.getpid():
-                _LEADER_FILE.unlink()
-                logger.info("leader_file_cleaned")
-        except (json.JSONDecodeError, OSError):
-            pass
+    from sylvan.database.orm.models.cluster_lock import ClusterLock
+
+    await ClusterLock.release()
+    logger.info("leadership_released")
+
+
+def release_leadership_sync() -> None:
+    """Release leadership synchronously (for signal handlers).
+
+    Uses a fresh sync sqlite3 connection to release the lock since
+    the event loop may be dead.
+    """
+    import sqlite3
+
+    from sylvan.config import get_config
+
+    try:
+        config = get_config()
+        conn = sqlite3.connect(str(config.db_path))
+        conn.execute("UPDATE cluster_lock SET holder_id = NULL, pid = NULL, claimed_at = NULL, heartbeat_at = NULL")
+        conn.commit()
+        conn.close()
+        logger.info("leadership_released_sync")
+    except Exception as exc:
+        logger.debug("leadership_release_sync_failed", error=str(exc))

@@ -20,7 +20,7 @@ class TestGetCurrentVersion:
             None.
         """
         version = await get_current_version(ctx.backend)
-        assert version == 1
+        assert version == 2
 
     async def test_returns_max_applied_version(self, ctx):
         """Returns the highest version from the _migrations table.
@@ -143,7 +143,7 @@ class TestRollbackMigration:
 
         assert rolled_back is not None
         assert "003_create_gadgets" in rolled_back
-        assert await get_current_version(ctx.backend) == 1
+        assert await get_current_version(ctx.backend) == 2
 
         row = await ctx.backend.fetch_one("SELECT name FROM sqlite_master WHERE type='table' AND name='gadgets'")
         assert row is None

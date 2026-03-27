@@ -129,8 +129,6 @@ class ServerConfig:
     port: int = 8420
     max_concurrent_tools: int = 8
     request_timeout: int = 30
-    dashboard_port: int = 32400
-    dashboard_random_port: bool = False
     workflow_gate: bool = True
     auto_configure: bool = False
 
@@ -141,15 +139,21 @@ class ClusterConfig:
 
     Attributes:
         enabled: Whether multi-instance support is active.
-        port: HTTP port for cluster communication and dashboard.
-        heartbeat_interval: Seconds between session stat flushes.
+        port: HTTP/WebSocket port for cluster communication and dashboard.
+        random_port: If True, pick a random free port instead of the fixed one.
+        heartbeat_interval: Seconds between heartbeat ticks.
         leader_timeout: Seconds before a dead leader is considered gone.
+        ws_ping_interval: Seconds between WebSocket ping messages.
+        lock_stale_threshold: Seconds before a stale lock holder can be claimed.
     """
 
     enabled: bool = True
     port: int = 32400
+    random_port: bool = False
     heartbeat_interval: int = 10
     leader_timeout: int = 30
+    ws_ping_interval: int = 2
+    lock_stale_threshold: int = 10
 
 
 @dataclass(slots=True)

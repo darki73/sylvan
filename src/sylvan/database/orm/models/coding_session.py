@@ -54,5 +54,8 @@ class CodingSession(Model):
     category_data = JsonColumn(default_factory=dict)
     """Per-category efficiency breakdown as JSON."""
 
+    nodes = HasMany("ClusterNode", foreign_key="coding_session_id")
+    """Cluster nodes belonging to this coding session."""
+
     instances = HasMany("Instance", foreign_key="coding_session_id")
     """Instances belonging to this coding session."""

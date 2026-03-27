@@ -65,32 +65,36 @@ async def _get_or_create_backend():
 
         atexit.register(_shutdown_backend_sync)
 
-        # Cluster discovery -- determine leader/follower role
-        from sylvan.cluster.discovery import discover_role
+        # Cluster discovery -- determine leader/follower role via DB lock
+        from sylvan.cluster.discovery import discover_role, generate_coding_session_id, generate_node_id
         from sylvan.cluster.state import ClusterState, set_cluster_state
 
         cluster_cfg = config.cluster
         if cluster_cfg.enabled:
-            role, session_id, coding_session_id, leader_info = discover_role(cluster_cfg.port)
+            role, node_id, coding_session_id = await discover_role(
+                stale_seconds=cluster_cfg.lock_stale_threshold,
+            )
         else:
-            from datetime import UTC, datetime
+            coding_session_id = generate_coding_session_id()
+            role, node_id = "leader", generate_node_id()
 
-            coding_session_id = f"cs-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
-            role, session_id, leader_info = "leader", "standalone", None
+        # Set follower mode on the backend so reads use the read-only connection
+        if role == "follower" and hasattr(backend, "set_follower_mode"):
+            backend.set_follower_mode(True)
 
         leader_url = None
-        if role == "follower" and leader_info:
-            leader_url = f"http://127.0.0.1:{leader_info.get('http_port', cluster_cfg.port)}"
+        if role == "follower":
+            leader_url = f"http://127.0.0.1:{cluster_cfg.port}"
 
         set_cluster_state(
             ClusterState(
                 role=role,
-                session_id=session_id,
+                session_id=node_id,
                 coding_session_id=coding_session_id,
                 leader_url=leader_url,
             )
         )
-        logger.info("cluster_role_set", role=role, session_id=session_id, coding_session_id=coding_session_id)
+        logger.info("cluster_role_set", role=role, node_id=node_id, coding_session_id=coding_session_id)
 
         # Start dashboard only if we're the leader
         from sylvan.cluster.state import get_cluster_state
@@ -121,17 +125,18 @@ async def _get_or_create_backend():
         except Exception as exc:
             logger.debug("coding_session_init_failed", error=str(exc))
 
-        # Start heartbeat for instance persistence
+        # Register this node in the cluster and start heartbeat
         try:
-            from sylvan.cluster.heartbeat import start_heartbeat
+            from sylvan.cluster.heartbeat import register_node, start_heartbeat
             from sylvan.database.orm.runtime.query_cache import get_query_cache
             from sylvan.session.tracker import get_session as _get_heartbeat_session
 
+            await register_node(backend, node_id, coding_session_id, role, cluster_cfg.port)
             await start_heartbeat(
                 backend,
                 _get_heartbeat_session(),
                 get_query_cache(),
-                session_id,
+                node_id,
                 coding_session_id,
                 role,
                 interval=cluster_cfg.heartbeat_interval,
@@ -314,12 +319,14 @@ async def _dispatch(name: str, arguments: dict) -> dict:
         return gate_response
 
     # If we're a follower and this is a write tool, proxy to leader
-    from sylvan.cluster.proxy import is_write_tool, proxy_to_leader
+    from sylvan.cluster.proxy import is_write_tool
     from sylvan.cluster.state import get_cluster_state
 
     cluster = get_cluster_state()
     if cluster.is_follower and is_write_tool(name):
-        logger.info("proxying_write_to_leader", tool=name, leader=cluster.leader_url)
+        from sylvan.cluster.websocket import proxy_to_leader
+
+        logger.info("proxying_write_to_leader", tool=name)
         return await proxy_to_leader(name, arguments)
 
     from sylvan.config import get_config
@@ -338,11 +345,17 @@ async def _dispatch(name: str, arguments: dict) -> dict:
     logger.info("tool_call_dispatching", tool=name, request_id=request_id)
 
     if _tool_semaphore is None:
-        _tool_semaphore = asyncio.Semaphore(8)
+        from sylvan.config import get_config as _get_dispatch_config
+
+        _dispatch_cfg = _get_dispatch_config()
+        _tool_semaphore = asyncio.Semaphore(_dispatch_cfg.server.max_concurrent_tools)
 
     async with using_context(ctx):
         try:
-            await asyncio.wait_for(_tool_semaphore.acquire(), timeout=30)
+            from sylvan.config import get_config as _get_timeout_config
+
+            _timeout = _get_timeout_config().server.request_timeout
+            await asyncio.wait_for(_tool_semaphore.acquire(), timeout=_timeout)
         except TimeoutError:
             return {"error": "server_busy", "detail": "Too many concurrent tool calls. Try again."}
 
@@ -708,10 +721,9 @@ async def _get_usage_stats(args: dict) -> dict:
 
     result["overall"] = await async_get_overall_usage(backend)
 
-    # Cluster: instances and coding sessions from DB
-    from sylvan.cluster.discovery import _is_pid_alive
+    # Cluster: nodes and coding sessions from DB
     from sylvan.cluster.state import get_cluster_state
-    from sylvan.database.orm import CodingSession, Instance
+    from sylvan.database.orm import ClusterNode, CodingSession, Instance
 
     cluster = get_cluster_state()
     result["cluster"] = {
@@ -732,29 +744,25 @@ async def _get_usage_stats(args: dict) -> dict:
             "instances_spawned": cs.instances_spawned,
         }
 
-    active_instances = await Instance.where_null("ended_at").order_by("role").order_by("last_heartbeat", "DESC").get()
-    instances_list = []
-    for inst in active_instances:
-        alive = _is_pid_alive(inst.pid)
-        eq = inst.efficiency_equivalent or 0
-        ret = inst.efficiency_returned or 0
-        instances_list.append(
+    nodes = await ClusterNode.query().order_by("role").order_by("last_seen", "DESC").get()
+    nodes_list = []
+    for node in nodes:
+        nodes_list.append(
             {
-                "instance_id": inst.instance_id,
-                "coding_session_id": inst.coding_session_id,
-                "pid": inst.pid,
-                "role": inst.role or "unknown",
-                "alive": alive,
-                "tool_calls": inst.tool_calls or 0,
-                "efficiency_returned": ret,
-                "efficiency_equivalent": eq,
-                "reduction_percent": round((1 - ret / eq) * 100, 1) if eq > 0 else 0,
-                "last_heartbeat": inst.last_heartbeat or "",
+                "node_id": node.node_id,
+                "coding_session_id": node.coding_session_id,
+                "pid": node.pid,
+                "role": node.role or "unknown",
+                "ws_port": node.ws_port,
+                "last_seen": node.last_seen or "",
             }
         )
-    result["cluster"]["instances"] = instances_list
-    result["cluster"]["active_count"] = sum(1 for s in instances_list if s["alive"])
-    result["cluster"]["total_tool_calls"] = sum(s["tool_calls"] for s in instances_list if s["alive"])
+    result["cluster"]["nodes"] = nodes_list
+    result["cluster"]["active_count"] = len(nodes_list)
+
+    active_instances = await Instance.active().get()
+    total_tool_calls = sum(inst.tool_calls or 0 for inst in active_instances)
+    result["cluster"]["total_tool_calls"] = total_tool_calls
 
     history_sessions = await CodingSession.query().order_by("started_at", "DESC").limit(10).get()
     history = []
