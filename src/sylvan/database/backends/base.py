@@ -135,7 +135,10 @@ class BaseBackend:
     async def transaction(self) -> AsyncIterator[None]:
         """Async context manager for atomic transactions.
 
-        Commits on successful exit, rolls back on exception.
+        Commits on success, rolls back on error. Subclasses may override
+        to issue explicit BEGIN (e.g., PostgreSQL). SQLite uses implicit
+        transactions via aiosqlite's deferred mode, so no explicit BEGIN
+        is needed.
 
         Yields:
             None.

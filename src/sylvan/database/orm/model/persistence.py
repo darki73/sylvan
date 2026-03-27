@@ -42,6 +42,9 @@ class _CrudMixin:
     async def save(self) -> Model:
         """INSERT or UPDATE this instance depending on persistence state.
 
+        On UPDATE, only writes columns that have changed (dirty tracking).
+        Snapshots the original state after a successful persist.
+
         Returns:
             This instance after persisting.
         """
@@ -56,10 +59,14 @@ class _CrudMixin:
         else:
             await self._save_insert(backend, fields, data)
 
+        self._snapshot_original()
         return self
 
     async def _save_update(self, backend: Any, fields: dict, data: dict) -> None:
         """Handle the UPDATE branch of save().
+
+        Only writes columns that have changed since loading. Skips the
+        UPDATE entirely if nothing is dirty.
 
         Args:
             backend: The active storage backend.
@@ -71,6 +78,20 @@ class _CrudMixin:
         pk_val = data.pop(pk_db, None)
         if pk_val is None:
             raise QueryError("Cannot update: no primary key value")
+
+        if self._original:
+            dirty = self.get_dirty()
+            if not dirty:
+                return
+            dirty_data = {}
+            for attr_name in dirty:
+                field = fields.get(attr_name)
+                if field:
+                    dirty_data[field.db_name] = field.to_db(getattr(self, attr_name, None))
+            if not dirty_data:
+                return
+            data = dirty_data
+
         set_parts = [f"{col} = ?" for col in data]
         params = [*data.values(), pk_val]
         sql = f"UPDATE {self.__table__} SET {', '.join(set_parts)} WHERE {pk_db} = ?"

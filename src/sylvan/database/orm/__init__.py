@@ -56,6 +56,7 @@ from sylvan.database.orm.primitives.scopes import scope
 from sylvan.database.orm.query.builder import QueryBuilder
 from sylvan.database.orm.query.execution import Avg, Count, Max, Min, Sum
 from sylvan.database.orm.runtime.connection_manager import get_backend
+from sylvan.database.orm.runtime.transaction import transaction
 
 __all__ = [
     "AutoPrimaryKey",
@@ -91,4 +92,5 @@ __all__ = [
     "Workspace",
     "get_backend",
     "scope",
+    "transaction",
 ]
