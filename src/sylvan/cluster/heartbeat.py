@@ -10,8 +10,6 @@ from sylvan.logging import get_logger
 
 logger = get_logger(__name__)
 
-_heartbeat_task: asyncio.Task | None = None
-
 
 async def ensure_coding_session(backend, coding_session_id: str) -> None:
     """Create the coding session row if it doesn't exist, and increment spawn count.
@@ -200,6 +198,97 @@ async def flush_instance_to_db(backend, session_tracker, cache, node_id: str, co
         await backend.commit()
 
 
+async def _try_promote(backend, node_id: str, coding_session_id: str) -> None:
+    """Check if the leader is dead and try to claim leadership.
+
+    Args:
+        backend: The async storage backend.
+        node_id: This node's identifier.
+        coding_session_id: The coding session ID.
+    """
+    from sylvan.config import get_config
+    from sylvan.database.orm import ClusterLock, ClusterNode
+
+    holder = await ClusterLock.holder()
+    logger.debug(
+        "try_promote_check",
+        node_id=node_id,
+        holder=holder.holder_id if holder else None,
+        holder_pid=holder.pid if holder else None,
+    )
+
+    if holder is not None and holder.holder_id == node_id:
+        return
+
+    if holder is not None and _is_pid_alive(holder.pid or 0):
+        logger.debug("try_promote_leader_alive", holder_pid=holder.pid)
+        return
+
+    cfg = get_config()
+
+    if hasattr(backend, "promote_to_leader"):
+        await backend.promote_to_leader()
+
+    claimed = await ClusterLock.claim(node_id, os.getpid(), stale_seconds=cfg.cluster.lock_stale_threshold)
+    logger.debug("try_promote_claim_result", claimed=claimed, node_id=node_id)
+    if not claimed:
+        if hasattr(backend, "enable_follower_mode"):
+            await backend.enable_follower_mode()
+        return
+
+    logger.info("promoting_to_leader", node_id=node_id)
+
+    from sylvan.cluster.state import ClusterState, set_cluster_state
+
+    set_cluster_state(
+        ClusterState(
+            role="leader",
+            session_id=node_id,
+            coding_session_id=coding_session_id,
+            leader_url=None,
+        )
+    )
+
+    existing = await ClusterNode.where(node_id=node_id).first()
+    now = datetime.now(UTC).isoformat()
+    if existing:
+        await ClusterNode.where(node_id=node_id).update(role="leader", ws_port=cfg.cluster.port)
+    else:
+        await ClusterNode.create(
+            node_id=node_id,
+            pid=os.getpid(),
+            role="leader",
+            ws_port=cfg.cluster.port,
+            connected_at=now,
+            last_seen=now,
+            coding_session_id=coding_session_id,
+        )
+    await backend.commit()
+
+    try:
+        from sylvan.cluster.websocket import stop_follower_connection
+
+        await stop_follower_connection()
+    except Exception as exc:
+        logger.debug("follower_ws_stop_on_promote_failed", error=str(exc))
+
+    try:
+        from sylvan.dashboard.server import start_dashboard
+
+        await start_dashboard()
+    except Exception as exc:
+        logger.debug("dashboard_start_on_promote_failed", error=str(exc))
+
+    try:
+        from sylvan.cluster.websocket import start_leader_pings
+
+        await start_leader_pings(interval=cfg.cluster.ws_ping_interval)
+    except Exception as exc:
+        logger.debug("leader_pings_on_promote_failed", error=str(exc))
+
+    logger.info("promoted_to_leader", node_id=node_id)
+
+
 async def start_heartbeat(
     backend,
     session_tracker,
@@ -223,7 +312,6 @@ async def start_heartbeat(
         role: Initial role (only used for first log message).
         interval: Seconds between heartbeat flushes.
     """
-    global _heartbeat_task
 
     async def _loop():
         while True:
@@ -232,24 +320,18 @@ async def start_heartbeat(
                 if state.is_leader:
                     await flush_instance_to_db(backend, session_tracker, cache, node_id, coding_session_id)
                     await cleanup_dead_nodes(backend)
+                else:
+                    await _try_promote(backend, node_id, coding_session_id)
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
                 logger.debug("heartbeat_error", error=str(exc))
             await asyncio.sleep(interval)
 
-    _heartbeat_task = asyncio.ensure_future(_loop())
+    from sylvan.server.lifecycle import get_lifecycle
 
-
-async def stop_heartbeat() -> None:
-    """Cancel the heartbeat task."""
-    global _heartbeat_task
-    if _heartbeat_task is not None:
-        _heartbeat_task.cancel()
-        _heartbeat_task = None
-
-
-def stop_heartbeat_sync() -> None:
-    """Cancel the heartbeat task (sync, for signal handlers)."""
-    global _heartbeat_task
-    if _heartbeat_task is not None:
-        _heartbeat_task.cancel()
-        _heartbeat_task = None
+    lifecycle = get_lifecycle()
+    if lifecycle:
+        lifecycle.spawn(_loop(), name="heartbeat")
+    else:
+        asyncio.ensure_future(_loop())

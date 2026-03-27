@@ -47,15 +47,21 @@ class ClusterLock(Model):
         Returns:
             True if this node is now the leader.
         """
+        import sqlite3
+
         now = datetime.now(UTC).isoformat()
         stale = (datetime.now(UTC) - timedelta(seconds=stale_seconds)).isoformat()
-        affected = (
-            await cls.where_null("pid")
-            .or_where_null("heartbeat_at")
-            .or_where("heartbeat_at", "<", stale)
-            .update(holder_id=node_id, pid=pid, claimed_at=now, heartbeat_at=now)
-        )
-        return affected > 0
+        try:
+            affected = (
+                await cls.where_null("pid")
+                .or_where_null("heartbeat_at")
+                .or_where("heartbeat_at", "<", stale)
+                .update(holder_id=node_id, pid=pid, claimed_at=now, heartbeat_at=now)
+            )
+            return affected > 0
+        except sqlite3.OperationalError:
+            # Database locked by another instance - they're the leader
+            return False
 
     @classmethod
     async def release(cls) -> None:

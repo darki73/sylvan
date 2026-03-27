@@ -157,25 +157,6 @@ def _register_signal_handlers() -> None:
         except Exception as exc:
             logger.warning("flush_all_failed_on_signal", error=str(exc))
         try:
-            from sylvan.cluster.heartbeat import stop_heartbeat_sync
-
-            stop_heartbeat_sync()
-        except Exception as exc:
-            logger.warning("stop_heartbeat_failed_on_signal", error=str(exc))
-        try:
-            from sylvan.cluster.websocket import disconnect_from_leader, stop_leader_pings
-
-            stop_leader_pings()
-            disconnect_from_leader()
-        except Exception as exc:
-            logger.warning("cluster_ws_cleanup_failed_on_signal", error=str(exc))
-        try:
-            from sylvan.dashboard.server import stop_dashboard_sync
-
-            stop_dashboard_sync()
-        except Exception as exc:
-            logger.warning("stop_dashboard_failed_on_signal", error=str(exc))
-        try:
             from sylvan.cluster.discovery import release_leadership_sync
 
             release_leadership_sync()
@@ -243,16 +224,26 @@ def main(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8420) ->
     _register_signal_handlers()
 
     from sylvan.server import server
+    from sylvan.server.lifecycle import ServerLifecycle
     from sylvan.server.transports import run_sse, run_stdio, run_streamable_http
+
+    async def _run_with_lifecycle(coro):
+        """Run the transport inside the lifecycle context manager.
+
+        All background tasks spawned via lifecycle.spawn() are
+        automatically cancelled when the transport coroutine returns.
+        """
+        async with ServerLifecycle():
+            await coro
 
     try:
         match transport:
             case "stdio":
-                asyncio.run(run_stdio(server))
+                asyncio.run(_run_with_lifecycle(run_stdio(server)))
             case "sse":
-                asyncio.run(run_sse(server, host=host, port=port))
+                asyncio.run(_run_with_lifecycle(run_sse(server, host=host, port=port)))
             case "http":
-                asyncio.run(run_streamable_http(server, host=host, port=port))
+                asyncio.run(_run_with_lifecycle(run_streamable_http(server, host=host, port=port)))
             case _:
                 logger.error("unknown_transport", transport=transport)
                 raise ValueError(f"Unknown transport: {transport!r}. Use stdio, sse, or http.")
@@ -264,25 +255,6 @@ def main(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8420) ->
             from sylvan.session.usage_stats import flush_all
 
             flush_all()
-        except Exception:  # noqa: S110 -- shutdown must not crash on cleanup
-            pass
-        try:
-            from sylvan.cluster.heartbeat import stop_heartbeat_sync
-
-            stop_heartbeat_sync()
-        except Exception:  # noqa: S110 -- shutdown must not crash on cleanup
-            pass
-        try:
-            from sylvan.cluster.websocket import disconnect_from_leader, stop_leader_pings
-
-            stop_leader_pings()
-            disconnect_from_leader()
-        except Exception:  # noqa: S110 -- shutdown must not crash on cleanup
-            pass
-        try:
-            from sylvan.dashboard.server import stop_dashboard_sync
-
-            stop_dashboard_sync()
         except Exception:  # noqa: S110 -- shutdown must not crash on cleanup
             pass
         from sylvan.cluster.discovery import release_leadership_sync

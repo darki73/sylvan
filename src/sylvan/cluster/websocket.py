@@ -19,7 +19,6 @@ logger = get_logger(__name__)
 
 # Leader-side: connected follower websockets
 _followers: dict[str, WebSocket] = {}
-_leader_ping_task: asyncio.Task | None = None
 
 
 # ── Leader side ──────────────────────────────────────────────────────
@@ -42,8 +41,11 @@ async def handle_follower_connection(websocket: WebSocket) -> None:
         raw = await websocket.receive_text()
         msg = protocol.decode(raw)
         follower_id = msg.get("node_id", "unknown")
+        follower_pid = msg.get("pid", 0)
         _followers[follower_id] = websocket
-        logger.info("follower_connected", follower_id=follower_id, total=len(_followers))
+        logger.info("follower_connected", follower_id=follower_id, pid=follower_pid, total=len(_followers))
+
+        await _register_follower_node(follower_id, follower_pid)
 
         while True:
             raw = await websocket.receive_text()
@@ -57,6 +59,61 @@ async def handle_follower_connection(websocket: WebSocket) -> None:
     finally:
         if follower_id and follower_id in _followers:
             del _followers[follower_id]
+        if follower_id:
+            await _unregister_follower_node(follower_id)
+
+
+async def _register_follower_node(follower_id: str, pid: int = 0) -> None:
+    """Register a follower node in the DB (leader-side).
+
+    Args:
+        follower_id: The follower's node identifier.
+        pid: The follower's OS process ID.
+    """
+    try:
+        from datetime import UTC, datetime
+
+        from sylvan.cluster.state import get_cluster_state
+        from sylvan.database.orm import ClusterNode
+        from sylvan.database.orm.runtime.connection_manager import get_backend
+
+        now = datetime.now(UTC).isoformat()
+        state = get_cluster_state()
+        backend = get_backend()
+
+        existing = await ClusterNode.where(node_id=follower_id).first()
+        if existing is None:
+            await ClusterNode.create(
+                node_id=follower_id,
+                pid=pid,
+                role="follower",
+                connected_at=now,
+                last_seen=now,
+                coding_session_id=state.coding_session_id,
+            )
+        elif existing.role != "leader":
+            await existing.update(role="follower", last_seen=now)
+
+        await backend.commit()
+        logger.info("follower_registered_in_db", follower_id=follower_id)
+    except Exception as exc:
+        logger.warning("follower_registration_failed", follower_id=follower_id, error=str(exc))
+
+
+async def _unregister_follower_node(follower_id: str) -> None:
+    """Remove a follower node from the DB on disconnect (leader-side).
+
+    Args:
+        follower_id: The follower's node identifier.
+    """
+    try:
+        from sylvan.database.orm import ClusterNode
+        from sylvan.database.orm.runtime.connection_manager import get_backend
+
+        await ClusterNode.where(node_id=follower_id).delete()
+        await get_backend().commit()
+    except Exception as exc:
+        logger.debug("follower_unregistration_failed", follower_id=follower_id, error=str(exc))
 
 
 async def _handle_leader_message(websocket: WebSocket, follower_id: str, msg: dict[str, Any]) -> None:
@@ -103,7 +160,6 @@ async def start_leader_pings(interval: int = 2) -> None:
     Args:
         interval: Seconds between pings.
     """
-    global _leader_ping_task
 
     async def _ping_loop():
         while True:
@@ -118,7 +174,13 @@ async def start_leader_pings(interval: int = 2) -> None:
                 _followers.pop(fid, None)
                 logger.info("follower_ping_failed", follower_id=fid)
 
-    _leader_ping_task = asyncio.ensure_future(_ping_loop())
+    from sylvan.server.lifecycle import get_lifecycle
+
+    lifecycle = get_lifecycle()
+    if lifecycle:
+        lifecycle.spawn(_ping_loop(), name="leader_pings")
+    else:
+        asyncio.ensure_future(_ping_loop())
 
 
 async def broadcast_step_down(new_leader: str | None = None) -> None:
@@ -136,19 +198,24 @@ async def broadcast_step_down(new_leader: str | None = None) -> None:
     logger.info("step_down_broadcast", followers=len(_followers))
 
 
-def stop_leader_pings() -> None:
-    """Cancel the leader ping task."""
-    global _leader_ping_task
-    if _leader_ping_task is not None:
-        _leader_ping_task.cancel()
-        _leader_ping_task = None
-
-
-# ── Follower side ────────────────────────────────────────────────────
-
 _follower_ws: Any = None
 _follower_task: asyncio.Task | None = None
 _pending_writes: dict[str, asyncio.Future] = {}
+_node_id: str = ""
+_coding_session_id: str = ""
+
+
+async def stop_follower_connection() -> None:
+    """Cancel the follower WebSocket client task.
+
+    Called during promotion to prevent the node from reconnecting
+    to itself as a follower after it becomes the new leader.
+    """
+    global _follower_task, _follower_ws
+    if _follower_task is not None:
+        _follower_task.cancel()
+        _follower_task = None
+    _follower_ws = None
 
 
 async def connect_to_leader(leader_url: str, node_id: str, on_step_down: Any = None) -> None:
@@ -163,34 +230,54 @@ async def connect_to_leader(leader_url: str, node_id: str, on_step_down: Any = N
         node_id: This follower's node identifier.
         on_step_down: Optional async callback when leader steps down.
     """
-    global _follower_task
 
     async def _run():
-        global _follower_ws
+        global _follower_ws, _node_id, _coding_session_id
         from websockets.asyncio.client import connect
+
+        from sylvan.cluster.state import get_cluster_state
+
+        state = get_cluster_state()
+        _node_id = node_id
+        _coding_session_id = state.coding_session_id
 
         ws_url = leader_url.replace("http://", "ws://") + "/ws/cluster"
 
-        async for ws in connect(ws_url, ping_interval=None, compression=None):
-            try:
-                _follower_ws = ws
-                await ws.send(protocol.encode({"type": "identify", "node_id": node_id}))
-                logger.info("connected_to_leader", url=ws_url)
+        try:
+            async for ws in connect(ws_url, ping_interval=None, compression=None):
+                try:
+                    _follower_ws = ws
+                    import os
 
-                async for raw in ws:
-                    msg = protocol.decode(raw)
-                    await _handle_follower_message(msg, on_step_down)
+                    await ws.send(protocol.encode({"type": "identify", "node_id": node_id, "pid": os.getpid()}))
+                    logger.info("connected_to_leader", url=ws_url)
 
-            except Exception as exc:
-                logger.warning("leader_connection_lost", error=str(exc))
-            finally:
-                _follower_ws = None
-                for fut in _pending_writes.values():
-                    if not fut.done():
-                        fut.set_exception(ConnectionError("Leader connection lost"))
-                _pending_writes.clear()
+                    async for raw in ws:
+                        msg = protocol.decode(raw)
+                        await _handle_follower_message(msg, on_step_down)
 
-    _follower_task = asyncio.ensure_future(_run())
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning("leader_connection_lost", error=str(exc))
+                finally:
+                    _follower_ws = None
+                    for fut in _pending_writes.values():
+                        if not fut.done():
+                            fut.set_exception(ConnectionError("Leader connection lost"))
+                    _pending_writes.clear()
+        except asyncio.CancelledError:
+            pass
+
+    global _follower_task
+
+    from sylvan.server.lifecycle import get_lifecycle
+
+    lifecycle = get_lifecycle()
+    if lifecycle:
+        _follower_task = lifecycle.spawn(_run(), name="follower_ws")
+    else:
+        _follower_task = asyncio.ensure_future(_run())
 
 
 async def _handle_follower_message(msg: dict[str, Any], on_step_down: Any = None) -> None:
@@ -219,6 +306,11 @@ async def _handle_follower_message(msg: dict[str, Any], on_step_down: Any = None
         logger.info("leader_stepping_down", new_leader=msg.get("new_leader"))
         if on_step_down:
             await on_step_down(msg.get("new_leader"))
+        else:
+            from sylvan.cluster.heartbeat import _try_promote
+            from sylvan.database.orm.runtime.connection_manager import get_backend
+
+            await _try_promote(get_backend(), _node_id, _coding_session_id)
 
 
 async def proxy_to_leader(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -251,12 +343,3 @@ async def proxy_to_leader(tool_name: str, arguments: dict[str, Any]) -> dict[str
     except Exception as exc:
         _pending_writes.pop(request_id, None)
         return {"error": "proxy_failed", "detail": str(exc)}
-
-
-def disconnect_from_leader() -> None:
-    """Cancel the follower connection task."""
-    global _follower_task, _follower_ws
-    if _follower_task is not None:
-        _follower_task.cancel()
-        _follower_task = None
-    _follower_ws = None
