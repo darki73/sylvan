@@ -82,22 +82,60 @@ class SQLiteBackend(BaseBackend):
         self._follower_mode: bool = False
 
     async def connect(self) -> None:
-        """Open both database connections and configure SQLite settings.
+        """Open a write connection for initial setup (migrations).
 
-        The write connection is opened normally. The read connection is
-        opened in read-only mode via SQLite URI. Both get WAL mode,
-        busy timeout, and sqlite-vec loaded.
+        After role discovery, call ``enable_follower_mode()`` to close
+        the write connection and switch to read-only, or keep it for
+        the leader.
         """
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         db_str = str(self.db_path)
         self._connection = await _open_connection(db_str, readonly=False)
         self._read_connection = await _open_connection(db_str, readonly=True)
 
-    async def disconnect(self) -> None:
-        """Close both database connections.
+    async def enable_leader_mode(self) -> None:
+        """Finalize as leader, keeping both connections open.
 
-        Checkpoints the WAL into the main database on the write
-        connection before closing.
+        The write connection stays active for all DB mutations.
+        Reads go through the write connection for consistency.
+        """
+        self._follower_mode = False
+        logger.debug("leader_mode_enabled")
+
+    async def enable_follower_mode(self) -> None:
+        """Finalize as follower by closing the write connection.
+
+        After this, only the read-only connection remains. Any write
+        attempt will raise RuntimeError. Call ``promote_to_leader()``
+        to reopen the write connection if this node becomes leader.
+        """
+        if self._connection is not None:
+            import contextlib
+
+            with contextlib.suppress(Exception):
+                await self._connection.close()
+            self._connection = None
+
+        self._follower_mode = True
+        logger.debug("follower_mode_enabled")
+
+    async def promote_to_leader(self) -> None:
+        """Reopen the write connection for a follower becoming leader.
+
+        Idempotent - returns immediately if the write connection is
+        already open.
+        """
+        if self._connection is not None:
+            return
+        db_str = str(self.db_path)
+        self._connection = await _open_connection(db_str, readonly=False)
+        self._follower_mode = False
+        logger.debug("promoted_to_writer")
+
+    async def disconnect(self) -> None:
+        """Close all open connections.
+
+        Checkpoints WAL on the write connection if available.
         """
         import contextlib
 
@@ -140,18 +178,6 @@ class SQLiteBackend(BaseBackend):
         if self._follower_mode and self._read_connection is not None:
             return self._read_connection
         return self.connection
-
-    def set_follower_mode(self, enabled: bool = True) -> None:
-        """Switch between follower (read-only) and leader (read-write) mode.
-
-        In follower mode, reads use the dedicated read-only connection.
-        In leader mode, reads use the write connection for consistency.
-
-        Args:
-            enabled: True for follower mode, False for leader mode.
-        """
-        self._follower_mode = enabled
-        logger.debug("follower_mode_changed", enabled=enabled)
 
     async def execute(self, sql: str, params: list[Any] | None = None) -> int:
         """Execute a write statement.

@@ -1,4 +1,13 @@
-"""Application context — dependency injection via contextvars."""
+"""Application context -- dependency injection for the ORM and tools.
+
+Two layers:
+- App state: module-level singleton holding backend, config, session, cache.
+  Set once at startup. Shared by all tasks.
+- Request state: contextvar holding per-request identity map.
+  Set by middleware and dispatch for each request/tool call.
+
+get_context() merges both into a SylvanContext for the ORM.
+"""
 
 import contextvars
 from collections.abc import AsyncIterator, Generator
@@ -13,16 +22,12 @@ logger = get_logger(__name__)
 
 @dataclass
 class SylvanContext:
-    """Holds all per-request dependencies.
-
-    The async ORM, tool handlers, and all other code access the storage
-    backend, config, session, and cache through this context rather than
-    global singletons.
+    """Merged view of app state + request state.
 
     Attributes:
-        backend: The async storage backend (SQLiteBackend, future PostgresBackend).
+        backend: The async storage backend.
         config: The application configuration.
-        session: The session tracker for this request chain.
+        session: The session tracker.
         cache: The query cache instance.
         identity_map: Per-request identity map for deduplicating loaded model instances.
     """
@@ -34,26 +39,70 @@ class SylvanContext:
     identity_map: Any = None
 
 
+@dataclass
+class _AppState:
+    """Process-wide singletons. Not a contextvar."""
+
+    backend: Any = None
+    config: Any = None
+    session: Any = None
+    cache: Any = None
+
+
+_app_state = _AppState()
+
+_identity_map_var: contextvars.ContextVar[Any] = contextvars.ContextVar("sylvan_identity_map", default=None)
+
+# Legacy contextvar kept for backward compatibility with tests and CLI
 _current_context: contextvars.ContextVar[SylvanContext | None] = contextvars.ContextVar("sylvan_context", default=None)
+
+
+def init_app_state(*, backend: Any, config: Any = None, session: Any = None, cache: Any = None) -> None:
+    """Initialize the process-wide app state. Called once at startup.
+
+    Args:
+        backend: The async storage backend.
+        config: The application configuration.
+        session: The session tracker.
+        cache: The query cache instance.
+    """
+    _app_state.backend = backend
+    _app_state.config = config
+    _app_state.session = session
+    _app_state.cache = cache
 
 
 def get_context() -> SylvanContext:
     """Get the current sylvan context.
 
-    Returns:
-        The active SylvanContext for the current execution context.
+    Merges the process-wide app state with the per-request identity map.
+    Falls back to the legacy contextvar if set (tests, CLI).
 
-    Raises:
-        RuntimeError: If no context has been set.
+    Returns:
+        The active SylvanContext.
     """
-    ctx = _current_context.get()
-    if ctx is not None:
-        return ctx
+    legacy = _current_context.get()
+    if legacy is not None:
+        return legacy
+
+    if _app_state.backend is not None:
+        from sylvan.database.orm.runtime.identity_map import IdentityMap
+
+        return SylvanContext(
+            backend=_app_state.backend,
+            config=_app_state.config,
+            session=_app_state.session,
+            cache=_app_state.cache,
+            identity_map=_identity_map_var.get() or IdentityMap(),
+        )
+
     return _build_default_context()
 
 
 def set_context(ctx: SylvanContext) -> contextvars.Token:
-    """Set the sylvan context for the current execution scope.
+    """Set the legacy context for the current execution scope.
+
+    Used by tests and CLI commands that set up their own context.
 
     Args:
         ctx: The context to make current.
@@ -65,7 +114,7 @@ def set_context(ctx: SylvanContext) -> contextvars.Token:
 
 
 def reset_context(token: contextvars.Token) -> None:
-    """Reset the context to its previous value.
+    """Reset the legacy context to its previous value.
 
     Args:
         token: The token returned by set_context().
@@ -73,12 +122,30 @@ def reset_context(token: contextvars.Token) -> None:
     _current_context.reset(token)
 
 
+def set_identity_map(identity_map: Any) -> contextvars.Token:
+    """Set the per-request identity map.
+
+    Args:
+        identity_map: The IdentityMap for this request.
+
+    Returns:
+        A token to reset it.
+    """
+    return _identity_map_var.set(identity_map)
+
+
+def reset_identity_map(token: contextvars.Token) -> None:
+    """Reset the per-request identity map.
+
+    Args:
+        token: The token returned by set_identity_map().
+    """
+    _identity_map_var.reset(token)
+
+
 @asynccontextmanager
 async def using_context(ctx: SylvanContext) -> AsyncIterator[SylvanContext]:
-    """Async context manager for setting a temporary context.
-
-    Useful in tests to inject mock dependencies and in the server
-    dispatch to set per-request context.
+    """Async context manager for setting a temporary legacy context.
 
     Args:
         ctx: The context to use within the block.
@@ -95,9 +162,7 @@ async def using_context(ctx: SylvanContext) -> AsyncIterator[SylvanContext]:
 
 @contextmanager
 def using_context_sync(ctx: SylvanContext) -> Generator[SylvanContext, None, None]:
-    """Sync context manager for setting a temporary context.
-
-    For use in synchronous code paths (CLI commands, tests).
+    """Sync context manager for setting a temporary legacy context.
 
     Args:
         ctx: The context to use within the block.
@@ -113,11 +178,10 @@ def using_context_sync(ctx: SylvanContext) -> Generator[SylvanContext, None, Non
 
 
 async def drain_pending_tasks() -> None:
-    """Await all background tasks spawned via ``create_task``.
+    """Await all background tasks spawned via create_task.
 
-    Call this before disconnecting the backend in CLI commands to ensure
-    fire-and-forget tasks (embeddings, summaries) complete before the
-    event loop shuts down.  Safe to call when no tasks are pending.
+    Call before disconnecting the backend in CLI commands to ensure
+    fire-and-forget tasks complete before the event loop shuts down.
     """
     import asyncio
 
@@ -128,9 +192,6 @@ async def drain_pending_tasks() -> None:
 
 def _build_default_context() -> SylvanContext:
     """Build a context from existing global singletons.
-
-    Provides backward compatibility during the async migration —
-    code that doesn't set up a context explicitly still works.
 
     Returns:
         A SylvanContext populated from global singletons.

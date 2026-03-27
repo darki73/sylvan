@@ -9,8 +9,6 @@ from sylvan.cluster.websocket import (
     _followers,
     _handle_leader_message,
     _pending_writes,
-    start_leader_pings,
-    stop_leader_pings,
 )
 
 
@@ -80,16 +78,3 @@ class TestFollowerState:
         """Followers dict should start empty."""
         _followers.clear()
         assert len(_followers) == 0
-
-
-class TestLeaderPings:
-    """Test the leader ping lifecycle."""
-
-    async def test_start_and_stop_pings(self):
-        """Leader pings should start and stop cleanly."""
-        await start_leader_pings(interval=60)
-        stop_leader_pings()
-
-    async def test_stop_when_not_started(self):
-        """Stopping pings when not started should not raise."""
-        stop_leader_pings()

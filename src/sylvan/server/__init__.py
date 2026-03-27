@@ -65,9 +65,18 @@ async def _get_or_create_backend():
 
         atexit.register(_shutdown_backend_sync)
 
-        # Cluster discovery -- determine leader/follower role via DB lock
         from sylvan.cluster.discovery import discover_role, generate_coding_session_id, generate_node_id
         from sylvan.cluster.state import ClusterState, set_cluster_state
+        from sylvan.context import init_app_state
+        from sylvan.database.orm.runtime.query_cache import get_query_cache
+        from sylvan.session.tracker import get_session
+
+        init_app_state(
+            backend=backend,
+            config=config,
+            session=get_session(),
+            cache=get_query_cache(),
+        )
 
         cluster_cfg = config.cluster
         if cluster_cfg.enabled:
@@ -78,9 +87,10 @@ async def _get_or_create_backend():
             coding_session_id = generate_coding_session_id()
             role, node_id = "leader", generate_node_id()
 
-        # Set follower mode on the backend so reads use the read-only connection
-        if role == "follower" and hasattr(backend, "set_follower_mode"):
-            backend.set_follower_mode(True)
+        if role == "follower" and hasattr(backend, "enable_follower_mode"):
+            await backend.enable_follower_mode()
+        elif hasattr(backend, "enable_leader_mode"):
+            await backend.enable_leader_mode()
 
         leader_url = None
         if role == "follower":
@@ -142,21 +152,28 @@ async def _get_or_create_backend():
             except Exception as exc:
                 logger.debug("node_cleanup_failed", error=str(exc))
 
-        # Create/update coding session row
-        try:
-            from sylvan.cluster.heartbeat import ensure_coding_session
+        # Create/update coding session row and register node (leader only)
+        if get_cluster_state().is_leader:
+            try:
+                from sylvan.cluster.heartbeat import ensure_coding_session
 
-            await ensure_coding_session(backend, coding_session_id)
-        except Exception as exc:
-            logger.debug("coding_session_init_failed", error=str(exc))
+                await ensure_coding_session(backend, coding_session_id)
+            except Exception as exc:
+                logger.debug("coding_session_init_failed", error=str(exc))
 
-        # Register this node in the cluster and start heartbeat
+            try:
+                from sylvan.cluster.heartbeat import register_node
+
+                await register_node(backend, node_id, coding_session_id, role, cluster_cfg.port)
+            except Exception as exc:
+                logger.debug("node_registration_failed", error=str(exc))
+
+        # Start heartbeat
         try:
-            from sylvan.cluster.heartbeat import register_node, start_heartbeat
+            from sylvan.cluster.heartbeat import start_heartbeat
             from sylvan.database.orm.runtime.query_cache import get_query_cache
             from sylvan.session.tracker import get_session as _get_heartbeat_session
 
-            await register_node(backend, node_id, coding_session_id, role, cluster_cfg.port)
             await start_heartbeat(
                 backend,
                 _get_heartbeat_session(),
@@ -191,26 +208,35 @@ def _shutdown_backend_sync() -> None:
     import contextlib
 
     aio_conn = _backend._connection
-    if aio_conn is None:
-        _backend = None
-        return
 
-    with contextlib.suppress(Exception):
-        from aiosqlite.core import _STOP_RUNNING_SENTINEL
+    def _stop_aio_connection(conn):
+        """Checkpoint, close, and stop an aiosqlite connection's worker thread."""
+        if conn is None:
+            return
+        with contextlib.suppress(Exception):
+            from aiosqlite.core import _STOP_RUNNING_SENTINEL
 
-        aio_conn._running = False
+            conn._running = False
 
-        def _checkpoint_close_and_stop():
-            """Run on aiosqlite's worker thread where the connection lives."""
-            with contextlib.suppress(Exception):
-                if aio_conn._connection is not None:
-                    aio_conn._connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-                    aio_conn._connection.close()
-                    aio_conn._connection = None
-            return _STOP_RUNNING_SENTINEL
+            def _close():
+                with contextlib.suppress(Exception):
+                    if conn._connection is not None:
+                        conn._connection.close()
+                        conn._connection = None
+                return _STOP_RUNNING_SENTINEL
 
-        aio_conn._tx.put_nowait((None, _checkpoint_close_and_stop))
-        aio_conn._thread.join(timeout=2)
+            conn._tx.put_nowait((None, _close))
+            conn._thread.join(timeout=2)
+
+    from sylvan.cluster.state import get_cluster_state
+
+    if get_cluster_state().is_leader:
+        with contextlib.suppress(Exception):
+            if aio_conn and aio_conn._connection is not None:
+                aio_conn._connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+    _stop_aio_connection(_backend._read_connection)
+    _stop_aio_connection(aio_conn)
 
     logger.info("backend_disconnected")
     _backend = None
@@ -295,13 +321,12 @@ async def _dispatch(name: str, arguments: dict) -> dict:
 
     import structlog
 
-    from sylvan.context import SylvanContext, using_context
     from sylvan.error_codes import SylvanError
 
     request_id = uuid.uuid4().hex[:8]
     structlog.contextvars.bind_contextvars(request_id=request_id)
 
-    backend = await _get_or_create_backend()
+    await _get_or_create_backend()
 
     # Gate: require workflow guide before real tools (checked early so
     # followers don't proxy write tools before the agent sees the rules)
@@ -354,18 +379,10 @@ async def _dispatch(name: str, arguments: dict) -> dict:
         logger.info("proxying_write_to_leader", tool=name)
         return await proxy_to_leader(name, arguments)
 
-    from sylvan.config import get_config
+    from sylvan.context import reset_identity_map, set_identity_map
     from sylvan.database.orm.runtime.identity_map import IdentityMap
-    from sylvan.database.orm.runtime.query_cache import get_query_cache
-    from sylvan.session.tracker import get_session
 
-    ctx = SylvanContext(
-        backend=backend,
-        config=get_config(),
-        session=get_session(),
-        cache=get_query_cache(),
-        identity_map=IdentityMap(),
-    )
+    _im_token = set_identity_map(IdentityMap())
 
     logger.info("tool_call_dispatching", tool=name, request_id=request_id)
 
@@ -375,7 +392,7 @@ async def _dispatch(name: str, arguments: dict) -> dict:
         _dispatch_cfg = _get_dispatch_config()
         _tool_semaphore = asyncio.Semaphore(_dispatch_cfg.server.max_concurrent_tools)
 
-    async with using_context(ctx):
+    try:
         try:
             from sylvan.config import get_config as _get_timeout_config
 
@@ -445,6 +462,8 @@ async def _dispatch(name: str, arguments: dict) -> dict:
         finally:
             _tool_semaphore.release()
             structlog.contextvars.unbind_contextvars("request_id")
+    finally:
+        reset_identity_map(_im_token)
 
 
 @functools.cache

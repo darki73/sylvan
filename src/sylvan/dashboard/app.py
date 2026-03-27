@@ -1034,10 +1034,7 @@ async def api_stats(request: Request) -> JSONResponse:
 
 
 async def _context_middleware(request: Request, call_next):
-    """Set up a SylvanContext for each dashboard request.
-
-    The dashboard runs outside the MCP dispatch, so it needs its own
-    context with the shared backend.
+    """Set a per-request identity map for each dashboard request.
 
     Args:
         request: The incoming HTTP request.
@@ -1046,23 +1043,15 @@ async def _context_middleware(request: Request, call_next):
     Returns:
         The HTTP response.
     """
-    from sylvan.config import get_config
-    from sylvan.context import SylvanContext, using_context
+    from sylvan.context import reset_identity_map, set_identity_map
     from sylvan.database.orm.runtime.identity_map import IdentityMap
-    from sylvan.database.orm.runtime.query_cache import get_query_cache
-    from sylvan.server import _get_or_create_backend
-    from sylvan.session.tracker import get_session
 
-    backend = await _get_or_create_backend()
-    ctx = SylvanContext(
-        backend=backend,
-        config=get_config(),
-        session=get_session(),
-        cache=get_query_cache(),
-        identity_map=IdentityMap(),
-    )
-    async with using_context(ctx):
+    token = set_identity_map(IdentityMap())
+    try:
         response = await call_next(request)
+    finally:
+        reset_identity_map(token)
+    return response
     return response
 
 
