@@ -180,8 +180,29 @@ class QuerySqlMixin:
             else:
                 base_sql += f" ORDER BY {', '.join(self._order_bys)}"
 
+        if self._group_bys:
+            if "ORDER BY" in base_sql:
+                group_pos = base_sql.index("ORDER BY")
+            else:
+                group_pos = len(base_sql)
+            base_sql = base_sql[:group_pos] + f"GROUP BY {', '.join(self._group_bys)} " + base_sql[group_pos:]
+
+        if self._having:
+            having_clauses = []
+            for h_clause, h_params in self._having:
+                having_clauses.append(h_clause)
+                params.extend(h_params)
+            if "ORDER BY" in base_sql:
+                having_pos = base_sql.index("ORDER BY")
+            else:
+                having_pos = len(base_sql)
+            base_sql = base_sql[:having_pos] + f"HAVING {' AND '.join(having_clauses)} " + base_sql[having_pos:]
+
         if self._limit_val is not None:
             base_sql += " LIMIT ?"
             params.append(self._limit_val)
+        if self._offset_val is not None:
+            base_sql += " OFFSET ?"
+            params.append(self._offset_val)
 
         return self._translate_placeholders(base_sql), params

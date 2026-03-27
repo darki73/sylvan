@@ -131,6 +131,11 @@ class QuerySearchMixin:
         fts_builder._wheres = list(self._wheres)
         fts_builder._joins = list(self._joins)
         fts_builder._join_set = set(self._join_set)
+        fts_builder._order_bys = list(self._order_bys)
+        fts_builder._group_bys = list(self._group_bys)
+        fts_builder._having = list(self._having)
+        fts_builder._selects = list(self._selects)
+        fts_builder._select_raws = list(self._select_raws)
         fts_builder._limit_val = (self._limit_val or 20) * 2
         fts_sql, fts_params = fts_builder._build_fts_sql()
         fts_rows = await self.backend.fetch_all(fts_sql, fts_params)
@@ -142,7 +147,7 @@ class QuerySearchMixin:
         if not fts_results and not vec_results:
             return []
 
-        pk = self._model.__vec_column__ or "id"
+        pk = self._model._pk_column
         fts_weight = 1.0 - self._vec_weight
 
         merged = reciprocal_rank_fusion(

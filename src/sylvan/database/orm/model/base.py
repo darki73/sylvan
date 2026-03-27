@@ -99,6 +99,7 @@ class Model(_CrudMixin, _QueryMixin, _BulkMixin, metaclass=ModelMeta):
                 object.__setattr__(self, k, v)
 
         self._persisted = kwargs.get("_persisted", False)
+        self._original: dict[str, Any] = {}
 
     @classmethod
     def _get_fields(cls) -> dict[str, Column]:
@@ -153,6 +154,8 @@ class Model(_CrudMixin, _QueryMixin, _BulkMixin, metaclass=ModelMeta):
         kwargs["_persisted"] = True
         instance = cls.__new__(cls)
         Model.__init__(instance, **kwargs)
+
+        instance._snapshot_original()
 
         if identity_map is not None:
             pk_val = getattr(instance, cls._pk_column, None)
@@ -315,6 +318,57 @@ class Model(_CrudMixin, _QueryMixin, _BulkMixin, metaclass=ModelMeta):
         }
         kwargs.update(overrides)
         return self.__class__(**kwargs)
+
+    def _snapshot_original(self) -> None:
+        """Take a snapshot of current field values as the original state."""
+        fields = self._get_fields()
+        self._original = {attr: getattr(self, attr, None) for attr in fields}
+
+    def is_dirty(self, column: str | None = None) -> bool:
+        """Check if the model (or a specific column) has changed since loading.
+
+        Args:
+            column: Optional attribute name to check. If None, checks all fields.
+
+        Returns:
+            True if the model or the specified column has unsaved changes.
+        """
+        if not self._original:
+            return True
+        if column is not None:
+            return getattr(self, column, None) != self._original.get(column)
+        fields = self._get_fields()
+        return any(getattr(self, attr, None) != self._original.get(attr) for attr in fields)
+
+    def get_dirty(self) -> dict[str, Any]:
+        """Return a dict of changed fields and their current values.
+
+        Returns:
+            Dict mapping attribute names to their new (unsaved) values.
+        """
+        if not self._original:
+            fields = self._get_fields()
+            return {attr: getattr(self, attr, None) for attr in fields}
+        dirty = {}
+        fields = self._get_fields()
+        for attr in fields:
+            current = getattr(self, attr, None)
+            if current != self._original.get(attr):
+                dirty[attr] = current
+        return dirty
+
+    def get_original(self, column: str | None = None) -> Any:
+        """Return the original value(s) from when the model was loaded.
+
+        Args:
+            column: Optional attribute name. If None, returns all originals.
+
+        Returns:
+            The original value for a specific column, or a dict of all originals.
+        """
+        if column is not None:
+            return self._original.get(column)
+        return dict(self._original)
 
     def __eq__(self, other: object) -> bool:
         """Compare by primary key if both instances are persisted.
