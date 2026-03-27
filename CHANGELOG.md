@@ -1,5 +1,57 @@
 # Changelog
 
+## 1.5.0
+
+### Cluster redesign
+
+- SQLite-based leader election via `cluster_lock` table (replaces leader.json)
+- WebSocket protocol for all inter-node communication (replaces HTTP proxy)
+- Dual DB connections: leader keeps read + write, followers close write after startup
+- Dynamic leader failover: step_down broadcast on graceful shutdown, follower promotion via heartbeat
+- Write proxy over WebSocket with request/response multiplexing
+- Per-instance log buffering for followers (ring buffer with WebSocket flush)
+- ServerLifecycle context manager for background task ownership
+- New models: ClusterLock, ClusterNode
+- Migration 002: cluster tables with coding session stats preservation
+- Cluster error types: LeaderUnreachableError, ProxyError, ElectionError, ClusterNotReadyError
+- Dashboard shows all cluster nodes with live status
+- `websockets` added as dependency
+
+### ORM hardening
+
+- Operator support in where(): `.where("score", ">", 50)` with operator whitelist
+- `where("col", None)` auto-converts to IS NULL
+- OR variants: or_where_null, or_where_not_null, or_where_in, or_where_not_in, or_where_between
+- Multi-column: where_any, where_all, where_none, where_column
+- increment/decrement on query builder
+- Column name validation on all where methods and pluck
+- Dirty tracking: is_dirty(), get_dirty(), get_original(), optimized save
+- Transaction context manager: `from sylvan.database.orm import transaction`
+- BelongsToMany eager loading (was silently skipped)
+- Fix SQL injection in to_subquery()
+- Fix _save_update using wrong PK column name
+- Fix update() setting attrs before DB write
+- Fix paginate/chunk mutating builder state
+- Fix exists() using COUNT instead of SELECT 1
+- Fix COALESCE(0) on Max/Min aggregates
+- Fix bulk_create exceeding SQLite 999-param limit
+- Fix text PK handling in _save_insert
+- FTS: OFFSET support, GROUP BY/HAVING, hybrid search RRF key fix
+- Identity map size limit (2000 entries, FIFO eviction)
+- JsonColumn: empty []/\{} serialized as "[]"/"\{}" instead of NULL
+- Remove dead soft-delete checks, QueryResult class, with_trashed/only_trashed
+
+### Config
+
+- Merge dashboard_port into ClusterConfig.port
+- Read semaphore/timeout from config in dispatch (was hardcoded)
+- Add ws_ping_interval, lock_stale_threshold to ClusterConfig
+
+### Context
+
+- Split into app state (module singleton) + request state (contextvar identity map)
+- init_app_state() called once at startup, works across all async tasks
+
 ## 1.4.2
 
 - Deep keyword extraction for k8s resources (all nested keys and values searchable)
