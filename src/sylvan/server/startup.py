@@ -163,6 +163,13 @@ def _register_signal_handlers() -> None:
         except Exception as exc:
             logger.warning("stop_heartbeat_failed_on_signal", error=str(exc))
         try:
+            from sylvan.cluster.websocket import disconnect_from_leader, stop_leader_pings
+
+            stop_leader_pings()
+            disconnect_from_leader()
+        except Exception as exc:
+            logger.warning("cluster_ws_cleanup_failed_on_signal", error=str(exc))
+        try:
             from sylvan.dashboard.server import stop_dashboard_sync
 
             stop_dashboard_sync()
@@ -263,6 +270,13 @@ def main(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8420) ->
             from sylvan.cluster.heartbeat import stop_heartbeat_sync
 
             stop_heartbeat_sync()
+        except Exception:  # noqa: S110 -- shutdown must not crash on cleanup
+            pass
+        try:
+            from sylvan.cluster.websocket import disconnect_from_leader, stop_leader_pings
+
+            stop_leader_pings()
+            disconnect_from_leader()
         except Exception:  # noqa: S110 -- shutdown must not crash on cleanup
             pass
         try:

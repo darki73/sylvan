@@ -33,6 +33,7 @@ dependencies = [
     "jinja2>=3.1,<4.0",
     "uvicorn>=0.30.0,<1.0.0",
     "starlette>=0.38.0,<2.0.0",
+    "websockets>=16.0",
 ]
 
 [project.optional-dependencies]

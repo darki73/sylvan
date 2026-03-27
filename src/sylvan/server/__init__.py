@@ -96,7 +96,7 @@ async def _get_or_create_backend():
         )
         logger.info("cluster_role_set", role=role, node_id=node_id, coding_session_id=coding_session_id)
 
-        # Start dashboard only if we're the leader
+        # Start dashboard + WebSocket server (leader) or connect to leader (follower)
         from sylvan.cluster.state import get_cluster_state
 
         if get_cluster_state().is_leader:
@@ -106,16 +106,41 @@ async def _get_or_create_backend():
                 await start_dashboard()
             except Exception as exc:
                 logger.debug("dashboard_start_skipped", error=str(exc))
+
+            try:
+                from sylvan.cluster.websocket import start_leader_pings
+
+                await start_leader_pings(interval=cluster_cfg.ws_ping_interval)
+            except Exception as exc:
+                logger.debug("leader_pings_start_failed", error=str(exc))
         else:
             logger.info("dashboard_skipped_follower")
 
-        # Clean up dead instances from previous runs
-        try:
-            from sylvan.cluster.heartbeat import cleanup_dead_instances
+            try:
+                from sylvan.cluster.websocket import connect_to_leader
 
-            await cleanup_dead_instances(backend)
-        except Exception as exc:
-            logger.debug("instance_cleanup_failed", error=str(exc))
+                await connect_to_leader(leader_url, node_id)
+            except Exception as exc:
+                logger.debug("leader_connection_failed", error=str(exc))
+
+            try:
+                import logging
+
+                from sylvan.cluster.logging import ClusterLogHandler
+
+                handler = ClusterLogHandler(node_id=node_id, role="follower")
+                logging.getLogger().addHandler(handler)
+            except Exception as exc:
+                logger.debug("cluster_log_handler_failed", error=str(exc))
+
+        # Clean up dead nodes from previous runs (leader only)
+        if get_cluster_state().is_leader:
+            try:
+                from sylvan.cluster.heartbeat import cleanup_dead_nodes
+
+                await cleanup_dead_nodes(backend)
+            except Exception as exc:
+                logger.debug("node_cleanup_failed", error=str(exc))
 
         # Create/update coding session row
         try:
@@ -319,7 +344,7 @@ async def _dispatch(name: str, arguments: dict) -> dict:
         return gate_response
 
     # If we're a follower and this is a write tool, proxy to leader
-    from sylvan.cluster.proxy import is_write_tool
+    from sylvan.cluster import is_write_tool
     from sylvan.cluster.state import get_cluster_state
 
     cluster = get_cluster_state()

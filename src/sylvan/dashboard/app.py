@@ -1075,7 +1075,6 @@ def create_dashboard_app() -> Starlette:
     from starlette.middleware import Middleware
     from starlette.middleware.base import BaseHTTPMiddleware
 
-    from sylvan.cluster.api import handle_heartbeat, handle_proxy
     from sylvan.cluster.websocket import handle_follower_connection
 
     routes = [
@@ -1088,8 +1087,6 @@ def create_dashboard_app() -> Starlette:
         Route("/extensions", extensions_page),
         Route("/history", history_page),
         Route("/api/stats", api_stats),
-        Route("/api/proxy", handle_proxy, methods=["POST"]),
-        Route("/api/session/heartbeat", handle_heartbeat, methods=["POST"]),
         WebSocketRoute("/ws/cluster", handle_follower_connection),
         Route("/htmx/stats", overview_partial),
         Route("/htmx/quality", quality_partial),
