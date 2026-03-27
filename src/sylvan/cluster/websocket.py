@@ -154,10 +154,12 @@ _pending_writes: dict[str, asyncio.Future] = {}
 async def connect_to_leader(leader_url: str, node_id: str, on_step_down: Any = None) -> None:
     """Connect to the leader's WebSocket endpoint as a follower.
 
-    Maintains the connection in a background task with auto-reconnect.
+    Uses websockets' built-in auto-reconnect iterator. On each successful
+    connection, identifies the follower and processes messages until disconnect.
+    Reconnection with exponential backoff is handled automatically.
 
     Args:
-        leader_url: The leader's WebSocket URL (ws://...).
+        leader_url: The leader's HTTP URL (auto-converted to ws://).
         node_id: This follower's node identifier.
         on_step_down: Optional async callback when leader steps down.
     """
@@ -165,30 +167,28 @@ async def connect_to_leader(leader_url: str, node_id: str, on_step_down: Any = N
 
     async def _run():
         global _follower_ws
-        import websockets
+        from websockets.asyncio.client import connect
 
-        while True:
+        ws_url = leader_url.replace("http://", "ws://") + "/ws/cluster"
+
+        async for ws in connect(ws_url, ping_interval=None, compression=None):
             try:
-                ws_url = leader_url.replace("http://", "ws://") + "/ws/cluster"
-                async with websockets.connect(ws_url) as ws:
-                    _follower_ws = ws
-                    # Identify ourselves
-                    await ws.send(protocol.encode({"type": "identify", "node_id": node_id}))
-                    logger.info("connected_to_leader", url=ws_url)
+                _follower_ws = ws
+                await ws.send(protocol.encode({"type": "identify", "node_id": node_id}))
+                logger.info("connected_to_leader", url=ws_url)
 
-                    async for raw in ws:
-                        msg = protocol.decode(raw)
-                        await _handle_follower_message(msg, on_step_down)
+                async for raw in ws:
+                    msg = protocol.decode(raw)
+                    await _handle_follower_message(msg, on_step_down)
 
             except Exception as exc:
                 logger.warning("leader_connection_lost", error=str(exc))
+            finally:
                 _follower_ws = None
-                # Reject pending writes
                 for fut in _pending_writes.values():
                     if not fut.done():
                         fut.set_exception(ConnectionError("Leader connection lost"))
                 _pending_writes.clear()
-                await asyncio.sleep(2)
 
     _follower_task = asyncio.ensure_future(_run())
 
@@ -239,7 +239,7 @@ async def proxy_to_leader(tool_name: str, arguments: dict[str, Any]) -> dict[str
         return {"error": "leader_unreachable", "detail": "Not connected to leader WebSocket."}
 
     request_id = protocol.make_id()
-    future: asyncio.Future = asyncio.get_event_loop().create_future()
+    future: asyncio.Future = asyncio.get_running_loop().create_future()
     _pending_writes[request_id] = future
 
     try:
