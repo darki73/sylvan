@@ -1,6 +1,6 @@
 """Schema builder — the migration-facing API for DDL operations.
 
-Provides a fluent, Laravel-style interface for creating, modifying, and
+Provides a fluent interface for creating, modifying, and
 dropping tables, FTS5 virtual tables, sqlite-vec tables, triggers, and
 indexes.  Compiles to SQL and executes against the storage backend.
 

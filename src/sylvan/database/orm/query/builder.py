@@ -125,8 +125,6 @@ class QueryBuilder[T: "Model"](
         self._vec_vector: list[float] | None = None
         self._vec_k: int = 20
         self._vec_weight: float = 0.3
-        self._include_trashed: bool = False
-        self._only_trashed: bool = False
 
     def __repr__(self) -> str:
         """Show the SQL this builder would generate."""
@@ -339,22 +337,4 @@ class QueryBuilder[T: "Model"](
         """
         if condition:
             return callback(self)
-        return self
-
-    def with_trashed(self) -> QueryBuilder[T]:
-        """Include soft-deleted records in results.
-
-        Returns:
-            This builder for chaining.
-        """
-        self._include_trashed = True
-        return self
-
-    def only_trashed(self) -> QueryBuilder[T]:
-        """Return only soft-deleted records.
-
-        Returns:
-            This builder for chaining.
-        """
-        self._only_trashed = True
         return self

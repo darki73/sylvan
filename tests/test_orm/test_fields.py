@@ -94,13 +94,13 @@ class TestJsonColumn:
         val = col.to_db({"key": "value"})
         assert json.loads(val) == {"key": "value"}
 
-    def test_to_db_empty_list_returns_none(self):
+    def test_to_db_empty_list_returns_json(self):
         col = JsonColumn(list)
-        assert col.to_db([]) is None
+        assert col.to_db([]) == "[]"
 
-    def test_to_db_empty_dict_returns_none(self):
+    def test_to_db_empty_dict_returns_json(self):
         col = JsonColumn(dict)
-        assert col.to_db({}) is None
+        assert col.to_db({}) == "{}"
 
     def test_to_db_none_returns_none(self):
         col = JsonColumn(list)

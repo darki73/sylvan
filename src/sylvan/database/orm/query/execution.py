@@ -63,17 +63,23 @@ class Avg(_AggregateExpr):
 
 
 class Max(_AggregateExpr):
-    """MAX aggregate expression."""
+    """MAX aggregate expression. Returns NULL (not 0) for empty sets."""
 
     def __init__(self, column: str) -> None:
         super().__init__(column, "MAX")
 
+    def to_sql(self, alias: str) -> str:
+        return f"{self.func}({self.column}) AS {alias}"
+
 
 class Min(_AggregateExpr):
-    """MIN aggregate expression."""
+    """MIN aggregate expression. Returns NULL (not 0) for empty sets."""
 
     def __init__(self, column: str) -> None:
         super().__init__(column, "MIN")
+
+    def to_sql(self, alias: str) -> str:
+        return f"{self.func}({self.column}) AS {alias}"
 
 
 class Count(_AggregateExpr):
@@ -192,8 +198,13 @@ class QueryExecutionMixin:
         sql, params = self._build_sql(select_override=column)
         if params:
             for param in params:
-                if isinstance(param, str):
-                    sql = sql.replace("?", f"'{param}'", 1)
+                if param is None:
+                    sql = sql.replace("?", "NULL", 1)
+                elif isinstance(param, str):
+                    escaped = param.replace("'", "''")
+                    sql = sql.replace("?", f"'{escaped}'", 1)
+                elif isinstance(param, bool):
+                    sql = sql.replace("?", "1" if param else "0", 1)
                 else:
                     sql = sql.replace("?", str(param), 1)
         return sql
@@ -214,9 +225,11 @@ class QueryExecutionMixin:
         total = next(iter(row.values())) if row else 0
         pages = math.ceil(total / per_page) if per_page > 0 else 0
 
+        saved_limit, saved_offset = self._limit_val, self._offset_val
         self._limit_val = per_page
         self._offset_val = (page - 1) * per_page
         data = await self.get()
+        self._limit_val, self._offset_val = saved_limit, saved_offset
 
         return {
             "data": data,
@@ -343,7 +356,12 @@ class QueryExecutionMixin:
         Returns:
             True if at least one record matches.
         """
-        return await self.limit(1).count() > 0
+        saved_limit = self._limit_val
+        self._limit_val = 1
+        sql, params = self._build_sql(select_override="1")
+        self._limit_val = saved_limit
+        row = await self.backend.fetch_one(sql, params)
+        return row is not None
 
     async def pluck(self, column: str) -> list:
         """Return a flat list of a single column's values.
@@ -354,6 +372,9 @@ class QueryExecutionMixin:
         Returns:
             List of scalar values from the specified column.
         """
+        from sylvan.database.orm.query.where import _validate_column
+
+        _validate_column(column)
         sql, params = self._build_sql(select_override=column)
         rows = await self.backend.fetch_all(sql, params)
         return [next(iter(r.values())) for r in rows]
@@ -398,6 +419,46 @@ class QueryExecutionMixin:
             sql += f" WHERE {where_sql}"
         return await self.backend.execute(self._translate_placeholders(sql), set_params + where_params)
 
+    async def increment(self, column: str, amount: int | float = 1, **extra: Any) -> int:
+        """Increment a column's value on matching rows.
+
+        Args:
+            column: Column to increment.
+            amount: Amount to add (default 1).
+            **extra: Additional columns to update alongside the increment.
+
+        Returns:
+            Number of rows updated.
+        """
+        table = self._model.__table__
+        fields = self._model._get_fields()
+        set_parts = [f"{column} = {column} + ?"]
+        set_params: list[Any] = [amount]
+        for col, val in extra.items():
+            field = fields.get(col)
+            if field:
+                val = field.to_db(val)
+            set_parts.append(f"{col} = ?")
+            set_params.append(val)
+        where_sql, where_params = self._build_where()
+        sql = f"UPDATE {table} SET {', '.join(set_parts)}"
+        if where_sql:
+            sql += f" WHERE {where_sql}"
+        return await self.backend.execute(self._translate_placeholders(sql), set_params + where_params)
+
+    async def decrement(self, column: str, amount: int | float = 1, **extra: Any) -> int:
+        """Decrement a column's value on matching rows.
+
+        Args:
+            column: Column to decrement.
+            amount: Amount to subtract (default 1).
+            **extra: Additional columns to update alongside the decrement.
+
+        Returns:
+            Number of rows updated.
+        """
+        return await self.increment(column, -amount, **extra)
+
     @classmethod
     async def raw(cls, model_class: type[Model], sql: str, params: list | None = None) -> list:
         """Execute raw SQL and return model instances.
@@ -419,25 +480,30 @@ class QueryExecutionMixin:
     async def chunk(self, size: int, callback: Any) -> None:
         """Process results in chunks to avoid loading everything into RAM.
 
-        The callback can be either sync or async.
+        The callback can be either sync or async. The builder's limit/offset
+        state is preserved after chunking completes.
 
         Args:
             size: Number of records per chunk.
             callback: Callable receiving each chunk (list of instances).
         """
+        saved_limit, saved_offset = self._limit_val, self._offset_val
         offset = 0
-        while True:
-            results = await self.limit(size).offset(offset).get()
-            if not results:
-                break
-            result = callback(results)
-            if inspect.isawaitable(result):
-                await result
-            if len(results) < size:
-                break
-            offset += size
-            self._limit_val = None
-            self._offset_val = None
+        try:
+            while True:
+                self._limit_val = size
+                self._offset_val = offset
+                results = await self.get()
+                if not results:
+                    break
+                result = callback(results)
+                if inspect.isawaitable(result):
+                    await result
+                if len(results) < size:
+                    break
+                offset += size
+        finally:
+            self._limit_val, self._offset_val = saved_limit, saved_offset
 
     def _log_query(self, sql: str, params: list) -> None:
         """Log the query if debug mode is enabled.

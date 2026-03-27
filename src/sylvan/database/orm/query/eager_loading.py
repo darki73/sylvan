@@ -31,12 +31,14 @@ class QueryEagerMixin:
             if rel_desc is None:
                 continue
 
-            from sylvan.database.orm.primitives.relations import BelongsTo, HasMany, HasOne
+            from sylvan.database.orm.primitives.relations import BelongsTo, BelongsToMany, HasMany, HasOne
 
             if isinstance(rel_desc, BelongsTo):
                 await self._eager_load_belongs_to(instances, rel_name, rel_desc)
             elif isinstance(rel_desc, (HasMany, HasOne)):
                 await self._eager_load_has(instances, rel_name, rel_desc)
+            elif isinstance(rel_desc, BelongsToMany):
+                await self._eager_load_belongs_to_many(instances, rel_name, rel_desc)
 
     async def _eager_load_belongs_to(self, instances: list, rel_name: str, rel_desc: Any) -> None:
         """Eager-load a BelongsTo relation for all instances.
@@ -90,6 +92,54 @@ class QueryEagerMixin:
             for inst in instances:
                 lv = getattr(inst, rel_desc.local_key)
                 object.__setattr__(inst, f"_rel_{rel_name}", lookup_one.get(lv))
+
+    async def _eager_load_belongs_to_many(self, instances: list, rel_name: str, rel_desc: Any) -> None:
+        """Eager-load a BelongsToMany relation for all instances.
+
+        Queries the pivot table first to find mappings, then loads the
+        related model instances in a single batch.
+
+        Args:
+            instances: List of model instances.
+            rel_name: Name of the relation being loaded.
+            rel_desc: The BelongsToMany descriptor.
+        """
+        local_values = [
+            getattr(inst, rel_desc.local_key) for inst in instances if getattr(inst, rel_desc.local_key) is not None
+        ]
+        if not local_values:
+            return
+
+        ph = ", ".join("?" for _ in local_values)
+        pivot_sql = (
+            f"SELECT {rel_desc.foreign_key}, {rel_desc.related_key} "
+            f"FROM {rel_desc.pivot_table} "
+            f"WHERE {rel_desc.foreign_key} IN ({ph})"
+        )
+        pivot_rows = await self.backend.fetch_all(pivot_sql, local_values)
+
+        related_ids = list({r[rel_desc.related_key] for r in pivot_rows})
+        if not related_ids:
+            for inst in instances:
+                object.__setattr__(inst, f"_rel_{rel_name}", [])
+            return
+
+        related_model = rel_desc.related_model
+        related_pk = related_model._pk_column
+        related_instances = await related_model.where_in(related_pk, related_ids).get()
+        related_lookup = {getattr(r, related_pk): r for r in related_instances}
+
+        mapping: dict[Any, list] = {}
+        for row in pivot_rows:
+            fk = row[rel_desc.foreign_key]
+            rk = row[rel_desc.related_key]
+            related_inst = related_lookup.get(rk)
+            if related_inst is not None:
+                mapping.setdefault(fk, []).append(related_inst)
+
+        for inst in instances:
+            lv = getattr(inst, rel_desc.local_key)
+            object.__setattr__(inst, f"_rel_{rel_name}", mapping.get(lv, []))
 
     async def _load_eager_counts(self, instances: list) -> None:
         """Batch-load relation counts for a list of instances.

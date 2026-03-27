@@ -129,7 +129,7 @@ class JsonColumn(Column):
         Returns:
             A JSON string, or None for empty or None values.
         """
-        if value is None or (isinstance(value, (list, dict)) and not value):
+        if value is None:
             return None
         return json.dumps(value)
 

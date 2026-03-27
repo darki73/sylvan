@@ -92,7 +92,10 @@ class _BulkMixin:
 
         backend = get_backend()
 
-        valid_cols = set(cls._get_fields().keys())
+        fields = cls._get_fields()
+        valid_db_cols = {f.db_name for f in fields.values()}
+        valid_attr_cols = set(fields.keys())
+        valid_cols = valid_db_cols | valid_attr_cols
         for col in conflict_columns:
             if col not in valid_cols:
                 raise QueryError(f"Invalid conflict column: {col!r}")
@@ -201,16 +204,16 @@ class _BulkMixin:
 
     @classmethod
     async def bulk_create(cls, records: list[dict]) -> int:
-        """Insert multiple records in a single SQL statement.
+        """Insert multiple records in batches.
 
-        Much faster than calling ``create()`` in a loop — one round-trip
-        instead of N.
+        Respects SQLite's 999-parameter limit by automatically splitting
+        into multiple INSERT statements when necessary.
 
         Args:
             records: List of dicts mapping column names to values.
 
         Returns:
-            Number of records inserted.
+            Total number of records inserted.
         """
         if not records:
             return 0
@@ -227,19 +230,25 @@ class _BulkMixin:
             data = {k: v for k, v in data.items() if k != pk_field.db_name}
         cols = list(data.keys())
         row_placeholder = "(" + ", ".join("?" for _ in cols) + ")"
+        batch_size = max(1, 999 // len(cols)) if cols else len(records)
 
-        all_values: list = []
-        value_rows: list[str] = []
-        for record in records:
-            instance = cls(**record)
-            row_data = instance._to_dict()
-            if pk_field and pk_field.primary_key and row_data.get(pk_field.db_name) is None:
-                row_data = {k: v for k, v in row_data.items() if k != pk_field.db_name}
-            all_values.extend(row_data.get(col) for col in cols)
-            value_rows.append(row_placeholder)
+        total = 0
+        for i in range(0, len(records), batch_size):
+            batch = records[i : i + batch_size]
+            all_values: list = []
+            value_rows: list[str] = []
+            for record in batch:
+                instance = cls(**record)
+                row_data = instance._to_dict()
+                if pk_field and pk_field.primary_key and row_data.get(pk_field.db_name) is None:
+                    row_data = {k: v for k, v in row_data.items() if k != pk_field.db_name}
+                all_values.extend(row_data.get(col) for col in cols)
+                value_rows.append(row_placeholder)
 
-        sql = f"INSERT INTO {cls.__table__} ({', '.join(cols)}) VALUES {', '.join(value_rows)}"
-        return await backend.execute(_translate_sql(backend, sql), all_values)
+            sql = f"INSERT INTO {cls.__table__} ({', '.join(cols)}) VALUES {', '.join(value_rows)}"
+            total += await backend.execute(_translate_sql(backend, sql), all_values)
+
+        return total
 
     @classmethod
     async def bulk_upsert(
