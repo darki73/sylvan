@@ -262,7 +262,7 @@ class Blueprint:
         return col
 
     def string(self, name: str) -> Column:
-        """TEXT column (Laravel-style alias for text).
+        """TEXT column (alias for text).
 
         Args:
             name: Column name.

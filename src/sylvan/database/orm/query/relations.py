@@ -124,8 +124,6 @@ class QueryRelationMixin:
         subq = (
             f"SELECT 1 FROM {related_table} WHERE {related_table}.{rel_desc.local_key} = {table}.{rel_desc.foreign_key}"
         )
-        if getattr(related_model, "__soft_deletes__", False):
-            subq += f" AND {related_table}.deleted_at IS NULL"
         return subq, []
 
     def _build_has_relation_subquery(self, rel_desc: Any, table: str) -> tuple[str, list]:
@@ -143,6 +141,4 @@ class QueryRelationMixin:
         subq = (
             f"SELECT 1 FROM {related_table} WHERE {related_table}.{rel_desc.foreign_key} = {table}.{rel_desc.local_key}"
         )
-        if getattr(related_model, "__soft_deletes__", False):
-            subq += f" AND {related_table}.deleted_at IS NULL"
         return subq, []

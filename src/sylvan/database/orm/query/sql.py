@@ -19,18 +19,12 @@ class QuerySqlMixin:
     self: QueryBuilder
 
     def _get_all_wheres(self) -> list[tuple[str, list, str]]:
-        """Return the wheres list including auto-injected soft delete clauses.
+        """Return the accumulated wheres list.
 
         Returns:
             List of (clause, params, connector) tuples.
         """
-        wheres = list(self._wheres)
-        if getattr(self._model, "__soft_deletes__", False):
-            if self._only_trashed:
-                wheres.append(("deleted_at IS NOT NULL", [], "AND"))
-            elif not self._include_trashed:
-                wheres.append(("deleted_at IS NULL", [], "AND"))
-        return wheres
+        return list(self._wheres)
 
     def _build_where(self) -> tuple[str, list]:
         """Build the WHERE clause string and params from accumulated wheres.

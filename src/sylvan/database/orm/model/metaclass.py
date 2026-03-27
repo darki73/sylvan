@@ -54,6 +54,12 @@ class ModelMeta(type):
                 attr_val._attr_name = attr_name
                 fields[attr_name] = attr_val
                 if attr_val.primary_key:
+                    if pk_column is not None:
+                        raise TypeError(
+                            f"Model {name} has multiple primary keys: "
+                            f"{pk_column!r} and {attr_name!r}. "
+                            f"Only one Column(primary_key=True) is allowed."
+                        )
                     pk_column = attr_name
             elif isinstance(attr_val, RelationDescriptor):
                 attr_val._attr_name = attr_name

@@ -67,12 +67,13 @@ class _CrudMixin:
             data: Serialized column-to-value mapping.
         """
         pk_field = fields.get(self._pk_column)
-        pk_val = data.pop(pk_field.db_name if pk_field else self._pk_column, None)
+        pk_db = pk_field.db_name if pk_field else self._pk_column
+        pk_val = data.pop(pk_db, None)
         if pk_val is None:
             raise QueryError("Cannot update: no primary key value")
         set_parts = [f"{col} = ?" for col in data]
         params = [*data.values(), pk_val]
-        sql = f"UPDATE {self.__table__} SET {', '.join(set_parts)} WHERE {self._pk_column} = ?"
+        sql = f"UPDATE {self.__table__} SET {', '.join(set_parts)} WHERE {pk_db} = ?"
         await backend.execute(
             _translate_sql(backend, sql),
             params,
@@ -104,6 +105,8 @@ class _CrudMixin:
     async def update(self, **kwargs: Any) -> Model:
         """Update specific fields on this instance and persist to the database.
 
+        Executes the UPDATE query first, then sets attributes on success.
+
         Args:
             **kwargs: Field name to new value mappings.
 
@@ -114,8 +117,6 @@ class _CrudMixin:
 
         backend = get_backend()
         fields = self._get_fields()
-        for k, v in kwargs.items():
-            object.__setattr__(self, k, v)
 
         pk_field = fields.get(self._pk_column)
         pk_db = pk_field.db_name if pk_field else self._pk_column
@@ -131,6 +132,9 @@ class _CrudMixin:
         params.append(pk_val)
         sql = f"UPDATE {self.__table__} SET {', '.join(set_parts)} WHERE {pk_db} = ?"
         await backend.execute(_translate_sql(backend, sql), params)
+
+        for k, v in kwargs.items():
+            object.__setattr__(self, k, v)
         return self
 
     async def delete(self) -> None:
@@ -138,8 +142,11 @@ class _CrudMixin:
         from sylvan.database.orm.runtime.connection_manager import get_backend
 
         backend = get_backend()
+        fields = self._get_fields()
+        pk_field = fields.get(self._pk_column)
+        pk_db = pk_field.db_name if pk_field else self._pk_column
         pk_val = getattr(self, self._pk_column)
-        sql = f"DELETE FROM {self.__table__} WHERE {self._pk_column} = ?"
+        sql = f"DELETE FROM {self.__table__} WHERE {pk_db} = ?"
         await backend.execute(_translate_sql(backend, sql), [pk_val])
         self._persisted = False
 
@@ -148,6 +155,6 @@ class _CrudMixin:
 
             ctx = get_context()
             if ctx.identity_map is not None:
-                ctx.identity_map.remove(type(self), getattr(self, self._pk_column))
+                ctx.identity_map.remove(type(self), pk_val)
         except Exception:  # noqa: S110 -- identity map cleanup is best-effort
             pass

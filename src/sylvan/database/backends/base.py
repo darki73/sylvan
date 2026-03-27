@@ -1,67 +1,8 @@
-"""Storage backend protocol — the contract every database backend must fulfill."""
+"""Storage backend protocol -- the contract every database backend must fulfill."""
 
-from collections.abc import AsyncIterator, ItemsView, KeysView, ValuesView
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
-
-
-@dataclass(slots=True, frozen=True)
-class QueryResult:
-    """A single row returned from a query.
-
-    Attributes:
-        data: Dict mapping column names to values.
-    """
-
-    data: dict[str, Any]
-
-    def __getitem__(self, key: str) -> Any:
-        """Access a column value by name.
-
-        Args:
-            key: Column name.
-
-        Returns:
-            The column value.
-        """
-        return self.data[key]
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """Access a column value with a default.
-
-        Args:
-            key: Column name.
-            default: Value to return if key is missing.
-
-        Returns:
-            The column value, or default.
-        """
-        return self.data.get(key, default)
-
-    def keys(self) -> KeysView[str]:
-        """Return column names.
-
-        Returns:
-            Dict keys view of column names.
-        """
-        return self.data.keys()
-
-    def values(self) -> ValuesView[Any]:
-        """Return column values.
-
-        Returns:
-            Dict values view of column values.
-        """
-        return self.data.values()
-
-    def items(self) -> ItemsView[str, Any]:
-        """Return column name-value pairs.
-
-        Returns:
-            Dict items view of (name, value) pairs.
-        """
-        return self.data.items()
 
 
 @runtime_checkable
