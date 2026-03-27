@@ -338,11 +338,17 @@ async def _dispatch(name: str, arguments: dict) -> dict:
     logger.info("tool_call_dispatching", tool=name, request_id=request_id)
 
     if _tool_semaphore is None:
-        _tool_semaphore = asyncio.Semaphore(8)
+        from sylvan.config import get_config as _get_dispatch_config
+
+        _dispatch_cfg = _get_dispatch_config()
+        _tool_semaphore = asyncio.Semaphore(_dispatch_cfg.server.max_concurrent_tools)
 
     async with using_context(ctx):
         try:
-            await asyncio.wait_for(_tool_semaphore.acquire(), timeout=30)
+            from sylvan.config import get_config as _get_timeout_config
+
+            _timeout = _get_timeout_config().server.request_timeout
+            await asyncio.wait_for(_tool_semaphore.acquire(), timeout=_timeout)
         except TimeoutError:
             return {"error": "server_busy", "detail": "Too many concurrent tool calls. Try again."}
 
@@ -708,10 +714,9 @@ async def _get_usage_stats(args: dict) -> dict:
 
     result["overall"] = await async_get_overall_usage(backend)
 
-    # Cluster: instances and coding sessions from DB
-    from sylvan.cluster.discovery import _is_pid_alive
+    # Cluster: nodes and coding sessions from DB
     from sylvan.cluster.state import get_cluster_state
-    from sylvan.database.orm import CodingSession, Instance
+    from sylvan.database.orm import ClusterNode, CodingSession, Instance
 
     cluster = get_cluster_state()
     result["cluster"] = {
@@ -732,29 +737,25 @@ async def _get_usage_stats(args: dict) -> dict:
             "instances_spawned": cs.instances_spawned,
         }
 
-    active_instances = await Instance.where_null("ended_at").order_by("role").order_by("last_heartbeat", "DESC").get()
-    instances_list = []
-    for inst in active_instances:
-        alive = _is_pid_alive(inst.pid)
-        eq = inst.efficiency_equivalent or 0
-        ret = inst.efficiency_returned or 0
-        instances_list.append(
+    nodes = await ClusterNode.query().order_by("role").order_by("last_seen", "DESC").get()
+    nodes_list = []
+    for node in nodes:
+        nodes_list.append(
             {
-                "instance_id": inst.instance_id,
-                "coding_session_id": inst.coding_session_id,
-                "pid": inst.pid,
-                "role": inst.role or "unknown",
-                "alive": alive,
-                "tool_calls": inst.tool_calls or 0,
-                "efficiency_returned": ret,
-                "efficiency_equivalent": eq,
-                "reduction_percent": round((1 - ret / eq) * 100, 1) if eq > 0 else 0,
-                "last_heartbeat": inst.last_heartbeat or "",
+                "node_id": node.node_id,
+                "coding_session_id": node.coding_session_id,
+                "pid": node.pid,
+                "role": node.role or "unknown",
+                "ws_port": node.ws_port,
+                "last_seen": node.last_seen or "",
             }
         )
-    result["cluster"]["instances"] = instances_list
-    result["cluster"]["active_count"] = sum(1 for s in instances_list if s["alive"])
-    result["cluster"]["total_tool_calls"] = sum(s["tool_calls"] for s in instances_list if s["alive"])
+    result["cluster"]["nodes"] = nodes_list
+    result["cluster"]["active_count"] = len(nodes_list)
+
+    active_instances = await Instance.active().get()
+    total_tool_calls = sum(inst.tool_calls or 0 for inst in active_instances)
+    result["cluster"]["total_tool_calls"] = total_tool_calls
 
     history_sessions = await CodingSession.query().order_by("started_at", "DESC").limit(10).get()
     history = []

@@ -6,6 +6,8 @@ Import from here or from sylvan.database.orm directly:
 """
 
 from sylvan.database.orm.models.blob import Blob
+from sylvan.database.orm.models.cluster_lock import ClusterLock
+from sylvan.database.orm.models.cluster_node import ClusterNode
 from sylvan.database.orm.models.coding_session import CodingSession
 from sylvan.database.orm.models.file_import import FileImport
 from sylvan.database.orm.models.file_record import FileRecord
@@ -20,6 +22,8 @@ from sylvan.database.orm.models.workspace import Workspace
 
 __all__ = [
     "Blob",
+    "ClusterLock",
+    "ClusterNode",
     "CodingSession",
     "FileImport",
     "FileRecord",
