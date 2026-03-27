@@ -65,32 +65,36 @@ async def _get_or_create_backend():
 
         atexit.register(_shutdown_backend_sync)
 
-        # Cluster discovery -- determine leader/follower role
-        from sylvan.cluster.discovery import discover_role
+        # Cluster discovery -- determine leader/follower role via DB lock
+        from sylvan.cluster.discovery import discover_role, generate_coding_session_id, generate_node_id
         from sylvan.cluster.state import ClusterState, set_cluster_state
 
         cluster_cfg = config.cluster
         if cluster_cfg.enabled:
-            role, session_id, coding_session_id, leader_info = discover_role(cluster_cfg.port)
+            role, node_id, coding_session_id = await discover_role(
+                stale_seconds=cluster_cfg.lock_stale_threshold,
+            )
         else:
-            from datetime import UTC, datetime
+            coding_session_id = generate_coding_session_id()
+            role, node_id = "leader", generate_node_id()
 
-            coding_session_id = f"cs-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
-            role, session_id, leader_info = "leader", "standalone", None
+        # Set follower mode on the backend so reads use the read-only connection
+        if role == "follower" and hasattr(backend, "set_follower_mode"):
+            backend.set_follower_mode(True)
 
         leader_url = None
-        if role == "follower" and leader_info:
-            leader_url = f"http://127.0.0.1:{leader_info.get('http_port', cluster_cfg.port)}"
+        if role == "follower":
+            leader_url = f"http://127.0.0.1:{cluster_cfg.port}"
 
         set_cluster_state(
             ClusterState(
                 role=role,
-                session_id=session_id,
+                session_id=node_id,
                 coding_session_id=coding_session_id,
                 leader_url=leader_url,
             )
         )
-        logger.info("cluster_role_set", role=role, session_id=session_id, coding_session_id=coding_session_id)
+        logger.info("cluster_role_set", role=role, node_id=node_id, coding_session_id=coding_session_id)
 
         # Start dashboard only if we're the leader
         from sylvan.cluster.state import get_cluster_state
@@ -121,17 +125,18 @@ async def _get_or_create_backend():
         except Exception as exc:
             logger.debug("coding_session_init_failed", error=str(exc))
 
-        # Start heartbeat for instance persistence
+        # Register this node in the cluster and start heartbeat
         try:
-            from sylvan.cluster.heartbeat import start_heartbeat
+            from sylvan.cluster.heartbeat import register_node, start_heartbeat
             from sylvan.database.orm.runtime.query_cache import get_query_cache
             from sylvan.session.tracker import get_session as _get_heartbeat_session
 
+            await register_node(backend, node_id, coding_session_id, role, cluster_cfg.port)
             await start_heartbeat(
                 backend,
                 _get_heartbeat_session(),
                 get_query_cache(),
-                session_id,
+                node_id,
                 coding_session_id,
                 role,
                 interval=cluster_cfg.heartbeat_interval,

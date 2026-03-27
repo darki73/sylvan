@@ -21,18 +21,43 @@ async def ensure_coding_session(backend, coding_session_id: str) -> None:
         backend: The async storage backend.
         coding_session_id: The coding session identifier.
     """
-    now = datetime.now(UTC).isoformat()
-    existing = await backend.fetch_one("SELECT id FROM coding_sessions WHERE id = ?", [coding_session_id])
+    from sylvan.database.orm import CodingSession
+
+    existing = await CodingSession.where(id=coding_session_id).first()
     if existing is None:
-        await backend.execute(
-            "INSERT INTO coding_sessions (id, started_at, instances_spawned) VALUES (?, ?, 1)",
-            [coding_session_id, now],
+        now = datetime.now(UTC).isoformat()
+        await CodingSession.create(
+            id=coding_session_id,
+            started_at=now,
+            instances_spawned=1,
         )
     else:
-        await backend.execute(
-            "UPDATE coding_sessions SET instances_spawned = instances_spawned + 1 WHERE id = ?",
-            [coding_session_id],
-        )
+        await CodingSession.where(id=coding_session_id).increment("instances_spawned")
+    await backend.commit()
+
+
+async def register_node(backend, node_id: str, coding_session_id: str, role: str, port: int) -> None:
+    """Register this node in the cluster_nodes table.
+
+    Args:
+        backend: The async storage backend.
+        node_id: Unique node identifier.
+        coding_session_id: The coding session this node belongs to.
+        role: Node role (leader or follower).
+        port: The cluster/dashboard port.
+    """
+    from sylvan.database.orm import ClusterNode
+
+    now = datetime.now(UTC).isoformat()
+    await ClusterNode.create(
+        node_id=node_id,
+        pid=os.getpid(),
+        role=role,
+        ws_port=port if role == "leader" else None,
+        connected_at=now,
+        last_seen=now,
+        coding_session_id=coding_session_id,
+    )
     await backend.commit()
 
 

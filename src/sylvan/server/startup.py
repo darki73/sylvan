@@ -169,11 +169,11 @@ def _register_signal_handlers() -> None:
         except Exception as exc:
             logger.warning("stop_dashboard_failed_on_signal", error=str(exc))
         try:
-            from sylvan.cluster.discovery import cleanup_leader
+            from sylvan.cluster.discovery import release_leadership_sync
 
-            cleanup_leader()
+            release_leadership_sync()
         except Exception as exc:
-            logger.warning("cleanup_leader_failed_on_signal", error=str(exc))
+            logger.warning("release_leadership_failed_on_signal", error=str(exc))
         try:
             from sylvan.server import _shutdown_backend_sync
 
@@ -271,9 +271,9 @@ def main(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8420) ->
             stop_dashboard_sync()
         except Exception:  # noqa: S110 -- shutdown must not crash on cleanup
             pass
-        from sylvan.cluster.discovery import cleanup_leader
+        from sylvan.cluster.discovery import release_leadership_sync
 
-        cleanup_leader()
+        release_leadership_sync()
         from sylvan.server import _shutdown_backend_sync
 
         _shutdown_backend_sync()
