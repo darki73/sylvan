@@ -7,7 +7,7 @@ from jinja2 import Environment, FileSystemLoader
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
-from starlette.routing import Route
+from starlette.routing import Route, WebSocketRoute
 
 from sylvan.logging import get_logger
 
@@ -50,40 +50,43 @@ _jinja.globals["format_duration"] = _format_duration
 
 
 async def _get_cluster_sessions() -> list[dict]:
-    """Get all cluster instances from the DB instances table.
+    """Get all cluster nodes and their stats from the DB.
 
     Returns:
-        List of instance info dicts for rendering in the template.
+        List of node info dicts for rendering in the template.
     """
     from sylvan.cluster.discovery import _is_pid_alive
-    from sylvan.database.orm import Instance
+    from sylvan.database.orm import ClusterNode, Instance
 
-    instances = await Instance.query().order_by("role").order_by("last_heartbeat", "DESC").get()
+    nodes = await ClusterNode.query().order_by("role").order_by("last_seen", "DESC").get()
     sessions = []
 
-    for inst in instances:
-        pid = inst.pid or 0
-        ended = inst.ended_at
-        alive = not ended and _is_pid_alive(pid)
-        eq = inst.efficiency_equivalent or 0
-        ret = inst.efficiency_returned or 0
+    for node in nodes:
+        pid = node.pid or 0
+        alive = _is_pid_alive(pid)
+
+        # Get the latest instance stats for this node
+        inst = await Instance.where(node_id=node.node_id).where_null("ended_at").first()
+        eq = (inst.efficiency_equivalent or 0) if inst else 0
+        ret = (inst.efficiency_returned or 0) if inst else 0
+
         sessions.append(
             {
-                "session_id": inst.instance_id or "",
-                "coding_session_id": inst.coding_session_id or "",
+                "session_id": node.node_id or "",
+                "coding_session_id": node.coding_session_id or "",
                 "pid": pid,
-                "role": inst.role or "unknown",
+                "role": node.role or "unknown",
                 "alive": alive,
-                "tool_calls": inst.tool_calls or 0,
-                "tokens_returned": inst.tokens_returned or 0,
-                "tokens_avoided": inst.tokens_avoided or 0,
+                "tool_calls": (inst.tool_calls or 0) if inst else 0,
+                "tokens_returned": (inst.tokens_returned or 0) if inst else 0,
+                "tokens_avoided": (inst.tokens_avoided or 0) if inst else 0,
                 "efficiency_returned": ret,
                 "efficiency_equivalent": eq,
                 "reduction_percent": round((1 - ret / eq) * 100, 1) if eq > 0 else 0,
-                "symbols_retrieved": inst.symbols_retrieved or 0,
-                "queries": inst.queries or 0,
-                "category_data": inst.category_data or {},
-                "last_heartbeat": inst.last_heartbeat or "",
+                "symbols_retrieved": (inst.symbols_retrieved or 0) if inst else 0,
+                "queries": (inst.queries or 0) if inst else 0,
+                "category_data": (inst.category_data or {}) if inst else {},
+                "last_heartbeat": node.last_seen or "",
             }
         )
     return sessions
@@ -1071,6 +1074,7 @@ def create_dashboard_app() -> Starlette:
     from starlette.middleware.base import BaseHTTPMiddleware
 
     from sylvan.cluster.api import handle_heartbeat, handle_proxy
+    from sylvan.cluster.websocket import handle_follower_connection
 
     routes = [
         Route("/", overview),
@@ -1084,6 +1088,7 @@ def create_dashboard_app() -> Starlette:
         Route("/api/stats", api_stats),
         Route("/api/proxy", handle_proxy, methods=["POST"]),
         Route("/api/session/heartbeat", handle_heartbeat, methods=["POST"]),
+        WebSocketRoute("/ws/cluster", handle_follower_connection),
         Route("/htmx/stats", overview_partial),
         Route("/htmx/quality", quality_partial),
         Route("/htmx/search", search_results),

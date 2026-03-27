@@ -319,12 +319,14 @@ async def _dispatch(name: str, arguments: dict) -> dict:
         return gate_response
 
     # If we're a follower and this is a write tool, proxy to leader
-    from sylvan.cluster.proxy import is_write_tool, proxy_to_leader
+    from sylvan.cluster.proxy import is_write_tool
     from sylvan.cluster.state import get_cluster_state
 
     cluster = get_cluster_state()
     if cluster.is_follower and is_write_tool(name):
-        logger.info("proxying_write_to_leader", tool=name, leader=cluster.leader_url)
+        from sylvan.cluster.websocket import proxy_to_leader
+
+        logger.info("proxying_write_to_leader", tool=name)
         return await proxy_to_leader(name, arguments)
 
     from sylvan.config import get_config
