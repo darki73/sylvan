@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from sylvan.database.orm.exceptions import ModelNotFoundError, QueryError
 from sylvan.database.orm.query.builder import QueryBuilder
+from sylvan.database.orm.query.where import _UNSET
 
 if TYPE_CHECKING:
     from sylvan.database.orm.model.base import Model
@@ -41,18 +42,33 @@ class _QueryMixin:
         return QueryBuilder(cls)
 
     @classmethod
-    def where(cls, _col: str | dict | None = None, _val: Any = None, **kwargs: Any) -> QueryBuilder:
+    def where(
+        cls,
+        _col: str | dict | None = None,
+        _op_or_val: Any = _UNSET,
+        _val: Any = _UNSET,
+        **kwargs: Any,
+    ) -> QueryBuilder:
         """Start a filtered query with WHERE clause(s).
+
+        Supports the same styles as QueryBuilder.where::
+
+            Model.where(kind="function")              # kwargs
+            Model.where("kind", "function")           # positional equality
+            Model.where("score", ">", 50)             # operator form
+            Model.where({"kind": "function"})          # dict
+            Model.where("name", None)                 # IS NULL
 
         Args:
             _col: Column name, dict of conditions, or None.
-            _val: Value to match when _col is a string.
+            _op_or_val: Operator (three-arg) or value (two-arg).
+            _val: Value when using three-arg operator form.
             **kwargs: Additional column=value conditions.
 
         Returns:
             A QueryBuilder with the WHERE clauses applied.
         """
-        return QueryBuilder(cls).where(_col, _val, **kwargs)
+        return QueryBuilder(cls).where(_col, _op_or_val, _val, **kwargs)
 
     @classmethod
     def where_in(cls, column: str, values: list) -> QueryBuilder:

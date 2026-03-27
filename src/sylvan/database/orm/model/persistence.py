@@ -119,7 +119,8 @@ class _CrudMixin:
             _translate_sql(backend, sql),
             vals,
         )
-        if pk_field and pk_field.primary_key and row_id is not None:
+        current_pk = getattr(self, self._pk_column, None)
+        if pk_field and pk_field.primary_key and row_id is not None and current_pk is None:
             object.__setattr__(self, self._pk_column, row_id)
         self._persisted = True
 

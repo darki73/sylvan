@@ -672,25 +672,27 @@ async def history_page(request: Request) -> HTMLResponse:
     # Daily usage stats
     daily_stats = []
     try:
-        from sylvan.database.orm.runtime.connection_manager import get_backend
+        from sylvan.database.orm import UsageStats
 
-        backend = get_backend()
-        rows = await backend.fetch_all(
-            "SELECT us.date, r.name as repo, us.sessions, us.tool_calls, "
-            "us.symbols_retrieved, us.sections_retrieved, us.tokens_avoided "
-            "FROM usage_stats us JOIN repos r ON r.id = us.repo_id "
-            "ORDER BY us.date DESC, us.tool_calls DESC LIMIT 100"
+        stats_rows = (
+            await UsageStats.query()
+            .join(f"JOIN repos r ON r.id = {UsageStats.__table__}.repo_id")
+            .select("r.name as repo")
+            .order_by("date", "DESC")
+            .order_by("tool_calls", "DESC")
+            .limit(100)
+            .get()
         )
-        for row in rows:
+        for row in stats_rows:
             daily_stats.append(
                 {
-                    "date": row["date"],
-                    "repo": row["repo"],
-                    "sessions": row["sessions"] or 0,
-                    "tool_calls": row["tool_calls"] or 0,
-                    "symbols_retrieved": row["symbols_retrieved"] or 0,
-                    "sections_retrieved": row["sections_retrieved"] or 0,
-                    "tokens_avoided": row["tokens_avoided"] or 0,
+                    "date": row.date or "",
+                    "repo": getattr(row, "repo", ""),
+                    "sessions": row.sessions or 0,
+                    "tool_calls": row.tool_calls or 0,
+                    "symbols_retrieved": row.symbols_retrieved or 0,
+                    "sections_retrieved": row.sections_retrieved or 0,
+                    "tokens_avoided": row.tokens_avoided or 0,
                 }
             )
     except Exception:  # noqa: S110 -- usage_stats table may not exist yet

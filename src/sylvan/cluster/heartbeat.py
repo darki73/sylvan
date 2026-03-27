@@ -1,7 +1,6 @@
-"""Heartbeat -- persist instance stats and push to leader."""
+"""Heartbeat -- node registration, stats persistence, dead instance cleanup."""
 
 import asyncio
-import json
 import os
 from datetime import UTC, datetime, timedelta
 
@@ -15,7 +14,7 @@ _heartbeat_task: asyncio.Task | None = None
 
 
 async def ensure_coding_session(backend, coding_session_id: str) -> None:
-    """Create the coding_sessions row if it doesn't exist, and increment instances_spawned.
+    """Create the coding session row if it doesn't exist, and increment spawn count.
 
     Args:
         backend: The async storage backend.
@@ -61,286 +60,183 @@ async def register_node(backend, node_id: str, coding_session_id: str, role: str
     await backend.commit()
 
 
-async def cleanup_dead_instances(backend) -> int:
-    """Mark instances whose PIDs are no longer alive as ended.
+async def cleanup_dead_nodes(backend) -> int:
+    """Remove cluster nodes whose PIDs are no longer alive.
 
-    For each dead instance, merges its stats into the parent coding_sessions
-    row and sets ``ended_at``. If all instances of a coding session are dead,
-    also sets ``ended_at`` on the coding session.
+    For each dead node's instances, merges stats into the parent coding
+    session and marks the instance as ended. Purges instances older than
+    7 days.
 
     Args:
         backend: The async storage backend.
 
     Returns:
-        Number of instances marked as dead.
+        Number of nodes cleaned up.
     """
-    rows = await backend.fetch_all(
-        "SELECT instance_id, pid, coding_session_id, tool_calls, tokens_returned, "
-        "tokens_avoided, efficiency_returned, efficiency_equivalent, "
-        "symbols_retrieved, sections_retrieved, queries "
-        "FROM instances WHERE ended_at IS NULL"
-    )
+    from sylvan.database.orm import ClusterNode, CodingSession, Instance
+
+    nodes = await ClusterNode.query().get()
     dead_count = 0
     affected_sessions: set[str] = set()
 
-    for r in rows:
-        if _is_pid_alive(r["pid"]):
+    for node in nodes:
+        if _is_pid_alive(node.pid):
             continue
 
         now = datetime.now(UTC).isoformat()
-        instance_id = r["instance_id"]
-        cs_id = r["coding_session_id"]
 
-        # Mark instance as ended
-        await backend.execute(
-            "UPDATE instances SET ended_at = ? WHERE instance_id = ?",
-            [now, instance_id],
-        )
+        # Mark active instances for this node as ended
+        active_instances = await Instance.where(node_id=node.node_id).where_null("ended_at").get()
+        for inst in active_instances:
+            await Instance.where(instance_id=inst.instance_id).update(ended_at=now)
 
-        # Merge stats into coding_sessions
-        await backend.execute(
-            """UPDATE coding_sessions SET
-                total_tool_calls = total_tool_calls + ?,
-                total_tokens_returned = total_tokens_returned + ?,
-                total_tokens_avoided = total_tokens_avoided + ?,
-                total_efficiency_returned = total_efficiency_returned + ?,
-                total_efficiency_equivalent = total_efficiency_equivalent + ?,
-                total_symbols_retrieved = total_symbols_retrieved + ?,
-                total_sections_retrieved = total_sections_retrieved + ?,
-                total_queries = total_queries + ?
-            WHERE id = ?""",
-            [
-                r.get("tool_calls", 0) or 0,
-                r.get("tokens_returned", 0) or 0,
-                r.get("tokens_avoided", 0) or 0,
-                r.get("efficiency_returned", 0) or 0,
-                r.get("efficiency_equivalent", 0) or 0,
-                r.get("symbols_retrieved", 0) or 0,
-                r.get("sections_retrieved", 0) or 0,
-                r.get("queries", 0) or 0,
-                cs_id,
-            ],
-        )
+            # Merge stats into coding session
+            cs_id = inst.coding_session_id
+            if cs_id:
+                await CodingSession.where(id=cs_id).increment("total_tool_calls", inst.tool_calls or 0)
+                await CodingSession.where(id=cs_id).increment("total_tokens_returned", inst.tokens_returned or 0)
+                await CodingSession.where(id=cs_id).increment("total_tokens_avoided", inst.tokens_avoided or 0)
+                await CodingSession.where(id=cs_id).increment(
+                    "total_efficiency_returned", inst.efficiency_returned or 0
+                )
+                await CodingSession.where(id=cs_id).increment(
+                    "total_efficiency_equivalent", inst.efficiency_equivalent or 0
+                )
+                await CodingSession.where(id=cs_id).increment("total_symbols_retrieved", inst.symbols_retrieved or 0)
+                await CodingSession.where(id=cs_id).increment("total_sections_retrieved", inst.sections_retrieved or 0)
+                await CodingSession.where(id=cs_id).increment("total_queries", inst.queries or 0)
+                affected_sessions.add(cs_id)
 
-        affected_sessions.add(cs_id)
+        # Remove the dead node
+        await ClusterNode.where(node_id=node.node_id).delete()
         dead_count += 1
 
+    # Close coding sessions where all nodes are gone
     for cs_id in affected_sessions:
-        alive_row = await backend.fetch_one(
-            "SELECT instance_id FROM instances WHERE coding_session_id = ? AND ended_at IS NULL",
-            [cs_id],
-        )
-        if alive_row is None:
+        remaining = await ClusterNode.where(coding_session_id=cs_id).exists()
+        if not remaining:
             now = datetime.now(UTC).isoformat()
-            await backend.execute(
-                "UPDATE coding_sessions SET ended_at = ? WHERE id = ? AND ended_at IS NULL",
-                [now, cs_id],
-            )
+            await CodingSession.where(id=cs_id).where_null("ended_at").update(ended_at=now)
 
-    # Purge instances that ended more than 7 days ago
+    # Purge instances older than 7 days
     cutoff = (datetime.now(UTC) - timedelta(days=7)).isoformat()
-    purged = await backend.execute(
-        "DELETE FROM instances WHERE ended_at IS NOT NULL AND ended_at < ?",
-        [cutoff],
-    )
+    purged = await Instance.where_not_null("ended_at").where("ended_at", "<", cutoff).delete()
     if purged:
         logger.debug("old_instances_purged", cutoff=cutoff)
 
     if dead_count or purged:
         await backend.commit()
     if dead_count:
-        logger.info("dead_instances_cleaned", count=dead_count)
+        logger.info("dead_nodes_cleaned", count=dead_count)
 
     return dead_count
 
 
-async def flush_instance_to_db(
-    backend, session_tracker, cache, instance_id: str, coding_session_id: str, role: str
-) -> None:
-    """Persist current instance stats to the instances table.
+async def flush_instance_to_db(backend, session_tracker, cache, node_id: str, coding_session_id: str) -> None:
+    """Persist current instance stats to the instances table using the ORM.
+
+    Uses upsert (first_or_create pattern) to either create or update
+    the instance row for this node.
 
     Args:
         backend: The async storage backend.
         session_tracker: The SessionTracker instance.
         cache: The QueryCache instance.
-        instance_id: Unique instance identifier.
+        node_id: Unique node identifier.
         coding_session_id: The coding session this instance belongs to.
-        role: This instance's cluster role (``"leader"`` or ``"follower"``).
     """
+    from sylvan.database.orm import ClusterNode, Instance
+
     stats = session_tracker.get_session_stats()
     efficiency = session_tracker.get_efficiency_stats()
     cache_stats = cache.stats()
-
     now = datetime.now(UTC).isoformat()
 
-    await backend.execute(
-        """INSERT OR REPLACE INTO instances
-           (instance_id, coding_session_id, pid, role, started_at, last_heartbeat,
-            tool_calls, tokens_returned, tokens_avoided,
-            efficiency_returned, efficiency_equivalent,
-            symbols_retrieved, sections_retrieved, queries,
-            cache_hits, cache_misses, category_data)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        [
-            instance_id,
-            coding_session_id,
-            os.getpid(),
-            role,
-            stats.get("start_time", now),
-            now,
-            stats.get("tool_calls", 0),
-            stats.get("tokens_returned", 0),
-            stats.get("tokens_avoided", 0),
-            efficiency.get("total_returned", 0),
-            efficiency.get("total_equivalent", 0),
-            stats.get("symbols_retrieved", 0),
-            stats.get("sections_retrieved", 0),
-            stats.get("queries", 0),
-            cache_stats.get("hits", 0),
-            cache_stats.get("misses", 0),
-            json.dumps(efficiency.get("by_category", {})),
-        ],
-    )
+    # Update node last_seen
+    await ClusterNode.where(node_id=node_id).update(last_seen=now)
+
+    # Update or create instance stats
+    instance = await Instance.where(node_id=node_id).where_null("ended_at").first()
+    if instance is None:
+        await Instance.create(
+            instance_id=node_id,
+            node_id=node_id,
+            coding_session_id=coding_session_id,
+            started_at=stats.get("start_time", now),
+            tool_calls=stats.get("tool_calls", 0),
+            tokens_returned=stats.get("tokens_returned", 0),
+            tokens_avoided=stats.get("tokens_avoided", 0),
+            efficiency_returned=efficiency.get("total_returned", 0),
+            efficiency_equivalent=efficiency.get("total_equivalent", 0),
+            symbols_retrieved=stats.get("symbols_retrieved", 0),
+            sections_retrieved=stats.get("sections_retrieved", 0),
+            queries=stats.get("queries", 0),
+            cache_hits=cache_stats.get("hits", 0),
+            cache_misses=cache_stats.get("misses", 0),
+            category_data=efficiency.get("by_category", {}),
+        )
+    else:
+        await instance.update(
+            tool_calls=stats.get("tool_calls", 0),
+            tokens_returned=stats.get("tokens_returned", 0),
+            tokens_avoided=stats.get("tokens_avoided", 0),
+            efficiency_returned=efficiency.get("total_returned", 0),
+            efficiency_equivalent=efficiency.get("total_equivalent", 0),
+            symbols_retrieved=stats.get("symbols_retrieved", 0),
+            sections_retrieved=stats.get("sections_retrieved", 0),
+            queries=stats.get("queries", 0),
+            cache_hits=cache_stats.get("hits", 0),
+            cache_misses=cache_stats.get("misses", 0),
+            category_data=efficiency.get("by_category", {}),
+        )
     await backend.commit()
 
-
-async def push_stats_to_leader(session_tracker, cache, instance_id: str) -> None:
-    """Push instance stats to leader over HTTP (follower only).
-
-    Args:
-        session_tracker: The SessionTracker instance.
-        cache: The QueryCache instance.
-        instance_id: Unique instance identifier.
-    """
-    import httpx
-
+    # Also refresh the cluster lock heartbeat if we're the leader
     state = get_cluster_state()
-    if not state.leader_url:
-        return
+    if state.is_leader:
+        from sylvan.database.orm import ClusterLock
 
-    stats = session_tracker.get_session_stats()
-    efficiency = session_tracker.get_efficiency_stats()
-    cache_stats = cache.stats()
-
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(
-                f"{state.leader_url}/api/session/heartbeat",
-                json={
-                    "session_id": instance_id,
-                    "stats": stats,
-                    "efficiency": efficiency,
-                    "cache": cache_stats,
-                },
-            )
-    except Exception as exc:
-        logger.debug("heartbeat_push_failed", error=str(exc))
+        await ClusterLock.refresh(node_id)
+        await backend.commit()
 
 
 async def start_heartbeat(
-    backend, session_tracker, cache, instance_id: str, coding_session_id: str, role: str, interval: int = 10
+    backend,
+    session_tracker,
+    cache,
+    node_id: str,
+    coding_session_id: str,
+    role: str,
+    interval: int = 10,
 ) -> None:
     """Start the background heartbeat loop.
 
-    Periodically flushes instance stats to the database and, if running
-    as a follower, pushes stats to the leader over HTTP.
+    Periodically flushes instance stats to the database. The role is
+    read from ClusterState (single source of truth), not tracked locally.
 
     Args:
         backend: The async storage backend.
         session_tracker: The SessionTracker instance.
         cache: The QueryCache instance.
-        instance_id: Unique instance identifier.
+        node_id: Unique node identifier.
         coding_session_id: The coding session this instance belongs to.
-        role: This instance's cluster role.
+        role: Initial role (only used for first log message).
         interval: Seconds between heartbeat flushes.
     """
     global _heartbeat_task
 
-    current_role = role
-
     async def _loop():
-        nonlocal current_role
         while True:
             try:
-                await flush_instance_to_db(
-                    backend, session_tracker, cache, instance_id, coding_session_id, current_role
-                )
-                if current_role == "follower":
-                    await push_stats_to_leader(session_tracker, cache, instance_id)
-                    if await _should_promote():
-                        current_role = "leader"
-                        await _promote_to_leader(backend, instance_id, coding_session_id)
+                state = get_cluster_state()
+                if state.is_leader:
+                    await flush_instance_to_db(backend, session_tracker, cache, node_id, coding_session_id)
+                    await cleanup_dead_nodes(backend)
             except Exception as exc:
                 logger.debug("heartbeat_error", error=str(exc))
             await asyncio.sleep(interval)
 
     _heartbeat_task = asyncio.ensure_future(_loop())
-
-
-async def _should_promote() -> bool:
-    """Check if the leader is dead and this follower should promote.
-
-    Returns:
-        True if leader PID is no longer alive.
-    """
-    from sylvan.cluster.discovery import _LEADER_FILE, _is_pid_alive
-
-    if not _LEADER_FILE.exists():
-        return True
-    try:
-        data = json.loads(_LEADER_FILE.read_text())
-        leader_pid = data.get("pid")
-        return not (leader_pid and _is_pid_alive(leader_pid))
-    except (json.JSONDecodeError, OSError):
-        return True
-
-
-async def _promote_to_leader(backend: object, instance_id: str, coding_session_id: str) -> None:
-    """Promote this follower to leader.
-
-    Claims the leader file, starts the dashboard, and updates cluster state.
-
-    Args:
-        backend: The async storage backend.
-        instance_id: This instance's identifier.
-        coding_session_id: The coding session ID.
-    """
-    import os
-
-    from sylvan.cluster.discovery import _LEADER_FILE
-    from sylvan.cluster.state import ClusterState, set_cluster_state
-    from sylvan.config import get_config
-
-    cfg = get_config()
-    port = cfg.cluster.port
-
-    leader_data = {
-        "pid": os.getpid(),
-        "session_id": instance_id,
-        "coding_session_id": coding_session_id,
-        "started_at": datetime.now(UTC).isoformat(),
-        "http_port": port,
-    }
-    _LEADER_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _LEADER_FILE.write_text(json.dumps(leader_data, indent=2))
-
-    set_cluster_state(
-        ClusterState(
-            role="leader",
-            session_id=instance_id,
-            coding_session_id=coding_session_id,
-            leader_url=None,
-        )
-    )
-
-    try:
-        from sylvan.dashboard.server import start_dashboard
-
-        await start_dashboard()
-    except Exception as exc:
-        logger.debug("dashboard_start_on_promote_failed", error=str(exc))
-
-    logger.info("promoted_to_leader", instance_id=instance_id, port=port)
 
 
 async def stop_heartbeat() -> None:
@@ -352,7 +248,7 @@ async def stop_heartbeat() -> None:
 
 
 def stop_heartbeat_sync() -> None:
-    """Cancel the heartbeat task (sync, for signal handlers and finally blocks)."""
+    """Cancel the heartbeat task (sync, for signal handlers)."""
     global _heartbeat_task
     if _heartbeat_task is not None:
         _heartbeat_task.cancel()
