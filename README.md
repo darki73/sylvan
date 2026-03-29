@@ -1,5 +1,7 @@
 # Sylvan
 
+[![SafeSkill 79/100](https://img.shields.io/badge/SafeSkill-79%2F100_Passes%20with%20Notes-yellow)](https://safeskill.dev/scan/darki73-sylvan)
+
 [![Tests](https://github.com/darki73/sylvan/actions/workflows/tests.yml/badge.svg)](https://github.com/darki73/sylvan/actions/workflows/tests.yml)
 [![PyPI](https://img.shields.io/pypi/v/sylvan)](https://pypi.org/project/sylvan/)
 [![Python](https://img.shields.io/pypi/pyversions/sylvan)](https://pypi.org/project/sylvan/)
