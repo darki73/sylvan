@@ -1,8 +1,14 @@
 """MCP tool: get_repo_outline -- high-level summary of an indexed repo."""
 
-from sylvan.database.orm import FileRecord, Repo, Section, Symbol
-from sylvan.error_codes import RepoNotFoundError
-from sylvan.tools.support.response import MetaBuilder, check_staleness, ensure_orm, log_tool_call, wrap_response
+from sylvan.error_codes import SylvanError
+from sylvan.services.symbol import SymbolService
+from sylvan.tools.support.response import (
+    check_staleness,
+    ensure_orm,
+    get_meta,
+    log_tool_call,
+    wrap_response,
+)
 
 
 @log_tool_call
@@ -18,55 +24,16 @@ async def get_repo_outline(repo: str) -> dict:
     Returns:
         Tool response dict with repo statistics and ``_meta`` envelope.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    repo_obj = await Repo.where(name=repo).first()
+    try:
+        result = await SymbolService().repo_outline(repo)
+    except SylvanError as exc:
+        exc._meta = meta.build()
+        raise
 
-    if repo_obj is None:
-        raise RepoNotFoundError(repo=repo, _meta=meta.build())
-
-    repo_id = repo_obj.id
-
-    languages = await FileRecord.where(repo_id=repo_id).where_not_null("language").group_by("language").count()
-
-    symbol_kinds = await (
-        Symbol.query()
-        .join("files", "files.id = symbols.file_id")
-        .where("files.repo_id", repo_id)
-        .group_by("symbols.kind")
-        .count()
-    )
-
-    total_files = await FileRecord.where(repo_id=repo_id).count()
-
-    total_symbols = await (
-        Symbol.query().join("files", "files.id = symbols.file_id").where("files.repo_id", repo_id).count()
-    )
-
-    total_sections = await (
-        Section.query().join("files", "files.id = sections.file_id").where("files.repo_id", repo_id).count()
-    )
-
-    doc_files = await (
-        FileRecord.query()
-        .select("DISTINCT files.id")
-        .join("sections sec", "sec.file_id = files.id")
-        .where("files.repo_id", repo_id)
-        .count()
-    )
-
-    result = {
-        "repo": repo,
-        "indexed_at": repo_obj.indexed_at,
-        "git_head": repo_obj.git_head,
-        "files": total_files,
-        "symbols": total_symbols,
-        "sections": total_sections,
-        "doc_files": doc_files,
-        "languages": languages if isinstance(languages, dict) else {},
-        "symbol_kinds": symbol_kinds if isinstance(symbol_kinds, dict) else {},
-    }
+    repo_id = result.pop("repo_id")
 
     meta.set("repo", repo)
     response = wrap_response(result, meta.build())

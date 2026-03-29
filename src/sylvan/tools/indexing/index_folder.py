@@ -1,8 +1,6 @@
 """MCP tool: index_folder -- index a local folder."""
 
-from sylvan.context import get_context
-from sylvan.indexing.pipeline.orchestrator import index_folder as _index_folder
-from sylvan.tools.support.response import MetaBuilder, _staleness_cache, log_tool_call, wrap_response
+from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
 
 
 @log_tool_call
@@ -12,8 +10,8 @@ async def index_folder(
 ) -> dict:
     """Index a local folder for code symbol retrieval.
 
-    Delegates to the indexing orchestrator, then clears any cached
-    staleness state for the repo so subsequent tool calls re-check.
+    Delegates to the indexing service, then returns stats about the
+    indexed repo.
 
     Args:
         path: Absolute path to the folder to index.
@@ -22,14 +20,14 @@ async def index_folder(
     Returns:
         Tool response dict with indexing stats and ``_meta`` envelope.
     """
-    meta = MetaBuilder()
-    result = await _index_folder(path, name=name)
+    meta = get_meta()
 
-    _staleness_cache.pop(result.repo_id, None)
-    get_context().cache.clear()
+    from sylvan.services.indexing import index_folder as _svc
 
-    meta.set("repo", result.repo_name)
-    meta.set("files_indexed", result.files_indexed)
-    meta.set("symbols_extracted", result.symbols_extracted)
+    result = await _svc(path, name=name)
 
-    return wrap_response(result.to_dict(), meta.build())
+    meta.set("repo", result.get("repo", ""))
+    meta.set("files_indexed", result.get("files_indexed", 0))
+    meta.set("symbols_extracted", result.get("symbols_extracted", 0))
+
+    return wrap_response(result, meta.build())

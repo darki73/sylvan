@@ -160,7 +160,14 @@ class _CrudMixin:
         return self
 
     async def delete(self) -> None:
-        """Delete this instance from the database."""
+        """Delete this instance and cascade to relations with on_delete set.
+
+        Walks all relation descriptors on the model class. For HasMany/HasOne
+        with ``on_delete="cascade"``, deletes all children (recursively).
+        For BelongsToMany with ``on_delete="detach"``, removes pivot rows.
+        """
+        await self._cascade_relations()
+
         from sylvan.database.orm.runtime.connection_manager import get_backend
 
         backend = get_backend()
@@ -180,3 +187,47 @@ class _CrudMixin:
                 ctx.identity_map.remove(type(self), pk_val)
         except Exception:  # noqa: S110 -- identity map cleanup is best-effort
             pass
+
+    async def _cascade_relations(self) -> None:
+        """Process on_delete for all relation descriptors on this model."""
+        from sylvan.database.orm.primitives.relations import BelongsToMany, HasMany, HasOne
+
+        for attr_name in dir(type(self)):
+            rel = getattr(type(self), attr_name, None)
+            if rel is None or not hasattr(rel, "on_delete") or rel.on_delete is None:
+                continue
+
+            if isinstance(rel, BelongsToMany) and rel.on_delete == "detach":
+                await self.detach(attr_name)
+
+            elif isinstance(rel, (HasMany, HasOne)) and rel.on_delete == "cascade":
+                related_model = rel.related_model
+                local_value = getattr(self, rel.local_key)
+
+                if _has_cascade_children(related_model):
+                    children = await related_model.where(**{rel.foreign_key: local_value}).get()
+                    for child in children:
+                        await child.delete()
+                else:
+                    await related_model.where(**{rel.foreign_key: local_value}).delete()
+
+
+def _has_cascade_children(model_class: type) -> bool:
+    """Check if a model has any relations with on_delete set.
+
+    If it does, its children need individual delete() calls to trigger
+    their own cascades. If not, a bulk delete is safe and faster.
+
+    Args:
+        model_class: The ORM model class to inspect.
+
+    Returns:
+        True if the model has cascading relations.
+    """
+    from sylvan.database.orm.primitives.relations import RelationDescriptor
+
+    for attr_name in dir(model_class):
+        rel = getattr(model_class, attr_name, None)
+        if isinstance(rel, RelationDescriptor) and getattr(rel, "on_delete", None):
+            return True
+    return False

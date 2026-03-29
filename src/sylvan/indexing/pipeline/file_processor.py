@@ -43,6 +43,8 @@ async def process_file(
     repo_name: str,
     max_file_size: int,
     result: IndexResult,
+    *,
+    force: bool = False,
 ) -> None:
     """Read, hash-check, parse, and store a single discovered file.
 
@@ -52,6 +54,7 @@ async def process_file(
         repo_name: Display name of the repository.
         max_file_size: Maximum file size in bytes.
         result: IndexResult accumulator for counts and errors.
+        force: If True, re-extract even if the content hash is unchanged.
     """
     try:
         content_bytes = df.path.read_bytes()
@@ -65,7 +68,7 @@ async def process_file(
     content_hash = hash_content(content_bytes)
     existing = await FileRecord.where(repo_id=repo_id, path=df.relative_path).first()
 
-    if await _file_unchanged(existing, content_hash):
+    if not force and await _file_unchanged(existing, content_hash):
         return
 
     await Blob.store(content_hash, content_bytes)
@@ -130,20 +133,16 @@ async def process_file(
 
 
 async def _file_unchanged(existing: FileRecord | None, content_hash: str) -> bool:
-    """Return True if file content matches the stored hash and has extracted data.
+    """Return True if file content matches the stored hash.
 
     Args:
         existing: Previously stored FileRecord, or None.
         content_hash: SHA-256 hash of the current file content.
 
     Returns:
-        True if the file is unchanged and has existing symbol data.
+        True if the file exists and content has not changed.
     """
-    if existing is None or existing.content_hash != content_hash:
-        return False
-    if not existing.language:
-        return True
-    return await Symbol.where(file_id=existing.id).count() > 0
+    return existing is not None and existing.content_hash == content_hash
 
 
 async def _upsert_symbol_without_parent(sym: object, file_id: int) -> None:

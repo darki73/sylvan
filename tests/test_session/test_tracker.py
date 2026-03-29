@@ -103,8 +103,8 @@ class TestGetSessionStats:
 class TestRecordSavings:
     def test_accumulates_savings(self):
         tracker = SessionTracker()
-        tracker.record_savings(tokens_returned=100, tokens_avoided=400)
-        tracker.record_savings(tokens_returned=50, tokens_avoided=200)
+        tracker.record_tool_call("get_symbol", category="retrieval", tokens_returned=100, tokens_equivalent=500)
+        tracker.record_tool_call("get_symbol", category="retrieval", tokens_returned=50, tokens_equivalent=250)
         stats = tracker.get_session_stats()
         assert stats["tokens_returned"] == 150
         assert stats["tokens_avoided"] == 600

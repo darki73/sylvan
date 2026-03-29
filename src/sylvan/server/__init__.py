@@ -186,6 +186,44 @@ async def _get_or_create_backend():
         except Exception as exc:
             logger.debug("heartbeat_start_failed", error=str(exc))
 
+        # Follower: send stats to leader on every tool call
+        if get_cluster_state().is_follower:
+            try:
+                from sylvan.cluster.heartbeat import _send_stats_to_leader
+                from sylvan.database.orm.runtime.query_cache import get_query_cache as _get_follower_cache
+                from sylvan.events import on as _on_event
+                from sylvan.session.tracker import get_session as _get_follower_session
+
+                _f_session = _get_follower_session()
+                _f_cache = _get_follower_cache()
+                _f_node_id = node_id
+
+                def _on_follower_tool_call(_data):
+                    import asyncio
+
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(_send_stats_to_leader(_f_session, _f_cache, _f_node_id))
+                    except RuntimeError:
+                        pass
+
+                _on_event("tool_call", _on_follower_tool_call)
+            except Exception as exc:
+                logger.debug("follower_stats_hook_failed", error=str(exc))
+
+        # Start the job queue runner (leader only)
+        if get_cluster_state().is_leader:
+            try:
+                from sylvan.queue import get_runner
+                from sylvan.server.lifecycle import get_lifecycle
+
+                lifecycle = get_lifecycle()
+                if lifecycle:
+                    runner = get_runner()
+                    lifecycle.spawn(runner.run(), name="job_queue")
+            except Exception as exc:
+                logger.debug("queue_runner_start_failed", error=str(exc))
+
         return _backend
 
 
@@ -226,7 +264,7 @@ def _shutdown_backend_sync() -> None:
                 return _STOP_RUNNING_SENTINEL
 
             conn._tx.put_nowait((None, _close))
-            conn._thread.join(timeout=2)
+            conn._thread.join(timeout=0.5)
 
     from sylvan.cluster.state import get_cluster_state
 
@@ -339,6 +377,7 @@ async def _dispatch(name: str, arguments: dict) -> dict:
         "list_libraries",
         "get_session_stats",
         "get_dashboard_url",
+        "get_peak_status",
         "get_server_config",
         "get_logs",
         "suggest_queries",
@@ -405,60 +444,115 @@ async def _dispatch(name: str, arguments: dict) -> dict:
             from sylvan.session.tracker import get_session as _get_session
 
             session = _get_session()
-            session.record_tool_call(name)
 
             handlers = _get_handlers()
             handler = handlers.get(name)
             if handler is None:
                 return {"error": f"Unknown tool: {name}"}
             try:
-                result = handler(**arguments)
-                if asyncio.iscoroutine(result):
-                    result = await result
+                from datetime import UTC, datetime
 
-                # Record token efficiency from tool response
+                from sylvan.tools.support.response import MetaBuilder, reset_meta, set_meta
+
+                _request_meta = MetaBuilder()
+                _request_meta.set("repo", arguments.get("repo") or arguments.get("workspace") or arguments.get("name"))
+                _meta_token = set_meta(_request_meta)
+
+                try:
+                    result = handler(**arguments)
+                    if asyncio.iscoroutine(result):
+                        result = await result
+                finally:
+                    reset_meta(_meta_token)
+
+                built_meta = _request_meta.build()
+                category = _tool_category(name)
+                _call_repo = built_meta.get("repo")
+
                 if isinstance(result, dict):
-                    meta = result.get("_meta", {})
-                    efficiency = meta.get("token_efficiency")
-                    if efficiency:
-                        category = _tool_category(name)
-                        returned = efficiency.get("returned", 0)
-                        equivalent = efficiency.get("equivalent_file_read", 0)
-                        _get_session().record_efficiency(
-                            category,
-                            returned,
-                            equivalent,
-                        )
+                    existing_meta = result.get("_meta", {})
+                    existing_meta.update(
+                        {k: v for k, v in built_meta.items() if k not in existing_meta or existing_meta[k] is None}
+                    )
+                    existing_meta["timing_ms"] = built_meta["timing_ms"]
+                    if not existing_meta.get("repo"):
+                        existing_meta["repo"] = _call_repo
+                    if not existing_meta.get("repo") and arguments.get("symbol_id"):
+                        from sylvan.database.orm import Symbol as _SymLookup
 
-                        # Persist per-repo efficiency to usage_stats
-                        repo_id = meta.get("repo_id")
-                        if repo_id:
-                            from sylvan.session.usage_stats import record_usage
+                        _sym_row = await _SymLookup.where(symbol_id=arguments["symbol_id"]).with_("file.repo").first()
+                        if _sym_row and getattr(_sym_row, "file", None) and getattr(_sym_row.file, "repo", None):
+                            existing_meta["repo"] = _sym_row.file.repo.name
+                    result["_meta"] = existing_meta
 
-                            eff_kwargs: dict[str, int] = {}
-                            if category == "search":
-                                eff_kwargs["tokens_returned_search"] = returned
-                                eff_kwargs["tokens_equivalent_search"] = equivalent
-                            elif category == "retrieval":
-                                eff_kwargs["tokens_returned_retrieval"] = returned
-                                eff_kwargs["tokens_equivalent_retrieval"] = equivalent
-                            if eff_kwargs:
-                                record_usage(repo_id, tool_calls=0, **eff_kwargs)
+                _call_timing = built_meta.get("timing_ms")
+                if isinstance(result, dict):
+                    _call_repo = result.get("_meta", {}).get("repo") or _call_repo
+
+                # Extract token efficiency from result
+                _eff = {}
+                if isinstance(result, dict):
+                    _eff = result.get("_meta", {}).get("token_efficiency", {})
+                _tokens_returned = _eff.get("returned", 0)
+                _tokens_equivalent = _eff.get("equivalent_file_read", 0)
+
+                # Single recording call - all stats in one place
+                session.record_tool_call(
+                    name,
+                    repo=_call_repo,
+                    duration_ms=_call_timing,
+                    category=category,
+                    tokens_returned=_tokens_returned,
+                    tokens_equivalent=_tokens_equivalent,
+                )
+
+                # Per-repo per-day DB stats
+                from sylvan.session.usage_stats import record_usage
+
+                _repo_id = result.get("_meta", {}).get("repo_id", 0) if isinstance(result, dict) else 0
+                _usage_kwargs: dict[str, int] = {"tool_calls": 1}
+                if _tokens_returned:
+                    _usage_kwargs["tokens_returned"] = _tokens_returned
+                    _usage_kwargs["tokens_avoided"] = max(0, _tokens_equivalent - _tokens_returned)
+                    if category == "search":
+                        _usage_kwargs["tokens_returned_search"] = _tokens_returned
+                        _usage_kwargs["tokens_equivalent_search"] = _tokens_equivalent
+                    elif category == "retrieval":
+                        _usage_kwargs["tokens_returned_retrieval"] = _tokens_returned
+                        _usage_kwargs["tokens_equivalent_retrieval"] = _tokens_equivalent
+                await record_usage(_repo_id or 0, **_usage_kwargs)
+
+                from sylvan.events import emit as _emit_event
+
+                _tool_call_efficiency = session.get_efficiency_stats()
+                try:
+                    from sylvan.cluster.state import get_cluster_state as _get_tc_state
+
+                    if _get_tc_state().is_leader:
+                        from sylvan.dashboard.app import _combine_session_efficiency, _get_cluster_sessions
+
+                        _tc_sessions = await _get_cluster_sessions()
+                        _tc_combined = _combine_session_efficiency(_tc_sessions)
+                        if _tc_combined:
+                            _tool_call_efficiency = _tc_combined
+                except Exception:  # noqa: S110
+                    pass
+
+                _emit_event(
+                    "tool_call",
+                    {
+                        "name": name,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "repo": _call_repo,
+                        "duration_ms": _call_timing,
+                        "session": session.get_session_stats(),
+                        "efficiency": _tool_call_efficiency,
+                    },
+                )
 
                 return result
             except SylvanError as exc:
                 return exc.to_dict()
-            finally:
-                try:
-                    from sylvan.session.usage_stats import get_accumulator
-
-                    acc = get_accumulator()
-                    if acc._call_count >= acc._FLUSH_INTERVAL:
-                        from sylvan.session.usage_stats import async_flush_usage
-
-                        await async_flush_usage()
-                except Exception as flush_exc:
-                    logger.debug("usage_flush_failed", error=str(flush_exc))
         finally:
             _tool_semaphore.release()
             structlog.contextvars.unbind_contextvars("request_id")
@@ -603,6 +697,7 @@ def _get_handlers() -> dict[str, Callable[..., dict]]:
         "add_to_workspace": add_to_workspace,
         "pin_library": pin_library,
         "get_dashboard_url": _get_dashboard_url,
+        "get_peak_status": _get_peak_status,
         "get_logs": get_logs,
         "get_workflow_guide": get_workflow_guide,
         "get_server_config": get_server_config,
@@ -678,6 +773,7 @@ _TOOL_CATEGORIES: dict[str, str] = {
     "configure_copilot": "meta",
     "scaffold": "meta",
     "get_dashboard_url": "meta",
+    "get_peak_status": "meta",
     "add_library": "meta",
     "list_libraries": "meta",
     "remove_library": "meta",
@@ -716,6 +812,17 @@ async def _get_dashboard_url(**_kwargs: object) -> dict:
     if url:
         return {"url": url, "status": "running"}
     return {"status": "not_running", "message": "Dashboard is not available."}
+
+
+async def _get_peak_status(**_kwargs: object) -> dict:
+    """Check Claude peak/off-peak usage status.
+
+    Returns:
+        Dict with is_peak, current time, and transition info.
+    """
+    from sylvan.services.peak import get_peak_status
+
+    return get_peak_status()
 
 
 async def _get_usage_stats(args: dict) -> dict:

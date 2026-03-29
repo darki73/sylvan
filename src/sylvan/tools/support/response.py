@@ -1,5 +1,6 @@
 """Response envelope builder for MCP tool responses."""
 
+import contextvars
 import functools
 import inspect
 import time
@@ -11,6 +12,48 @@ from sylvan.logging import get_logger
 _tool_logger = get_logger("sylvan.tools")
 
 RESPONSE_VERSION = "1.0"
+
+_current_meta: contextvars.ContextVar["MetaBuilder | None"] = contextvars.ContextVar("sylvan_meta", default=None)
+
+
+def get_meta() -> "MetaBuilder":
+    """Get the MetaBuilder for the current tool call.
+
+    The dispatch layer creates one MetaBuilder per request and stores
+    it in this contextvar. Tools call this to record token efficiency
+    or set custom metadata.
+
+    Returns:
+        The active MetaBuilder for this request.
+
+    Raises:
+        RuntimeError: If called outside of a tool dispatch context.
+    """
+    meta = _current_meta.get()
+    if meta is None:
+        return MetaBuilder()
+    return meta
+
+
+def set_meta(meta: "MetaBuilder") -> contextvars.Token:
+    """Set the MetaBuilder for the current tool call.
+
+    Args:
+        meta: The MetaBuilder to make current.
+
+    Returns:
+        A token to reset it.
+    """
+    return _current_meta.set(meta)
+
+
+def reset_meta(token: contextvars.Token) -> None:
+    """Reset the MetaBuilder contextvar.
+
+    Args:
+        token: The token from set_meta().
+    """
+    _current_meta.reset(token)
 
 
 def _sanitize_log_kwargs(kwargs: dict) -> dict:
@@ -243,6 +286,30 @@ def clamp(value: int, low: int, high: int) -> int:
     return min(max(value, low), high)
 
 
+def inject_meta(exc: Exception, meta: "MetaBuilder") -> Exception:
+    """Re-raise a SylvanError with ``_meta`` attached.
+
+    Service-layer functions raise SylvanError subclasses without meta
+    (they should not depend on the response module). This helper copies
+    the original error's fields and attaches the tool-level meta so the
+    dispatch layer can serialize it properly.
+
+    Args:
+        exc: The caught SylvanError instance.
+        meta: The MetaBuilder to attach.
+
+    Returns:
+        A new exception of the same type with ``_meta`` set.
+    """
+    from sylvan.error_codes import SylvanError
+
+    if not isinstance(exc, SylvanError):
+        return exc
+
+    new_exc = type(exc)(exc.detail, _meta=meta.build(), **exc.context)
+    return new_exc
+
+
 _staleness_cache: dict[int, bool | None] = {}
 """Per-session cache of repo_id to staleness flag, checked at most once per repo."""
 
@@ -302,63 +369,6 @@ async def _detect_staleness(repo_id: int) -> bool | None:
         return current_head != repo.git_head
     except Exception:
         return None
-
-
-async def record_savings(
-    meta: MetaBuilder,
-    returned_text: str,
-    file_record: object,
-    *,
-    symbols_retrieved: int = 0,
-    sections_retrieved: int = 0,
-) -> None:
-    """Record token savings for a tool response.
-
-    Builds the savings data and attaches it to the response meta.
-    Session-level counters are handled centrally by ``_dispatch`` in
-    ``server/__init__.py`` via ``record_efficiency()``, so this
-    function only computes the numbers and persists per-repo stats.
-
-    Args:
-        meta: The response meta builder to annotate with savings data.
-        returned_text: The text actually returned to the agent.
-        file_record: The ORM file record (needs ``content`` and ``repo_id``).
-        symbols_retrieved: Number of symbols included in the response.
-        sections_retrieved: Number of sections included in the response.
-    """
-    if file_record is None:
-        return
-    file_content = await file_record.get_content()
-    if not file_content:
-        return
-
-    from sylvan.tools.support.token_counting import estimate_savings
-
-    file_text = file_content.decode("utf-8", errors="replace")
-    savings = estimate_savings(
-        returned_bytes=len(returned_text.encode("utf-8")),
-        total_file_bytes=len(file_content),
-        returned_text=returned_text,
-        total_file_text=file_text,
-    )
-    meta.set("savings", savings)
-
-    tokens_returned = savings.get("returned_tokens", 0)
-    tokens_avoided = savings.get("tokens_avoided", 0)
-    total_file_tokens = savings.get("total_file_tokens", 0)
-
-    if tokens_returned > 0 and total_file_tokens > 0:
-        meta.record_token_efficiency(tokens_returned, total_file_tokens)
-
-    from sylvan.session.usage_stats import record_usage
-
-    record_usage(
-        repo_id=file_record.repo_id,
-        tokens_returned=tokens_returned,
-        tokens_avoided=tokens_avoided,
-        symbols_retrieved=symbols_retrieved,
-        sections_retrieved=sections_retrieved,
-    )
 
 
 _schema_ready = False

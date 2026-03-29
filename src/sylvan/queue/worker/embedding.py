@@ -1,0 +1,121 @@
+"""Embedding worker - generates vector embeddings for symbols and sections."""
+
+from __future__ import annotations
+
+import asyncio
+from typing import TYPE_CHECKING, Any
+
+from sylvan.logging import get_logger
+from sylvan.queue.registry import register_worker
+from sylvan.queue.worker.base import BaseWorker
+
+if TYPE_CHECKING:
+    from sylvan.queue.job import Job
+
+logger = get_logger(__name__)
+
+
+@register_worker("generate_embeddings")
+class EmbeddingWorker(BaseWorker):
+    """Generates embeddings for a repository's symbols and sections.
+
+    Runs at lower priority than indexing - only processes when the
+    index queue is empty. Automatically detects GPU availability
+    via ONNX Runtime's CUDA provider.
+    """
+
+    job_type = "generate_embeddings"
+    priority = 10
+    concurrency = 1
+
+    async def handle(self, job: Job) -> Any:
+        """Generate embeddings for a repo.
+
+        Args:
+            job: Job with kwargs: repo_id, repo_name.
+
+        Returns:
+            Dict with embedding generation stats.
+        """
+        repo_id = job.kwargs["repo_id"]
+        repo_name = job.kwargs.get("repo_name", "")
+
+        self.report_progress(job, stage="loading_provider", repo=repo_name)
+
+        from sylvan.search.embeddings import get_embedding_provider
+
+        provider = get_embedding_provider()
+        if provider is None:
+            return {"skipped": True, "reason": "no_embedding_provider"}
+
+        from sylvan.database.orm import Symbol
+        from sylvan.database.orm.runtime.connection_manager import get_backend
+
+        backend = get_backend()
+
+        symbols = await Symbol.query().join("files", "files.id = symbols.file_id").where("files.repo_id", repo_id).get()
+
+        total = len(symbols)
+        if total == 0:
+            return {"embedded": 0, "repo": repo_name}
+
+        self.report_progress(job, stage="embedding", repo=repo_name, total=total, current=0)
+
+        batch_size = _detect_batch_size()
+        embedded = 0
+
+        for i in range(0, total, batch_size):
+            batch = symbols[i : i + batch_size]
+            texts = [f"{s.name} {s.signature or ''} {s.summary or ''}" for s in batch]
+
+            vectors = await asyncio.to_thread(provider.embed, texts)
+
+            for sym, vec in zip(batch, vectors):
+                await backend.execute(
+                    "INSERT OR REPLACE INTO symbols_vec (symbol_id, embedding) VALUES (?, ?)",
+                    [sym.symbol_id, _serialize_vector(vec)],
+                )
+
+            embedded += len(batch)
+            self.report_progress(
+                job,
+                stage="embedding",
+                repo=repo_name,
+                total=total,
+                current=embedded,
+            )
+
+        await backend.commit()
+
+        return {"embedded": embedded, "repo": repo_name}
+
+
+def _detect_batch_size() -> int:
+    """Detect optimal batch size based on available hardware.
+
+    Returns:
+        Batch size (larger for GPU, smaller for CPU).
+    """
+    try:
+        import onnxruntime
+
+        providers = onnxruntime.get_available_providers()
+        if "CUDAExecutionProvider" in providers:
+            return 64
+    except ImportError:
+        pass
+    return 16
+
+
+def _serialize_vector(vec: list[float]) -> bytes:
+    """Serialize a float vector to bytes for sqlite-vec storage.
+
+    Args:
+        vec: List of floats.
+
+    Returns:
+        Packed bytes.
+    """
+    import struct
+
+    return struct.pack(f"{len(vec)}f", *vec)

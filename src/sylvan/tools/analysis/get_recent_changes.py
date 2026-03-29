@@ -1,12 +1,6 @@
 """MCP tool: get_recent_changes -- file-level summary of recent git activity."""
 
-from __future__ import annotations
-
-from pathlib import Path
-
-from sylvan.database.orm import FileRecord, Repo, Symbol
-from sylvan.error_codes import RepoNotFoundError
-from sylvan.tools.support.response import MetaBuilder, clamp, ensure_orm, log_tool_call, wrap_response
+from sylvan.tools.support.response import clamp, ensure_orm, get_meta, inject_meta, log_tool_call, wrap_response
 
 
 @log_tool_call
@@ -33,68 +27,23 @@ async def get_recent_changes(
     Raises:
         RepoNotFoundError: If the repository is not indexed.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     commits = clamp(commits, 1, 100)
     ensure_orm()
 
-    repo_obj = await Repo.where(name=repo).first()
-    if not repo_obj:
-        raise RepoNotFoundError(
-            f"Repository '{repo}' is not indexed.",
-            repo_name=repo,
-            _meta=meta.build(),
-        )
+    from sylvan.error_codes import SylvanError
 
-    source_root = Path(repo_obj.source_path) if repo_obj.source_path else None
-    if source_root is None or not source_root.exists():
-        return wrap_response(
-            {"error": "source_unavailable", "detail": "Repository source path is not available on disk."},
-            meta.build(),
-        )
+    try:
+        from sylvan.services.git import GitService
 
-    from sylvan.git.diff import get_changed_files, get_commit_log
+        result = await GitService().recent_changes(repo, commits=commits, file_path=file_path)
+    except SylvanError as exc:
+        raise inject_meta(exc, meta) from exc
 
-    changed = get_changed_files(source_root, f"HEAD~{commits}")
+    if "error" in result:
+        return wrap_response(result, meta.build())
 
-    if file_path:
-        changed = [f for f in changed if f == file_path]
+    meta.set("commits_back", result["commits"])
+    meta.set("files_changed", len(result["files_changed"]))
 
-    files_changed: list[dict] = []
-
-    for fp in changed:
-        file_rec = await FileRecord.where(repo_id=repo_obj.id, path=fp).first()
-        if file_rec is None:
-            continue
-
-        symbol_count = await Symbol.where(file_id=file_rec.id).count()
-
-        log_entries = get_commit_log(source_root, file_path=fp, max_count=1)
-        last_commit = log_entries[0] if log_entries else None
-
-        entry: dict = {
-            "file": fp,
-            "language": file_rec.language,
-            "symbol_count": symbol_count,
-        }
-        if last_commit:
-            entry["last_commit"] = {
-                "hash": last_commit["hash"][:8],
-                "author": last_commit["author"],
-                "date": last_commit["date"],
-                "message": last_commit["message"],
-            }
-
-        files_changed.append(entry)
-
-    meta.set("commits_back", commits)
-    meta.set("files_changed", len(files_changed))
-
-    return wrap_response(
-        {
-            "repo": repo,
-            "commits": commits,
-            "files_changed": files_changed,
-            "summary": f"{len(files_changed)} indexed files changed across last {commits} commits",
-        },
-        meta.build(),
-    )
+    return wrap_response(result, meta.build())

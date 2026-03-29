@@ -3,7 +3,9 @@ __pycache__/
 *.py[oc]
 build/
 dist/
+!src/sylvan/dashboard/static/dist/
 wheels/
+node_modules/
 *.egg-info
 
 # Virtual environments

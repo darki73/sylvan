@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-from sylvan.tools.support.response import MetaBuilder, log_tool_call, wrap_response
+from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
 
 
 @log_tool_call
@@ -17,7 +17,7 @@ async def get_server_config() -> dict:
     Returns:
         Tool response dict with server config and connection info.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
 
     # Find the project root (where pyproject.toml lives)
     sylvan_src = Path(__file__).resolve()

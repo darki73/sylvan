@@ -144,9 +144,85 @@ async def _handle_leader_message(websocket: WebSocket, follower_id: str, msg: di
             await websocket.send_text(protocol.write_result(request_id, error=str(exc)))
 
     elif msg_type == protocol.MSG_STATS:
-        # Leader persists follower stats
         node_id = msg.get("node_id", follower_id)
-        logger.debug("stats_received", from_node=node_id)
+        stats = msg.get("stats", {})
+        efficiency = msg.get("efficiency", {})
+        cache_data = msg.get("cache", {})
+        try:
+            from sylvan.cluster.state import get_cluster_state as _get_state
+            from sylvan.database.orm import Instance
+
+            _inst_data = {
+                "tool_calls": stats.get("tool_calls", 0),
+                "tokens_returned": stats.get("tokens_returned", 0),
+                "tokens_avoided": stats.get("tokens_avoided", 0),
+                "efficiency_returned": efficiency.get("total_returned", 0),
+                "efficiency_equivalent": efficiency.get("total_equivalent", 0),
+                "symbols_retrieved": stats.get("symbols_retrieved", 0),
+                "sections_retrieved": stats.get("sections_retrieved", 0),
+                "queries": stats.get("queries", 0),
+                "cache_hits": cache_data.get("hits", 0),
+                "cache_misses": cache_data.get("misses", 0),
+                "category_data": efficiency.get("by_category", {}),
+            }
+
+            instance = await Instance.where(node_id=node_id).where_null("ended_at").first()
+            if instance:
+                await instance.update(**_inst_data)
+            else:
+                await Instance.create(
+                    instance_id=node_id,
+                    node_id=node_id,
+                    coding_session_id=_get_state().coding_session_id,
+                    started_at=stats.get("start_time", ""),
+                    **_inst_data,
+                )
+            from datetime import UTC, datetime
+
+            from sylvan.database.orm import ClusterNode
+            from sylvan.database.orm.runtime.connection_manager import get_backend
+
+            await ClusterNode.where(node_id=node_id).update(last_seen=datetime.now(UTC).isoformat())
+            await get_backend().commit()
+
+            # Push updated cluster stats + combined efficiency to dashboard
+            from sylvan.dashboard.app import _get_cluster_sessions
+            from sylvan.events import emit as _emit_cluster_update
+
+            cluster_sessions = await _get_cluster_sessions()
+            _cs = _get_state()
+
+            from sylvan.dashboard.app import _combine_session_efficiency
+
+            _combined = _combine_session_efficiency(cluster_sessions) or {}
+
+            _emit_cluster_update(
+                "stats_update",
+                {
+                    "cluster": {
+                        "role": _cs.role,
+                        "session_id": _cs.session_id,
+                        "coding_session_id": _cs.coding_session_id,
+                        "nodes": cluster_sessions,
+                        "active_count": sum(1 for s in cluster_sessions if s.get("alive")),
+                        "total_tool_calls": sum(s.get("tool_calls", 0) for s in cluster_sessions),
+                    },
+                    "efficiency": _combined,
+                },
+            )
+            logger.debug("follower_stats_updated", from_node=node_id, tool_calls=stats.get("tool_calls", 0))
+        except Exception as exc:
+            logger.debug("follower_stats_update_failed", from_node=node_id, error=str(exc))
+
+    elif msg_type == "usage":
+        data = msg.get("data", {})
+        try:
+            from sylvan.session.usage_stats import _write_to_db
+
+            await _write_to_db(**data)
+            logger.debug("usage_recorded_for_follower", from_node=follower_id, repo_id=data.get("repo_id"))
+        except Exception as exc:
+            logger.debug("usage_record_failed", from_node=follower_id, error=str(exc))
 
     elif msg_type == protocol.MSG_LOG:
         lines = msg.get("lines", [])
@@ -216,6 +292,23 @@ async def stop_follower_connection() -> None:
         _follower_task.cancel()
         _follower_task = None
     _follower_ws = None
+
+
+async def send_usage_to_leader(usage_data: dict) -> None:
+    """Send usage stats to the leader for DB recording.
+
+    Args:
+        usage_data: Dict with repo_id and stat fields.
+    """
+    if _follower_ws is None:
+        return
+    import json
+
+    msg = json.dumps({"type": "usage", "data": usage_data})
+    try:
+        await _follower_ws.send(msg)
+    except Exception as exc:
+        logger.debug("usage_send_failed", error=str(exc))
 
 
 async def connect_to_leader(leader_url: str, node_id: str, on_step_down: Any = None) -> None:

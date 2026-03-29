@@ -1,20 +1,17 @@
-"""Dashboard Starlette application — routes, templates, and data endpoints."""
+"""Dashboard Starlette application - routes and data helpers."""
 
 import time
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse
-from starlette.routing import Route, WebSocketRoute
+from starlette.responses import HTMLResponse
+from starlette.routing import Mount, Route, WebSocketRoute
 
 from sylvan.logging import get_logger
 
 logger = get_logger(__name__)
 
-_TEMPLATE_DIR = Path(__file__).parent / "templates"
-_jinja = Environment(loader=FileSystemLoader(str(_TEMPLATE_DIR)), autoescape=True)
 _start_time = time.monotonic()
 
 
@@ -43,10 +40,6 @@ def _format_duration(seconds: float) -> str:
     if s >= 60:
         return f"{s // 60}m {s % 60}s"
     return f"{s}s"
-
-
-_jinja.globals["uptime"] = _uptime
-_jinja.globals["format_duration"] = _format_duration
 
 
 async def _get_cluster_sessions() -> list[dict]:
@@ -93,7 +86,7 @@ async def _get_cluster_sessions() -> list[dict]:
 
 
 def _combine_session_efficiency(sessions: list[dict]) -> dict | None:
-    """Aggregate efficiency across all active instances.
+    """Aggregate efficiency across all instances, including ended ones.
 
     Args:
         sessions: List of instance dicts from _get_cluster_sessions.
@@ -101,16 +94,14 @@ def _combine_session_efficiency(sessions: list[dict]) -> dict | None:
     Returns:
         Combined efficiency dict, or None if no data.
     """
-    total_ret = sum(s.get("efficiency_returned", 0) for s in sessions if s.get("alive"))
-    total_eq = sum(s.get("efficiency_equivalent", 0) for s in sessions if s.get("alive"))
+    total_ret = sum(s.get("efficiency_returned", 0) for s in sessions)
+    total_eq = sum(s.get("efficiency_equivalent", 0) for s in sessions)
     if total_eq == 0:
         return None
 
     combined_cats: dict = {}
     for s in sessions:
-        if not s.get("alive"):
-            continue
-        for cat_name, cat_data in s.get("category_data", {}).items():
+        for cat_name, cat_data in (s.get("category_data") or {}).items():
             if cat_name not in combined_cats:
                 combined_cats[cat_name] = {"calls": 0, "returned": 0, "equivalent": 0}
             combined_cats[cat_name]["calls"] += cat_data.get("calls", 0)
@@ -241,6 +232,7 @@ async def _get_overview_data() -> dict:
         lib_data.append(
             {
                 "name": lib.name,
+                "package": lib.package_name or lib.name.split("@")[0],
                 "manager": lib.package_manager or "",
                 "version": lib.version or "",
                 "symbols": symbol_count,
@@ -468,571 +460,6 @@ async def _search_symbols(query: str, repo_name: str | None = None) -> list[dict
     return symbols
 
 
-async def overview(request: Request) -> HTMLResponse:
-    """Render the overview dashboard page.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        Rendered HTML response.
-    """
-    data = await _get_overview_data()
-    template = _jinja.get_template("overview.html")
-    return HTMLResponse(template.render(**data))
-
-
-async def overview_partial(request: Request) -> HTMLResponse:
-    """Return just the stats section for htmx refresh.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        Rendered HTML partial.
-    """
-    data = await _get_overview_data()
-    template = _jinja.get_template("partials/stats.html")
-    return HTMLResponse(template.render(**data))
-
-
-async def quality(request: Request) -> HTMLResponse:
-    """Render the quality report page.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        Rendered HTML response.
-    """
-    repo_name = request.query_params.get("repo", "")
-    from sylvan.database.orm import Repo
-
-    repos = await Repo.where_not(repo_type="library").get()
-    repo_names = [r.name for r in repos]
-
-    data = {}
-    if repo_name:
-        data = await _get_quality_data(repo_name)
-
-    template = _jinja.get_template("quality.html")
-    return HTMLResponse(template.render(repos=repo_names, selected_repo=repo_name, **data))
-
-
-async def quality_partial(request: Request) -> HTMLResponse:
-    """Return quality report content for htmx swap.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        Rendered HTML partial.
-    """
-    repo_name = request.query_params.get("repo", "")
-    if not repo_name:
-        return HTMLResponse("<p class='text-muted font-mono text-sm'>Select a repository above.</p>")
-    try:
-        data = await _get_quality_data(repo_name)
-        if "error" in data:
-            return HTMLResponse(
-                f"<p class='text-muted font-mono text-sm' style='color:var(--danger)'>{data['error']}</p>"
-            )
-        template = _jinja.get_template("partials/quality_report.html")
-        return HTMLResponse(template.render(**data))
-    except Exception as error:
-        return HTMLResponse(f"<p class='font-mono text-sm' style='color:var(--danger)'>Error: {error}</p>")
-
-
-async def libraries(request: Request) -> HTMLResponse:
-    """Render the libraries management page.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        Rendered HTML response.
-    """
-    data = await _get_overview_data()
-    template = _jinja.get_template("libraries.html")
-    return HTMLResponse(template.render(**data))
-
-
-async def workspaces_page(request: Request) -> HTMLResponse:
-    """Render the workspaces page."""
-    from sylvan.database.orm import FileRecord, Symbol, Workspace
-
-    ws_list = await Workspace.all().get()
-    workspaces = []
-
-    for ws in ws_list:
-        await ws.load("repos")
-        repos_data = []
-        total_files = 0
-        total_symbols = 0
-
-        for repo in ws.repos or []:
-            files = await FileRecord.where(repo_id=repo.id).count()
-            symbols = await (
-                Symbol.query().join("files", "files.id = symbols.file_id").where("files.repo_id", repo.id).count()
-            )
-            repos_data.append({"name": repo.name, "files": files, "symbols": symbols})
-            total_files += files
-            total_symbols += symbols
-
-        workspaces.append(
-            {
-                "name": ws.name,
-                "description": ws.description or "",
-                "created_at": ws.created_at or "",
-                "repo_count": len(repos_data),
-                "repos": repos_data,
-                "total_files": total_files,
-                "total_symbols": total_symbols,
-            }
-        )
-
-    template = _jinja.get_template("workspaces.html")
-    return HTMLResponse(template.render(workspaces=workspaces))
-
-
-async def extensions_page(request: Request) -> HTMLResponse:
-    """Render the extensions page."""
-    from pathlib import Path
-
-    from sylvan.config import get_config
-    from sylvan.extensions import get_registered_tools
-
-    config = get_config()
-    enabled = config.extensions.enabled
-    extensions_path = str(Path.home() / ".sylvan" / "extensions")
-
-    tools = [{"name": info["name"], "description": info["description"]} for info in get_registered_tools().values()]
-
-    # Collect registered extension languages/parsers/providers
-    languages = []
-    parsers = []
-    providers = []
-
-    template = _jinja.get_template("extensions.html")
-    return HTMLResponse(
-        template.render(
-            enabled=enabled,
-            extensions_path=extensions_path,
-            loaded_count=len(tools) + len(languages) + len(parsers) + len(providers),
-            tools=tools,
-            languages=languages,
-            parsers=parsers,
-            providers=providers,
-        )
-    )
-
-
-async def history_page(request: Request) -> HTMLResponse:
-    """Render the session history page."""
-    from sylvan.database.orm.models.coding_session import CodingSession
-
-    # Coding sessions (most recent first)
-    cs_list = await CodingSession.all().order_by("started_at", "DESC").limit(50).get()
-    sessions = []
-    for cs in cs_list:
-        duration_str = ""
-        if cs.started_at and cs.ended_at:
-            try:
-                from datetime import datetime
-
-                start = datetime.fromisoformat(cs.started_at)
-                end = datetime.fromisoformat(cs.ended_at)
-                delta = end - start
-                minutes = int(delta.total_seconds() // 60)
-                if minutes >= 60:
-                    duration_str = f"{minutes // 60}h {minutes % 60}m"
-                else:
-                    duration_str = f"{minutes}m"
-            except Exception:
-                duration_str = "?"
-        elif cs.started_at and not cs.ended_at:
-            duration_str = "active"
-
-        eq = cs.total_efficiency_equivalent or 0
-        ret = cs.total_efficiency_returned or 0
-        reduction = round((1 - ret / eq) * 100, 1) if eq > 0 else 0
-
-        sessions.append(
-            {
-                "id": cs.id,
-                "started_at": cs.started_at or "",
-                "duration": duration_str,
-                "instances_spawned": cs.instances_spawned or 0,
-                "total_tool_calls": cs.total_tool_calls or 0,
-                "total_tokens_avoided": cs.total_tokens_avoided or 0,
-                "reduction_pct": reduction,
-            }
-        )
-
-    # Daily usage stats
-    daily_stats = []
-    try:
-        from sylvan.database.orm import UsageStats
-
-        stats_rows = (
-            await UsageStats.query()
-            .join(f"JOIN repos r ON r.id = {UsageStats.__table__}.repo_id")
-            .select("r.name as repo")
-            .order_by("date", "DESC")
-            .order_by("tool_calls", "DESC")
-            .limit(100)
-            .get()
-        )
-        for row in stats_rows:
-            daily_stats.append(
-                {
-                    "date": row.date or "",
-                    "repo": getattr(row, "repo", ""),
-                    "sessions": row.sessions or 0,
-                    "tool_calls": row.tool_calls or 0,
-                    "symbols_retrieved": row.symbols_retrieved or 0,
-                    "sections_retrieved": row.sections_retrieved or 0,
-                    "tokens_avoided": row.tokens_avoided or 0,
-                }
-            )
-    except Exception:  # noqa: S110 -- usage_stats table may not exist yet
-        pass
-
-    # Totals
-    totals = None
-    if sessions:
-        totals = {
-            "tool_calls": sum(s["total_tool_calls"] for s in sessions),
-            "tokens_avoided": sum(s["total_tokens_avoided"] for s in sessions),
-            "symbols": sum((cs_list[i].total_symbols_retrieved or 0) for i in range(len(cs_list))),
-            "sessions": len(sessions),
-        }
-
-    template = _jinja.get_template("history.html")
-    return HTMLResponse(
-        template.render(
-            sessions=sessions,
-            daily_stats=daily_stats,
-            totals=totals,
-        )
-    )
-
-
-async def search(request: Request) -> HTMLResponse:
-    """Render the search page.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        Rendered HTML response.
-    """
-    from sylvan.database.orm import Repo
-
-    repos = await Repo.where_not(repo_type="library").get()
-    repo_names = [r.name for r in repos]
-    template = _jinja.get_template("search.html")
-    return HTMLResponse(template.render(repos=repo_names))
-
-
-async def search_results(request: Request) -> HTMLResponse:
-    """Return search results for htmx swap.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        Rendered HTML partial with search results.
-    """
-    query = request.query_params.get("q", "")
-    repo = request.query_params.get("repo", "") or None
-    kind = request.query_params.get("kind", "") or None
-    results = await _search_symbols(query, repo)
-    if kind:
-        results = [r for r in results if r.get("kind") == kind]
-    template = _jinja.get_template("partials/search_results.html")
-    return HTMLResponse(template.render(results=results, query=query))
-
-
-async def session_page(request: Request) -> HTMLResponse:
-    """Render the session stats page.
-
-    Shows the current instance's session stats plus any registered
-    follower sessions from the cluster.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        Rendered HTML response.
-    """
-    from sylvan.cluster.state import get_cluster_state
-    from sylvan.database.orm.runtime.query_cache import get_query_cache
-    from sylvan.session.tracker import get_session
-
-    session = get_session()
-    stats = session.get_session_stats()
-    efficiency = session.get_efficiency_stats()
-    cache = get_query_cache().stats()
-
-    cluster = get_cluster_state()
-    cluster_sessions = await _get_cluster_sessions()
-    combined = _combine_session_efficiency(cluster_sessions)
-    coding_history = await _get_coding_session_history()
-    cs_totals = await _get_current_coding_session_totals(cluster.coding_session_id)
-
-    template = _jinja.get_template("session.html")
-    return HTMLResponse(
-        template.render(
-            session=stats,
-            efficiency=combined or efficiency,
-            cache=cache,
-            cluster_role=cluster.role,
-            cluster_session_id=cluster.session_id,
-            cluster_sessions=cluster_sessions,
-            coding_history=coding_history,
-            cs_totals=cs_totals,
-        )
-    )
-
-
-async def session_partial(request: Request) -> HTMLResponse:
-    """Return session stats for htmx refresh.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        Rendered HTML partial.
-    """
-    from sylvan.cluster.state import get_cluster_state
-    from sylvan.database.orm.runtime.query_cache import get_query_cache
-    from sylvan.session.tracker import get_session
-
-    session = get_session()
-    stats = session.get_session_stats()
-    efficiency = session.get_efficiency_stats()
-    cache = get_query_cache().stats()
-
-    cluster = get_cluster_state()
-    cluster_sessions = await _get_cluster_sessions()
-    combined = _combine_session_efficiency(cluster_sessions)
-    coding_history = await _get_coding_session_history()
-    cs_totals = await _get_current_coding_session_totals(cluster.coding_session_id)
-
-    template = _jinja.get_template("partials/session_stats.html")
-    return HTMLResponse(
-        template.render(
-            session=stats,
-            efficiency=combined or efficiency,
-            cache=cache,
-            cluster_role=cluster.role,
-            cluster_session_id=cluster.session_id,
-            cluster_sessions=cluster_sessions,
-            coding_history=coding_history,
-            cs_totals=cs_totals,
-        )
-    )
-
-
-async def uptime_partial(request: Request) -> HTMLResponse:
-    """Return the current uptime string for htmx polling.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        Plain text uptime string.
-    """
-    return HTMLResponse(f"UPTIME {_uptime()}")
-
-
-async def symbol_source(request: Request) -> HTMLResponse:
-    """Return the source code of a symbol for htmx expansion.
-
-    Args:
-        request: The incoming HTTP request with 'id' query param.
-
-    Returns:
-        Rendered HTML with the symbol source in a code block.
-    """
-    symbol_id = request.query_params.get("id", "")
-    if not symbol_id:
-        return HTMLResponse("<div class='mono text-xs text-dim'>No symbol ID</div>")
-
-    from sylvan.database.orm import Symbol
-    from sylvan.database.orm.models.blob import Blob
-
-    sym = await Symbol.where(symbol_id=symbol_id).first()
-    if sym is None:
-        return HTMLResponse("<div class='mono text-xs text-dim'>Symbol not found</div>")
-
-    await sym.load("file")
-    source = ""
-    if sym.file and sym.file.content_hash:
-        content = await Blob.get(sym.file.content_hash)
-        if content and sym.byte_offset is not None and sym.byte_length:
-            raw = content[sym.byte_offset : sym.byte_offset + sym.byte_length]
-            source = raw.decode("utf-8", errors="replace")
-
-    if not source:
-        source = sym.signature or "(source unavailable)"
-
-    lang = sym.language or ""
-    prism_lang = {
-        "python": "python",
-        "javascript": "javascript",
-        "typescript": "typescript",
-        "tsx": "typescript",
-        "go": "go",
-        "rust": "rust",
-        "java": "java",
-        "c": "c",
-        "cpp": "cpp",
-        "c_sharp": "csharp",
-        "ruby": "ruby",
-        "php": "php",
-        "swift": "swift",
-        "kotlin": "kotlin",
-        "dart": "dart",
-        "scala": "scala",
-        "bash": "bash",
-        "sql": "sql",
-    }.get(lang, "")
-
-    import html as html_mod
-
-    escaped = html_mod.escape(source)
-    lang_class = f" language-{prism_lang}" if prism_lang else ""
-    return HTMLResponse(f'<pre class="code-block"><code class="{lang_class}">{escaped}</code></pre>')
-
-
-async def blast_radius_page(request: Request) -> HTMLResponse:
-    """Render the blast radius explorer page.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        Rendered HTML response.
-    """
-    from sylvan.database.orm import Repo
-
-    repos = await Repo.where_not(repo_type="library").get()
-    repo_names = [r.name for r in repos]
-    template = _jinja.get_template("blast_radius.html")
-    return HTMLResponse(template.render(repos=repo_names))
-
-
-async def blast_radius_partial(request: Request) -> HTMLResponse:
-    """Run blast radius analysis and return mermaid graph + details.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        Rendered HTML partial with mermaid diagram and file lists.
-    """
-    symbol_id = request.query_params.get("symbol_id", "").strip()
-    depth = int(request.query_params.get("depth", "2"))
-
-    if not symbol_id:
-        return HTMLResponse("<div class='empty-state'>Enter a symbol ID above</div>")
-
-    from sylvan.analysis.impact.blast_radius import get_blast_radius as _blast
-
-    result = await _blast(symbol_id, max_depth=depth)
-
-    if "error" in result:
-        return HTMLResponse(
-            f"<div class='empty-state' style='color:var(--danger)'>{result['error']}: {result.get('symbol_id', '')}</div>"
-        )
-
-    # Build mermaid graph
-    target_name = result["symbol"]["name"]
-    confirmed = result.get("confirmed", [])
-    potential = result.get("potential", [])
-
-    mermaid_lines = ["graph LR"]
-    target_node = f'target["{target_name}"]'
-    mermaid_lines.append("    style target fill:#1a3a2a,stroke:#3dd68c,color:#3dd68c")
-
-    seen_nodes = set()
-    for entry in confirmed:
-        fname = entry["file"].rsplit("/", 1)[-1]
-        node_id = fname.replace(".", "_").replace("-", "_")
-        if node_id not in seen_nodes:
-            seen_nodes.add(node_id)
-            refs = entry.get("occurrences", 0)
-            label = f'"{fname}<br/>{refs} refs"' if refs else f'"{fname}"'
-            mermaid_lines.append(f"    {target_node} -->|d{entry['depth']}| {node_id}[{label}]")
-            mermaid_lines.append(f"    style {node_id} fill:#2a1a1a,stroke:#e84855,color:#e84855")
-
-    for entry in potential:
-        fname = entry["file"].rsplit("/", 1)[-1]
-        node_id = fname.replace(".", "_").replace("-", "_")
-        if node_id not in seen_nodes:
-            seen_nodes.add(node_id)
-            mermaid_lines.append(f'    {target_node} -.->|d{entry["depth"]}| {node_id}["{fname}"]')
-            mermaid_lines.append(f"    style {node_id} fill:#1a1a20,stroke:#f0a030,color:#f0a030")
-
-    mermaid_code = "\n".join(mermaid_lines)
-
-    template = _jinja.get_template("partials/blast_radius_result.html")
-    return HTMLResponse(
-        template.render(
-            result=result,
-            confirmed=confirmed,
-            potential=potential,
-            mermaid_code=mermaid_code,
-            total=len(confirmed) + len(potential),
-        )
-    )
-
-
-async def symbol_search_partial(request: Request) -> HTMLResponse:
-    """Search symbols for the blast radius autocomplete.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        HTML options for the symbol dropdown.
-    """
-    query = request.query_params.get("q", "").strip()
-    repo = request.query_params.get("repo", "").strip() or None
-
-    if not query or len(query) < 2:
-        return HTMLResponse("")
-
-    results = await _search_symbols(query, repo)
-    options = []
-    for sym in results[:15]:
-        sid = sym["symbol_id"].replace("'", "\\'")
-        options.append(
-            f'<div class="autocomplete-item" onclick="selectSymbol(\'{sid}\')">'
-            f'<span class="badge badge-{sym["kind"]}">{sym["kind"]}</span> '
-            f'<span class="mono text-white" style="font-size:12px">{sym["name"]}</span> '
-            f'<span class="mono text-xs text-faint">{sym["file"]}</span>'
-            f"</div>"
-        )
-    return HTMLResponse("".join(options))
-
-
-async def api_stats(request: Request) -> JSONResponse:
-    """Return dashboard stats as JSON for programmatic access.
-
-    Args:
-        request: The incoming HTTP request.
-
-    Returns:
-        JSON response with overview data.
-    """
-    data = await _get_overview_data()
-    data["uptime"] = _uptime()
-    return JSONResponse(data)
-
-
 async def _context_middleware(request: Request, call_next):
     """Set a per-request identity map for each dashboard request.
 
@@ -1052,7 +479,21 @@ async def _context_middleware(request: Request, call_next):
     finally:
         reset_identity_map(token)
     return response
-    return response
+
+
+def _spa_catchall(request: Request) -> HTMLResponse:
+    """Serve the Vue SPA index.html for client-side routing.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        The SPA index.html file content.
+    """
+    spa_index = Path(__file__).parent / "static" / "dist" / "index.html"
+    if spa_index.exists():
+        return HTMLResponse(spa_index.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Dashboard not built</h1><p>Run pnpm build in frontend/</p>", status_code=503)
 
 
 def create_dashboard_app() -> Starlette:
@@ -1063,30 +504,24 @@ def create_dashboard_app() -> Starlette:
     """
     from starlette.middleware import Middleware
     from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.staticfiles import StaticFiles
 
     from sylvan.cluster.websocket import handle_follower_connection
+    from sylvan.dashboard.ws import handle_dashboard_ws
+
+    spa_dist = Path(__file__).parent / "static" / "dist"
 
     routes = [
-        Route("/", overview),
-        Route("/quality", quality),
-        Route("/libraries", libraries),
-        Route("/search", search),
-        Route("/session", session_page),
-        Route("/workspaces", workspaces_page),
-        Route("/extensions", extensions_page),
-        Route("/history", history_page),
-        Route("/api/stats", api_stats),
+        WebSocketRoute("/ws/dashboard", handle_dashboard_ws),
         WebSocketRoute("/ws/cluster", handle_follower_connection),
-        Route("/htmx/stats", overview_partial),
-        Route("/htmx/quality", quality_partial),
-        Route("/htmx/search", search_results),
-        Route("/htmx/session", session_partial),
-        Route("/htmx/symbol", symbol_source),
-        Route("/blast-radius", blast_radius_page),
-        Route("/htmx/blast-radius", blast_radius_partial),
-        Route("/htmx/symbol-search", symbol_search_partial),
-        Route("/partials/uptime", uptime_partial),
     ]
+
+    if spa_dist.exists():
+        routes.append(Mount("/assets", app=StaticFiles(directory=str(spa_dist / "assets"))))
+
+    # SPA catch-all must be last
+    routes.append(Route("/{path:path}", _spa_catchall))
+
     middleware = [
         Middleware(BaseHTTPMiddleware, dispatch=_context_middleware),
     ]

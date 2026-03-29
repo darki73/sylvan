@@ -54,6 +54,7 @@ class RelationDescriptor:
         related: str | type,
         foreign_key: str,
         local_key: str = "id",
+        on_delete: str | None = None,
     ):
         """Define a relation to another model.
 
@@ -61,10 +62,14 @@ class RelationDescriptor:
             related: The related model class or its name as a string.
             foreign_key: Column name holding the foreign key.
             local_key: Column name on the owning side to match against.
+            on_delete: Cascade behavior when the parent is deleted.
+                ``"cascade"`` deletes children, ``"detach"`` removes pivot rows.
+                None means no automatic cleanup.
         """
         self._related_ref = related
         self.foreign_key = foreign_key
         self.local_key = local_key
+        self.on_delete = on_delete
         self._attr_name: str = ""
 
     @property
@@ -212,7 +217,7 @@ class BelongsToMany(RelationDescriptor):
         related_key: Column in the pivot table referencing the related model.
     """
 
-    def __init__(self, related, pivot_table, foreign_key, related_key, local_key="id"):
+    def __init__(self, related, pivot_table, foreign_key, related_key, local_key="id", on_delete=None):
         """Define a many-to-many relation through a pivot table.
 
         Args:
@@ -221,8 +226,9 @@ class BelongsToMany(RelationDescriptor):
             foreign_key: Column in the pivot table referencing this model.
             related_key: Column in the pivot table referencing the related model.
             local_key: Column on this model to match against.
+            on_delete: ``"detach"`` to remove pivot rows on parent delete.
         """
-        super().__init__(related, foreign_key=foreign_key, local_key=local_key)
+        super().__init__(related, foreign_key=foreign_key, local_key=local_key, on_delete=on_delete)
         self.pivot_table = pivot_table
         self.related_key = related_key
 

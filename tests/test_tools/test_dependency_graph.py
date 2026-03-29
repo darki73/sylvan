@@ -138,7 +138,7 @@ class TestGetDependencyGraph:
 
 class TestBfsHelpers:
     async def test_bfs_forward_empty(self, indexed_repo):
-        from sylvan.tools.analysis.get_dependency_graph import _bfs_forward
+        from sylvan.services.analysis import _bfs_forward
 
         nodes: set[int] = set()
         edges: list[tuple[int, int]] = []
@@ -147,7 +147,7 @@ class TestBfsHelpers:
         assert len(edges) == 0
 
     async def test_bfs_reverse_empty(self, indexed_repo):
-        from sylvan.tools.analysis.get_dependency_graph import _bfs_reverse
+        from sylvan.services.analysis import _bfs_reverse
 
         nodes: set[int] = set()
         edges: list[tuple[int, int]] = []

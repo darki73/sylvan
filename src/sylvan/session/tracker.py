@@ -6,6 +6,7 @@ Tracks what the agent has already retrieved in this MCP session so we can:
 - Predict what the agent needs next
 """
 
+import collections
 import threading
 import time
 from dataclasses import dataclass, field
@@ -36,6 +37,7 @@ class SessionTracker:
     _query_history: list[dict] = field(default_factory=list)
     _tool_calls: int = 0
     _start_time: float = field(default_factory=time.monotonic)
+    _started_at: str = ""
     _tokens_returned: int = 0
     _tokens_avoided: int = 0
     _workflow_loaded: bool = False
@@ -43,10 +45,15 @@ class SessionTracker:
     _efficiency_by_category: dict[str, dict] = field(
         default_factory=lambda: {cat: {"calls": 0, "returned": 0, "equivalent": 0} for cat in _EFFICIENCY_CATEGORIES}
     )
+    _recent_calls: collections.deque = field(default_factory=lambda: collections.deque(maxlen=20))
 
     def __post_init__(self) -> None:
-        """Create the threading lock (not suitable as a dataclass field)."""
+        """Create the threading lock and set the start timestamp."""
         self._lock = threading.Lock()
+        if not self._started_at:
+            from datetime import UTC, datetime
+
+            self._started_at = datetime.now(UTC).isoformat()
 
     def record_symbol_access(self, symbol_id: str, file_path: str | None = None) -> None:
         """Record that a symbol was retrieved.
@@ -90,42 +97,48 @@ class SessionTracker:
                 }
             )
 
-    def record_tool_call(self, tool_name: str) -> None:
-        """Record any tool call.
+    def record_tool_call(
+        self,
+        tool_name: str,
+        *,
+        repo: str | None = None,
+        duration_ms: float | None = None,
+        category: str | None = None,
+        tokens_returned: int = 0,
+        tokens_equivalent: int = 0,
+    ) -> None:
+        """Record a tool call with all associated metrics.
+
+        This is the single entry point for all statistics recording.
+        Called once per tool call from _dispatch.
 
         Args:
             tool_name: Name of the invoked tool.
+            repo: Repository the call targeted.
+            duration_ms: How long the call took in milliseconds.
+            category: Tool category (search, retrieval, analysis, indexing, meta).
+            tokens_returned: Tokens actually returned to the agent.
+            tokens_equivalent: Tokens a raw file read would have cost.
         """
+        from datetime import UTC, datetime
+
         with self._lock:
             self._tool_calls += 1
-
-    def record_savings(self, tokens_returned: int, tokens_avoided: int) -> None:
-        """Record token savings from a retrieval.
-
-        Args:
-            tokens_returned: Number of tokens actually returned.
-            tokens_avoided: Number of tokens saved by partial retrieval.
-        """
-        with self._lock:
-            self._tokens_returned += tokens_returned
-            self._tokens_avoided += tokens_avoided
-
-    def record_efficiency(self, category: str, returned: int, equivalent: int) -> None:
-        """Record token efficiency for a tool call by category.
-
-        Args:
-            category: One of 'search', 'retrieval', 'analysis', 'indexing', 'meta'.
-            returned: Tokens actually returned to the agent.
-            equivalent: Tokens a raw file read would have cost.
-        """
-        with self._lock:
-            cat = self._efficiency_by_category.get(category)
-            if cat:
+            self._recent_calls.appendleft(
+                {
+                    "name": tool_name,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "repo": repo,
+                    "duration_ms": duration_ms,
+                }
+            )
+            if category and category in self._efficiency_by_category:
+                cat = self._efficiency_by_category[category]
                 cat["calls"] += 1
-                cat["returned"] += returned
-                cat["equivalent"] += equivalent
-            self._tokens_returned += returned
-            self._tokens_avoided += max(0, equivalent - returned)
+                cat["returned"] += tokens_returned
+                cat["equivalent"] += tokens_equivalent
+            self._tokens_returned += tokens_returned
+            self._tokens_avoided += max(0, tokens_equivalent - tokens_returned)
 
     def get_efficiency_stats(self) -> dict:
         """Get cumulative token efficiency statistics.
@@ -144,6 +157,18 @@ class SessionTracker:
                 "reduction_percent": reduction,
                 "by_category": {k: dict(v) for k, v in self._efficiency_by_category.items()},
             }
+
+    def get_recent_calls(self, limit: int = 20) -> list[dict]:
+        """Get the most recent tool calls.
+
+        Args:
+            limit: Maximum number of calls to return.
+
+        Returns:
+            List of recent tool call dicts, newest first.
+        """
+        with self._lock:
+            return list(self._recent_calls)[:limit]
 
     def is_symbol_seen(self, symbol_id: str) -> bool:
         """Check if a symbol was already retrieved in this session.
@@ -206,6 +231,7 @@ class SessionTracker:
         """
         elapsed = time.monotonic() - self._start_time
         return {
+            "start_time": self._started_at,
             "duration_seconds": round(elapsed, 1),
             "tool_calls": self._tool_calls,
             "symbols_retrieved": len(self._seen_symbols),

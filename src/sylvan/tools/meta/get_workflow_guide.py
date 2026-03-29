@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from sylvan.tools.meta.configure_editor import _with_update_check
-from sylvan.tools.support.response import MetaBuilder, log_tool_call, wrap_response
+from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
 
 _REQUIRED_PERMISSION = "mcp__sylvan__*"
 
@@ -141,7 +141,7 @@ async def get_workflow_guide(project_path: str | None = None) -> dict:
     Returns:
         Tool response dict with workflow rules, and optionally setup_actions.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
 
     from sylvan.session.tracker import get_session
 

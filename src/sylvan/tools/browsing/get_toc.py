@@ -1,7 +1,14 @@
 """MCP tool: get_toc -- table of contents for indexed documentation."""
 
-from sylvan.database.orm import Repo, Section
-from sylvan.tools.support.response import MetaBuilder, check_staleness, ensure_orm, log_tool_call, wrap_response
+from sylvan.database.orm import Repo
+from sylvan.services.section import SectionService
+from sylvan.tools.support.response import (
+    check_staleness,
+    ensure_orm,
+    get_meta,
+    log_tool_call,
+    wrap_response,
+)
 
 
 @log_tool_call
@@ -18,25 +25,14 @@ async def get_toc(
     Returns:
         Tool response dict with ``toc`` list and ``_meta`` envelope.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    query_builder = Section.in_repo(repo).with_("file")
+    data = await SectionService().toc(repo, doc_path=doc_path)
+    data.pop("repo_name")
 
-    if doc_path:
-        query_builder = query_builder.join("files", "files.id = sections.file_id").where("files.path", doc_path)
-
-    query_builder = query_builder.order_by("sections.byte_start").limit(5000)
-    sections = await query_builder.get()
-
-    toc = []
-    for section in sections:
-        entry = await section.to_summary_dict()
-        entry["parent_id"] = section.parent_section_id
-        toc.append(entry)
-
-    meta.set("section_count", len(toc))
-    response = wrap_response({"toc": toc}, meta.build())
+    meta.set("section_count", data.pop("section_count"))
+    response = wrap_response(data, meta.build())
     repo_obj = await Repo.where(name=repo).first()
     if repo_obj:
         await check_staleness(repo_obj.id, response)
@@ -54,46 +50,21 @@ async def get_toc_tree(repo: str, max_depth: int = 3) -> dict:
     Returns:
         Tool response dict with ``tree`` list and ``_meta`` envelope.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    max_depth = min(max(max_depth, 1), 6)
+    data = await SectionService().toc_tree(repo, max_depth=max_depth)
+    data.pop("repo_name")
 
-    sections = await Section.in_repo(repo).with_("file").order_by("sections.byte_start").limit(5000).get()
-
-    docs: dict[str, list] = {}
-    nodes: dict[str, dict] = {}
-    truncated = 0
-
-    for section in sections:
-        if section.level > max_depth:
-            truncated += 1
-            continue
-        file_rec = section.file
-        file_path = file_rec.path if file_rec else ""
-        node = {
-            "section_id": section.section_id,
-            "title": section.title,
-            "level": section.level,
-            "summary": section.summary or "",
-            "children": [],
-        }
-        nodes[section.section_id] = node
-
-        parent_id = section.parent_section_id
-        if parent_id and parent_id in nodes:
-            nodes[parent_id]["children"].append(node)
-        else:
-            docs.setdefault(file_path, []).append(node)
-
-    tree = [{"file": fp, "sections": secs} for fp, secs in docs.items()]
-
-    meta.set("document_count", len(tree))
-    meta.set("section_count", len(nodes))
+    meta.set("document_count", data.pop("document_count"))
+    meta.set("section_count", data.pop("section_count"))
+    truncated = data.pop("truncated_sections", None)
+    depth = data.pop("max_depth", None)
     if truncated:
         meta.set("truncated_sections", truncated)
-        meta.set("max_depth", max_depth)
-    response = wrap_response({"tree": tree}, meta.build())
+        meta.set("max_depth", depth)
+
+    response = wrap_response(data, meta.build())
     repo_obj = await Repo.where(name=repo).first()
     if repo_obj:
         await check_staleness(repo_obj.id, response)

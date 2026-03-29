@@ -189,13 +189,70 @@ async def flush_instance_to_db(backend, session_tracker, cache, node_id: str, co
         )
     await backend.commit()
 
-    # Also refresh the cluster lock heartbeat if we're the leader
     state = get_cluster_state()
     if state.is_leader:
         from sylvan.database.orm import ClusterLock
 
         await ClusterLock.refresh(node_id)
         await backend.commit()
+
+    from sylvan.events import emit
+
+    cluster_data = {
+        "role": state.role,
+        "session_id": state.session_id,
+        "coding_session_id": state.coding_session_id,
+    }
+
+    combined_efficiency = efficiency
+    coding_history: list = []
+    cluster_sessions: list = []
+
+    if state.is_leader:
+        try:
+            from sylvan.dashboard.app import (
+                _combine_session_efficiency,
+                _get_cluster_sessions,
+                _get_coding_session_history,
+            )
+
+            cluster_sessions = await _get_cluster_sessions()
+            cluster_data["nodes"] = cluster_sessions
+            cluster_data["active_count"] = sum(1 for s in cluster_sessions if s.get("alive"))
+            cluster_data["total_tool_calls"] = sum(s.get("tool_calls", 0) for s in cluster_sessions)
+            coding_history = await _get_coding_session_history(limit=10)
+
+            combined = _combine_session_efficiency(cluster_sessions)
+            if combined:
+                combined_efficiency = combined
+        except Exception:
+            cluster_sessions = []
+            coding_history = []
+
+    from sylvan.database.orm import CodingSession
+
+    cs = await CodingSession.where(id=coding_session_id).first()
+    if cs:
+        total_calls = cluster_data.get("total_tool_calls", stats.get("tool_calls", 0))
+        total_ret = combined_efficiency.get("total_returned", 0)
+        total_eq = combined_efficiency.get("total_equivalent", 0)
+        await cs.update(
+            total_tool_calls=total_calls,
+            total_efficiency_returned=total_ret,
+            total_efficiency_equivalent=total_eq,
+        )
+        await backend.commit()
+
+    emit(
+        "stats_update",
+        {
+            "session": stats,
+            "efficiency": combined_efficiency,
+            "cache": cache_stats,
+            "cluster": cluster_data,
+            "coding_history": coding_history,
+        },
+    )
 
 
 async def _try_promote(backend, node_id: str, coding_session_id: str) -> None:
@@ -289,6 +346,34 @@ async def _try_promote(backend, node_id: str, coding_session_id: str) -> None:
     logger.info("promoted_to_leader", node_id=node_id)
 
 
+async def _send_stats_to_leader(session_tracker, cache, node_id: str) -> None:
+    """Send this follower's session stats to the leader via WebSocket.
+
+    The leader uses this to update the follower's instance row in the DB,
+    so cluster-wide stats are accurate.
+
+    Args:
+        session_tracker: The SessionTracker instance.
+        cache: The QueryCache instance.
+        node_id: This follower's node identifier.
+    """
+    try:
+        from sylvan.cluster.websocket import _follower_ws
+
+        if _follower_ws is None:
+            return
+
+        from sylvan.cluster import protocol
+
+        stats = session_tracker.get_session_stats()
+        efficiency = session_tracker.get_efficiency_stats()
+        cache_stats = cache.stats()
+
+        await _follower_ws.send(protocol.stats_message(node_id, stats, efficiency, cache_stats))
+    except Exception as exc:
+        logger.debug("follower_stats_send_failed", error=str(exc))
+
+
 async def start_heartbeat(
     backend,
     session_tracker,
@@ -322,6 +407,7 @@ async def start_heartbeat(
                     await cleanup_dead_nodes(backend)
                 else:
                     await _try_promote(backend, node_id, coding_session_id)
+                    await _send_stats_to_leader(session_tracker, cache, node_id)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:

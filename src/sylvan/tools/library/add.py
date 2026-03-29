@@ -1,6 +1,6 @@
 """MCP tool: add_library -- index a third-party library's source code."""
 
-from sylvan.tools.support.response import MetaBuilder, log_tool_call, wrap_response
+from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
 
 
 @log_tool_call
@@ -17,12 +17,12 @@ async def add_library(package: str) -> dict:
     Returns:
         Tool response dict with library status and ``_meta`` envelope.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
 
     try:
-        from sylvan.libraries.manager import async_add_library
+        from sylvan.services.library import add_library as _svc
 
-        result = await async_add_library(package)
+        result = await _svc(package)
         meta.set("status", result.get("status", ""))
         return wrap_response(result, meta.build())
     except ValueError as e:

@@ -77,6 +77,8 @@ class IndexResult:
 async def index_folder(
     folder_path: str,
     name: str | None = None,
+    *,
+    force: bool = False,
 ) -> IndexResult:
     """Index a local folder: discover files, parse, extract symbols, store.
 
@@ -85,6 +87,7 @@ async def index_folder(
     Args:
         folder_path: Absolute or relative path to the folder to index.
         name: Optional display name for the repository.
+        force: If True, re-extract all files even if unchanged.
 
     Returns:
         An IndexResult with counts, errors, and timing information.
@@ -119,7 +122,7 @@ async def index_folder(
         result.repo_id = repo_id
 
         for discovered_file in discovery.files:
-            await process_file(discovered_file, repo_id, name, cfg.max_file_size, result)
+            await process_file(discovered_file, repo_id, name, cfg.max_file_size, result, force=force)
         await _purge_deleted_files(repo_id, discovered_paths)
 
     # Resolve import specifiers to file IDs after all files are indexed.
@@ -131,7 +134,6 @@ async def index_folder(
     await _enrich_ecosystem_context(root, repo_id)
 
     result.duration_ms = (time.monotonic() - start) * 1000
-    await _maybe_start_background(result.repo_id)
     return result
 
 
@@ -271,20 +273,3 @@ async def _enrich_ecosystem_context(root: Path, repo_id: int) -> None:
         symbols=len(symbols),
         providers=provider_names,
     )
-
-
-async def _maybe_start_background(repo_id: int) -> None:
-    """Schedule background tasks as an async task if possible.
-
-    Args:
-        repo_id: Database ID of the repository to process.
-    """
-    try:
-        import asyncio
-
-        loop = asyncio.get_running_loop()
-        from sylvan.indexing.post_processing.background_tasks import start_background_tasks
-
-        loop.create_task(start_background_tasks(repo_id))
-    except RuntimeError:
-        logger.debug("skipping_background_tasks", reason="no_event_loop")

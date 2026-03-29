@@ -1,6 +1,6 @@
 """MCP tool: get_logs - retrieve sylvan server log entries."""
 
-from sylvan.tools.support.response import MetaBuilder, log_tool_call, wrap_response
+from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
 
 
 @log_tool_call
@@ -24,40 +24,21 @@ async def get_logs(
     Returns:
         Tool response dict with ``entries`` list and ``_meta`` envelope.
     """
-    meta = MetaBuilder()
-    lines = max(1, min(lines, 500))
+    meta = get_meta()
 
-    from sylvan.logging import _get_log_dir
+    from sylvan.services.meta import get_logs as _svc
 
-    log_file = _get_log_dir() / "sylvan.log"
+    result = await _svc(lines=lines, from_start=from_start, offset=offset)
 
-    if not log_file.exists():
-        return wrap_response(
-            {"entries": [], "message": "No log file found."},
-            meta.build(),
-        )
+    meta.set("total_lines", result.get("total_lines", 0))
+    meta.set("returned_lines", result.get("returned_lines", 0))
+    meta.set("offset", result.get("offset", offset))
+    meta.set("from_start", result.get("from_start", from_start))
+    if "log_file" in result:
+        meta.set("log_file", result.pop("log_file"))
 
-    try:
-        all_lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
-    except Exception as error:
-        return wrap_response(
-            {"entries": [], "error": f"Failed to read log file: {error}"},
-            meta.build(),
-        )
+    # Remove meta-level keys from body
+    for key in ("total_lines", "returned_lines", "offset", "from_start"):
+        result.pop(key, None)
 
-    total = len(all_lines)
-
-    if from_start:
-        result = all_lines[offset : offset + lines]
-    else:
-        end = total - offset
-        start = max(0, end - lines)
-        result = all_lines[start:end] if end > 0 else []
-
-    meta.set("total_lines", total)
-    meta.set("returned_lines", len(result))
-    meta.set("offset", offset)
-    meta.set("from_start", from_start)
-    meta.set("log_file", str(log_file))
-
-    return wrap_response({"entries": result}, meta.build())
+    return wrap_response(result, meta.build())

@@ -300,6 +300,15 @@ TOOLS: list[Tool] = [
         inputSchema={"type": "object", "properties": {}},
     ),
     Tool(
+        name="get_peak_status",
+        description=(
+            "Check if Claude is currently in peak or off-peak usage hours. "
+            "Peak: weekdays 13:00-19:00 UTC. Weekends are always off-peak. "
+            "Returns current status, time until next transition, and the peak window."
+        ),
+        inputSchema={"type": "object", "properties": {}},
+    ),
+    Tool(
         name="get_workflow_guide",
         description=(
             "CALL THIS FIRST in every session. Returns the optimal workflow rules "

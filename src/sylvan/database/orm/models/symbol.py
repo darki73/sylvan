@@ -93,7 +93,10 @@ class Symbol(Model):
     parent_symbol = BelongsTo("Symbol", foreign_key="parent_symbol_id", local_key="symbol_id")
     """Parent symbol for nested symbols."""
 
-    quality_info = HasOne("Quality", foreign_key="symbol_id", local_key="symbol_id")
+    references = HasMany("Reference", foreign_key="source_symbol_id", local_key="symbol_id", on_delete="cascade")
+    """Outgoing references from this symbol."""
+
+    quality_info = HasOne("Quality", foreign_key="symbol_id", local_key="symbol_id", on_delete="cascade")
     """Associated quality metrics."""
 
     @scope

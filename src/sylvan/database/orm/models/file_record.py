@@ -40,11 +40,14 @@ class FileRecord(Model):
     repo = BelongsTo("Repo", foreign_key="repo_id")
     """Parent repository."""
 
-    symbols = HasMany("Symbol", foreign_key="file_id")
+    symbols = HasMany("Symbol", foreign_key="file_id", on_delete="cascade")
     """Symbols extracted from this file."""
 
-    sections = HasMany("Section", foreign_key="file_id")
+    sections = HasMany("Section", foreign_key="file_id", on_delete="cascade")
     """Documentation sections extracted from this file."""
+
+    imports = HasMany("FileImport", foreign_key="file_id", on_delete="cascade")
+    """Import statements extracted from this file."""
 
     async def get_content(self) -> bytes | None:
         """Get decompressed file content from the blob store.
