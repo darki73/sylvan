@@ -1,5 +1,58 @@
 # Changelog
 
+## 1.6.0
+
+### Services layer
+
+- Fluent builder pattern for all tool, CLI, and WebSocket operations
+- RepositoryService, WorkspaceService, SymbolService, SearchService, SectionService, AnalysisService, GitService, MetaService, LibraryService, IndexingService
+- Result classes with `__slots__` and `__getattr__` proxy wrapping ORM models
+- All 56 tools refactored to delegate to services
+
+### Vue 3 dashboard
+
+- Complete rewrite from Jinja/HTMX to Vue 3 SPA (Tailwind 4, TypeScript, Vue Router 5)
+- WebSocket-only communication, no REST API or polling
+- Pages: overview, repositories, libraries, workspaces, search, quality, session, history
+- Components: activity heatmap, efficiency ring, code block (Prism.js), file tree, cluster table
+- Real-time indexing progress, peak/off-peak indicator
+- Legacy Jinja templates and HTMX endpoints removed
+
+### Job queue
+
+- Priority-based FIFO queue with asyncio workers
+- IndexFolderWorker (priority 0), EmbeddingWorker (priority 10), SummaryWorker (priority 20)
+- Deduplication via job keys, progress reporting via event bus
+- Dashboard shows real-time queue status
+
+### Event bus
+
+- Sync and async handler registration with `on()`/`off()`
+- Queue-based consumers for WebSocket streaming
+- Fixed structlog `event` kwarg conflict in error logging
+
+### Statistics pipeline
+
+- Single write path, removed UsageAccumulator buffer
+- Follower stats relay via WebSocket (MSG_STATS + usage messages)
+- Combined efficiency aggregation from all instances (alive and dead)
+- Fixed follower disconnect losing stats data
+- Fixed efficiency data flipping every 10 seconds in dashboard
+
+### ORM
+
+- Cascade delete via `on_delete="cascade"` on HasMany/HasOne relations
+- `Model.attach(relation, *ids)` / `Model.detach(relation, *ids)` for pivot tables
+- `QueryBuilder.paginate(page, per_page)` with count + data
+- Nested eager loading: `with_("file.repo")` dot notation
+
+### Other
+
+- Composer package manager support via Packagist API
+- Peak/off-peak usage detection tool (`get_peak_status`)
+- `.gitignore`: node_modules excluded, static/dist included for built SPA
+- 1731 tests (up from 1614), 75% coverage
+
 ## 1.5.0
 
 ### Cluster redesign
