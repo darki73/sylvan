@@ -1,14 +1,12 @@
 """MCP tool: get_section -- retrieve full content of a documentation section."""
 
-from sylvan.context import get_context
-from sylvan.database.orm import Section
-from sylvan.error_codes import ContentNotAvailableError, SectionNotFoundError
+from sylvan.error_codes import SylvanError
+from sylvan.services.section import SectionService
 from sylvan.tools.support.response import (
-    MetaBuilder,
     check_staleness,
     ensure_orm,
+    get_meta,
     log_tool_call,
-    record_savings,
     wrap_response,
 )
 
@@ -31,41 +29,40 @@ async def get_section(
         SectionNotFoundError: If no section with the given ID exists.
         ContentNotAvailableError: If the section exists but content blob is missing.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    ctx = get_context()
-    cache = ctx.cache
-    cache_key = f"Section:{section_id}"
-    found, section = cache.get(cache_key)
-    if not found:
-        section = await Section.where(section_id=section_id).with_("file").first()
-        if section is not None:
-            cache.put(cache_key, section)
+    svc = SectionService().with_content()
+    if verify:
+        svc = svc.verified()
 
-    if section is None:
-        raise SectionNotFoundError(section_id=section_id, _meta=meta.build())
-
-    section_text = await section.get_content()
-    if not section_text:
-        raise ContentNotAvailableError(section_id=section_id, _meta=meta.build())
-
-    file_rec = section.file
+    try:
+        sec = await svc.find(section_id)
+    except SylvanError as exc:
+        exc._meta = meta.build()
+        raise
 
     result = {
-        **await section.to_summary_dict(include_repo=True),
-        "content": section_text,
-        "tags": section.tags or [],
-        "references": section.references or [],
+        **await sec._model.to_summary_dict(include_repo=True),
+        "content": sec.content,
+        "tags": sec._model.tags or [],
+        "references": sec._model.references or [],
     }
 
-    session = ctx.session
-    session.record_section_access(section_id, await section._resolve_file_path())
-    await record_savings(meta, section_text, file_rec, sections_retrieved=1)
+    if sec.content and sec.file_record:
+        from sylvan.tools.support.token_counting import count_tokens
+
+        file_content = await sec.file_record.get_content()
+        returned = count_tokens(sec.content)
+        if returned is not None and file_content:
+            file_text = file_content.decode("utf-8", errors="replace")
+            equivalent = count_tokens(file_text)
+            if equivalent and returned > 0 and equivalent > 0:
+                meta.record_token_efficiency(returned, equivalent)
 
     response = wrap_response(result, meta.build(), include_hints=True)
-    if file_rec:
-        await check_staleness(file_rec.repo_id, response)
+    if sec.file_record:
+        await check_staleness(sec.file_record.repo_id, response)
     return response
 
 
@@ -80,49 +77,37 @@ async def get_sections(section_ids: list[str]) -> dict:
         Tool response dict with ``sections`` list, ``not_found`` list,
         and ``_meta`` envelope.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    ctx = get_context()
-    cache = ctx.cache
-    results = []
-    not_found = []
+    svc = SectionService().with_content()
+    found_results = await svc.find_many(section_ids)
+
+    found_ids = {r.section_id for r in found_results}
+    not_found = [sid for sid in section_ids if sid not in found_ids]
     repo_ids: set[int] = set()
 
-    for sid in section_ids:
-        cache_key = f"Section:{sid}"
-        found, section = cache.get(cache_key)
-        if not found:
-            section = await Section.where(section_id=sid).with_("file").first()
-            if section is not None:
-                cache.put(cache_key, section)
-
-        if section is None:
-            not_found.append(sid)
-            continue
-
-        section_text = await section.get_content()
-        if not section_text:
-            not_found.append(sid)
-            continue
-
-        file_path = await section._resolve_file_path()
-        ctx.session.record_section_access(sid, file_path)
-        if section.file:
-            repo_ids.add(section.file.repo_id)
-        results.append(
+    sections = []
+    for r in found_results:
+        if r.file_record:
+            repo_ids.add(r.file_record.repo_id)
+        file_path = await r._model._resolve_file_path()
+        sections.append(
             {
-                "section_id": section.section_id,
-                "title": section.title,
-                "level": section.level,
+                "section_id": r.section_id,
+                "title": r.title,
+                "level": r.level,
                 "file": file_path,
-                "content": section_text,
+                "content": r.content,
             }
         )
 
-    meta.set("found", len(results))
+    data = {"sections": sections, "not_found": not_found}
+
+    meta.set("found", len(sections))
     meta.set("not_found", len(not_found))
-    response = wrap_response({"sections": results, "not_found": not_found}, meta.build())
+
+    response = wrap_response(data, meta.build())
     for rid in repo_ids:
         await check_staleness(rid, response)
     return response

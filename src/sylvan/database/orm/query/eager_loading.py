@@ -20,25 +20,62 @@ class QueryEagerMixin:
     async def _load_eager(self, instances: list) -> None:
         """Batch-load relations for a list of instances to prevent N+1 queries.
 
+        Supports dot-notation for nested relations (e.g. ``"file.repo"``).
+
         Args:
             instances: List of model instances to load relations for.
         """
         if not instances:
             return
 
-        for rel_name in self._eager_loads:
-            rel_desc = getattr(type(instances[0]), rel_name, None)
-            if rel_desc is None:
-                continue
+        nested: dict[str, list[str]] = {}
+        for rel_spec in self._eager_loads:
+            parts = rel_spec.split(".", 1)
+            top = parts[0]
+            if len(parts) > 1:
+                nested.setdefault(top, []).append(parts[1])
+            else:
+                nested.setdefault(top, [])
 
-            from sylvan.database.orm.primitives.relations import BelongsTo, BelongsToMany, HasMany, HasOne
+        for rel_name, children in nested.items():
+            await self._load_eager_relation(instances, rel_name)
 
-            if isinstance(rel_desc, BelongsTo):
-                await self._eager_load_belongs_to(instances, rel_name, rel_desc)
-            elif isinstance(rel_desc, (HasMany, HasOne)):
-                await self._eager_load_has(instances, rel_name, rel_desc)
-            elif isinstance(rel_desc, BelongsToMany):
-                await self._eager_load_belongs_to_many(instances, rel_name, rel_desc)
+            if children:
+                related = []
+                for inst in instances:
+                    loaded = getattr(inst, rel_name, None)
+                    if loaded is None:
+                        continue
+                    if isinstance(loaded, list):
+                        related.extend(loaded)
+                    else:
+                        related.append(loaded)
+                if related:
+                    from sylvan.database.orm.query.builder import QueryBuilder
+
+                    sub = QueryBuilder(type(related[0]))
+                    sub._eager_loads = children
+                    await sub._load_eager(related)
+
+    async def _load_eager_relation(self, instances: list, rel_name: str) -> None:
+        """Load a single relation by name on a list of instances.
+
+        Args:
+            instances: List of model instances.
+            rel_name: Name of the relation to load.
+        """
+        rel_desc = getattr(type(instances[0]), rel_name, None)
+        if rel_desc is None:
+            return
+
+        from sylvan.database.orm.primitives.relations import BelongsTo, BelongsToMany, HasMany, HasOne
+
+        if isinstance(rel_desc, BelongsTo):
+            await self._eager_load_belongs_to(instances, rel_name, rel_desc)
+        elif isinstance(rel_desc, (HasMany, HasOne)):
+            await self._eager_load_has(instances, rel_name, rel_desc)
+        elif isinstance(rel_desc, BelongsToMany):
+            await self._eager_load_belongs_to_many(instances, rel_name, rel_desc)
 
     async def _eager_load_belongs_to(self, instances: list, rel_name: str, rel_desc: Any) -> None:
         """Eager-load a BelongsTo relation for all instances.

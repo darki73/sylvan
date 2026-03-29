@@ -1,8 +1,6 @@
 """MCP tool: get_quality -- quality metrics for symbols."""
 
-from sylvan.database.orm import Quality, Repo
-from sylvan.error_codes import RepoNotFoundError
-from sylvan.tools.support.response import MetaBuilder, ensure_orm, log_tool_call, wrap_response
+from sylvan.tools.support.response import ensure_orm, get_meta, inject_meta, log_tool_call, wrap_response
 
 
 @log_tool_call
@@ -27,35 +25,23 @@ async def get_quality(
     Returns:
         Tool response dict with ``symbols`` quality list and ``_meta`` envelope.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    repo_obj = await Repo.where(name=repo).first()
-    if repo_obj is None:
-        raise RepoNotFoundError(repo=repo, _meta=meta.build())
+    from sylvan.error_codes import SylvanError
 
-    count = await (
-        Quality.query()
-        .join("symbols s", "s.symbol_id = quality.symbol_id")
-        .join("files f", "f.id = s.file_id")
-        .where("f.repo_id", repo_obj.id)
-        .count()
-    )
+    try:
+        from sylvan.services.analysis import AnalysisService
 
-    if count == 0:
-        from sylvan.analysis.quality.quality_metrics import compute_quality_metrics
+        result = await AnalysisService().quality(
+            repo,
+            untested_only=untested_only,
+            undocumented_only=undocumented_only,
+            min_complexity=min_complexity,
+            limit=limit,
+        )
+    except SylvanError as exc:
+        raise inject_meta(exc, meta) from exc
 
-        await compute_quality_metrics(repo_obj.id)
-
-    from sylvan.analysis.quality.quality_metrics import get_low_quality_symbols
-
-    results = await get_low_quality_symbols(
-        repo,
-        min_complexity=min_complexity,
-        untested_only=untested_only,
-        undocumented_only=undocumented_only,
-        limit=limit,
-    )
-
-    meta.set("count", len(results))
-    return wrap_response({"symbols": results}, meta.build())
+    meta.set("count", len(result["symbols"]))
+    return wrap_response(result, meta.build())

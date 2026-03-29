@@ -1,13 +1,8 @@
 """MCP tool: pin a specific library version to a workspace."""
 
 from sylvan.database.orm import Repo
-from sylvan.database.orm.runtime.connection_manager import get_backend
-from sylvan.database.workspace import (
-    async_add_repo_to_workspace,
-    async_get_workspace,
-)
 from sylvan.error_codes import RepoNotFoundError, WorkspaceNotFoundError
-from sylvan.tools.support.response import MetaBuilder, log_tool_call, wrap_response
+from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
 
 
 @log_tool_call
@@ -29,10 +24,11 @@ async def pin_library(workspace: str, library: str) -> dict:
         WorkspaceNotFoundError: If the workspace does not exist.
         RepoNotFoundError: If the library version is not indexed.
     """
-    meta = MetaBuilder()
-    backend = get_backend()
+    meta = get_meta()
 
-    ws = await async_get_workspace(backend, workspace)
+    from sylvan.services.workspace import WorkspaceService
+
+    ws = await WorkspaceService().find(workspace)
     if ws is None:
         raise WorkspaceNotFoundError(workspace=workspace, _meta=meta.build())
 
@@ -44,7 +40,7 @@ async def pin_library(workspace: str, library: str) -> dict:
             _meta=meta.build(),
         )
 
-    await async_add_repo_to_workspace(backend, ws["id"], repo.id)
+    await WorkspaceService().add_repo_by_id(workspace, repo.id)
 
     meta.set("workspace", workspace)
     meta.set("library", library)

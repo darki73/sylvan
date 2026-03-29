@@ -1,4 +1,4 @@
-"""Per-ecosystem package resolvers -- PyPI, npm, crates.io, Go proxy."""
+"""Per-ecosystem package resolvers -- PyPI, npm, crates.io, Go proxy, Packagist."""
 
 import httpx
 
@@ -225,6 +225,69 @@ def resolve_go(module: str, version: str) -> PackageInfo:
         repo_url=validate_repo_url(repo_url),
         tag=tag,
         manager="go",
+    )
+
+
+@_register("composer")
+def resolve_composer(name: str, version: str) -> PackageInfo:
+    """Resolve a PHP package from Packagist.
+
+    Args:
+        name: Composer package name (vendor/package format).
+        version: Desired version, or ``"latest"``.
+
+    Returns:
+        Resolved :class:`PackageInfo`.
+
+    Raises:
+        ValueError: If the package is not found or has no source repository.
+    """
+    url = f"https://repo.packagist.org/p2/{name}.json"
+    response = httpx.get(url, timeout=REGISTRY_TIMEOUT, follow_redirects=True)
+    response.raise_for_status()
+    data = response.json()
+
+    packages = data.get("packages", {}).get(name, [])
+    if not packages:
+        raise ValueError(f"Package '{name}' not found on Packagist.")
+
+    if version == "latest":
+        stable = [p for p in packages if "dev" not in p.get("version", "")]
+        chosen = stable[0] if stable else packages[0]
+    else:
+        chosen = None
+        for p in packages:
+            v = p.get("version", "").lstrip("v")
+            if v == version or p.get("version") == version or p.get("version") == f"v{version}":
+                chosen = p
+                break
+        if chosen is None:
+            raise ValueError(f"Version '{version}' not found for '{name}' on Packagist.")
+
+    resolved_version = chosen.get("version", version).lstrip("v")
+    while resolved_version.endswith(".0") and resolved_version.count(".") > 2:
+        resolved_version = resolved_version[:-2]
+
+    source = chosen.get("source", {})
+    repo_url = source.get("url", "")
+    if repo_url.endswith(".git"):
+        repo_url = repo_url[:-4]
+
+    if not repo_url:
+        raise ValueError(
+            f"Cannot find source repository for Composer package '{name}'. "
+            f"Fix with: sylvan library map composer/{name} https://github.com/org/repo"
+        )
+
+    display_version = chosen.get("version", f"v{resolved_version}")
+    tag = display_version if display_version.startswith("v") else f"v{display_version}"
+
+    return PackageInfo(
+        name=name,
+        version=resolved_version,
+        repo_url=validate_repo_url(repo_url),
+        tag=tag,
+        manager="composer",
     )
 
 

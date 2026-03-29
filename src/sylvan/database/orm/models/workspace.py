@@ -31,5 +31,6 @@ class Workspace(Model):
         pivot_table="workspace_repos",
         foreign_key="workspace_id",
         related_key="repo_id",
+        on_delete="detach",
     )
     """Repositories belonging to this workspace (many-to-many)."""

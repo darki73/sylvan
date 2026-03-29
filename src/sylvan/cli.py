@@ -763,7 +763,7 @@ def workspace_create(
         from sylvan.context import SylvanContext, drain_pending_tasks, using_context
         from sylvan.database.backends.sqlite.backend import SQLiteBackend
         from sylvan.database.migrations.runner import run_migrations
-        from sylvan.database.workspace import async_add_repo_to_workspace, async_create_workspace
+        from sylvan.services.workspace import WorkspaceService
 
         cfg = get_config()
         backend = SQLiteBackend(cfg.db_path)
@@ -772,11 +772,10 @@ def workspace_create(
 
         ctx = SylvanContext(backend=backend, config=cfg)
         async with using_context(ctx):
-            ws_id = await async_create_workspace(backend, name, description)
-            typer.echo(f"Workspace '{name}' created (id={ws_id})")
+            ws = await WorkspaceService().create(name, description)
+            typer.echo(f"Workspace '{name}' created (id={ws.id})")
 
             if paths:
-                from sylvan.database.orm import Repo
                 from sylvan.indexing.pipeline.orchestrator import index_folder
 
                 for p in paths:
@@ -786,9 +785,8 @@ def workspace_create(
                     result = await index_folder(resolved, name=repo_name)
                     typer.echo(f"    {result.files_indexed} files, {result.symbols_extracted} symbols")
 
-                    repo = await Repo.where(name=repo_name).first()
-                    if repo:
-                        await async_add_repo_to_workspace(backend, ws_id, repo.id)
+                    if result.repo_id:
+                        await WorkspaceService().add_repo_by_id(name, result.repo_id)
                         typer.echo(f"    Added '{repo_name}' to workspace")
 
                 await drain_pending_tasks()
@@ -804,15 +802,18 @@ def workspace_list() -> None:
 
     async def _run() -> list[dict]:
         from sylvan.config import get_config
+        from sylvan.context import SylvanContext, using_context
         from sylvan.database.backends.sqlite.backend import SQLiteBackend
         from sylvan.database.migrations.runner import run_migrations
-        from sylvan.database.workspace import async_list_workspaces
+        from sylvan.services.workspace import WorkspaceService
 
         cfg = get_config()
         backend = SQLiteBackend(cfg.db_path)
         await backend.connect()
         await run_migrations(backend)
-        result = await async_list_workspaces(backend)
+        ctx = SylvanContext(backend=backend, config=cfg)
+        async with using_context(ctx):
+            result = await WorkspaceService().with_repos().with_stats().get()
         await backend.disconnect()
         return result
 
@@ -822,10 +823,11 @@ def workspace_list() -> None:
         typer.echo("Create one with: sylvan workspace create <name>")
         return
     for ws in workspaces:
-        symbols = ws.get("total_symbols") or 0
-        typer.echo(f"  {ws['name']}: {ws.get('repo_count', 0)} repos, {symbols} symbols")
-        if ws.get("description"):
-            typer.echo(f"    {ws['description']}")
+        repo_count = len(ws.repos_data or [])
+        total_symbols = ws.stats["total_symbols"] if ws.stats else 0
+        typer.echo(f"  {ws.name}: {repo_count} repos, {total_symbols} symbols")
+        if ws.description:
+            typer.echo(f"    {ws.description}")
 
 
 @workspace_app.command("add")
@@ -845,8 +847,7 @@ def workspace_add(
         from sylvan.context import SylvanContext, using_context
         from sylvan.database.backends.sqlite.backend import SQLiteBackend
         from sylvan.database.migrations.runner import run_migrations
-        from sylvan.database.orm import Repo
-        from sylvan.database.workspace import async_add_repo_to_workspace
+        from sylvan.services.workspace import WorkspaceService
 
         cfg = get_config()
         backend = SQLiteBackend(cfg.db_path)
@@ -855,17 +856,10 @@ def workspace_add(
 
         ctx = SylvanContext(backend=backend, config=cfg)
         async with using_context(ctx):
-            repo_obj = await Repo.where(name=repo).first()
-            if not repo_obj:
-                typer.echo(f"Repository '{repo}' not found. Index it first with: sylvan index <path>")
+            result = await WorkspaceService().add_repo(name, repo)
+            if result is None:
+                typer.echo(f"Workspace '{name}' or repo '{repo}' not found.")
                 raise typer.Exit(1)
-
-            ws_row = await backend.fetch_one("SELECT id FROM workspaces WHERE name = ?", [name])
-            if not ws_row:
-                typer.echo(f"Workspace '{name}' not found. Create it first with: sylvan workspace create {name}")
-                raise typer.Exit(1)
-
-            await async_add_repo_to_workspace(backend, ws_row["id"], repo_obj.id)
             typer.echo(f"Added '{repo}' to workspace '{name}'")
 
         await backend.disconnect()
@@ -885,23 +879,22 @@ def workspace_remove(
 
     async def _run() -> None:
         from sylvan.config import get_config
+        from sylvan.context import SylvanContext, using_context
         from sylvan.database.backends.sqlite.backend import SQLiteBackend
         from sylvan.database.migrations.runner import run_migrations
+        from sylvan.services.workspace import WorkspaceService
 
         cfg = get_config()
         backend = SQLiteBackend(cfg.db_path)
         await backend.connect()
         await run_migrations(backend)
 
-        ws_row = await backend.fetch_one("SELECT id FROM workspaces WHERE name = ?", [name])
-        if not ws_row:
-            typer.echo(f"Workspace '{name}' not found.")
-            raise typer.Exit(1)
-
-        await backend.execute("DELETE FROM workspace_repos WHERE workspace_id = ?", [ws_row["id"]])
-        await backend.execute("DELETE FROM workspaces WHERE id = ?", [ws_row["id"]])
-        await backend.commit()
-        typer.echo(f"Workspace '{name}' removed")
+        ctx = SylvanContext(backend=backend, config=cfg)
+        async with using_context(ctx):
+            if not await WorkspaceService().delete(name):
+                typer.echo(f"Workspace '{name}' not found.")
+                raise typer.Exit(1)
+            typer.echo(f"Workspace '{name}' removed")
 
         await backend.disconnect()
 
@@ -920,15 +913,18 @@ def workspace_show(
 
     async def _run() -> dict | None:
         from sylvan.config import get_config
+        from sylvan.context import SylvanContext, using_context
         from sylvan.database.backends.sqlite.backend import SQLiteBackend
         from sylvan.database.migrations.runner import run_migrations
-        from sylvan.database.workspace import async_get_workspace
+        from sylvan.services.workspace import WorkspaceService
 
         cfg = get_config()
         backend = SQLiteBackend(cfg.db_path)
         await backend.connect()
         await run_migrations(backend)
-        result = await async_get_workspace(backend, name)
+        ctx = SylvanContext(backend=backend, config=cfg)
+        async with using_context(ctx):
+            result = await WorkspaceService().with_repos().with_stats().find(name)
         await backend.disconnect()
         return result
 
@@ -937,15 +933,19 @@ def workspace_show(
         typer.echo(f"Workspace '{name}' not found.")
         raise typer.Exit(1)
 
-    typer.echo(f"Workspace: {ws['name']}")
-    if ws.get("description"):
-        typer.echo(f"  {ws['description']}")
-    typer.echo(f"  Created: {ws.get('created_at', '-')}")
-    repos = ws.get("repos", [])
+    typer.echo(f"Workspace: {ws.name}")
+    if ws.description:
+        typer.echo(f"  {ws.description}")
+    typer.echo(f"  Created: {ws.created_at or '-'}")
+    stats = ws.stats or {}
+    typer.echo(
+        f"  Stats: {stats.get('total_files', 0)} files, {stats.get('total_symbols', 0)} symbols, {stats.get('total_sections', 0)} docs"
+    )
+    repos = ws.repos_data or []
     if repos:
         typer.echo(f"  Repos ({len(repos)}):")
         for r in repos:
-            typer.echo(f"    {r['name']}")
+            typer.echo(f"    {r['name']} - {r['files']} files, {r['symbols']} symbols")
     else:
         typer.echo("  No repos added yet.")
 

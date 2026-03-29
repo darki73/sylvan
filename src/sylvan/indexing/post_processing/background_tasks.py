@@ -1,4 +1,4 @@
-"""Post-indexing background tasks -- embedding generation and AI summaries."""
+"""Post-indexing tasks - embedding generation and AI summaries."""
 
 from sylvan.database.orm.runtime.connection_manager import get_backend
 from sylvan.logging import get_logger
@@ -6,11 +6,11 @@ from sylvan.logging import get_logger
 logger = get_logger(__name__)
 
 
-async def start_background_tasks(repo_id: int) -> None:
-    """Run embedding generation and AI summaries as an async task.
+async def run_post_processing(repo_id: int) -> None:
+    """Run all post-indexing tasks synchronously.
 
-    Intended to be scheduled via ``asyncio.create_task()`` from the
-    indexing orchestrator.
+    Called by the service layer for MCP tool calls where the caller
+    blocks until everything is done.
 
     Args:
         repo_id: Database ID of the repository to process.
@@ -20,23 +20,21 @@ async def start_background_tasks(repo_id: int) -> None:
         backend = get_backend()
         await backend.commit()
     except Exception as exc:
-        logger.warning("commit_after_embeddings_failed", error=str(exc))
+        logger.warning("embeddings_failed", error=str(exc))
 
     try:
         from sylvan.indexing.post_processing.summarizer import generate_summaries
 
         await generate_summaries(repo_id)
     except Exception as exc:
-        logger.warning("commit_after_summaries_failed", error=str(exc))
+        logger.warning("summaries_failed", error=str(exc))
 
     try:
-        from sylvan.indexing.post_processing.summarizer import (
-            generate_section_summaries,
-        )
+        from sylvan.indexing.post_processing.summarizer import generate_section_summaries
 
         await generate_section_summaries(repo_id)
     except Exception as exc:
-        logger.warning("commit_after_section_summaries_failed", error=str(exc))
+        logger.warning("section_summaries_failed", error=str(exc))
 
 
 async def generate_embeddings(repo_id: int) -> None:

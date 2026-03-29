@@ -1,6 +1,6 @@
 """MCP tool: list_libraries -- show all indexed third-party libraries."""
 
-from sylvan.tools.support.response import MetaBuilder, log_tool_call, wrap_response
+from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
 
 
 @log_tool_call
@@ -10,10 +10,10 @@ async def list_libraries() -> dict:
     Returns:
         Tool response dict with ``libraries`` list and ``_meta`` envelope.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
 
-    from sylvan.libraries.manager import async_list_libraries
+    from sylvan.services.library import list_libraries as _svc
 
-    libs = await async_list_libraries()
+    libs = await _svc()
     meta.set("count", len(libs))
     return wrap_response({"libraries": libs}, meta.build())

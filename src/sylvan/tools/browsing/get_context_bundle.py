@@ -5,7 +5,13 @@ import json
 from sylvan.context import get_context
 from sylvan.database.orm import FileImport, FileRecord, Symbol
 from sylvan.error_codes import SymbolNotFoundError
-from sylvan.tools.support.response import MetaBuilder, check_staleness, ensure_orm, log_tool_call, wrap_response
+from sylvan.tools.support.response import (
+    check_staleness,
+    ensure_orm,
+    get_meta,
+    log_tool_call,
+    wrap_response,
+)
 from sylvan.tools.support.token_counting import count_tokens
 
 
@@ -29,7 +35,7 @@ async def get_context_bundle(
         Tool response dict with symbol source, imports, siblings, and
         optionally callers, plus ``_meta`` envelope.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
     ctx = get_context()

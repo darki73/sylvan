@@ -325,6 +325,40 @@ class QueryBuilder[T: "Model"](
         self._eager_counts.append(relation)
         return self
 
+    def for_page(self, page: int, per_page: int = 15) -> QueryBuilder[T]:
+        """Set limit and offset for a given page number.
+
+        Args:
+            page: Page number (1-based).
+            per_page: Items per page.
+
+        Returns:
+            This builder for chaining.
+        """
+        return self.offset((page - 1) * per_page).limit(per_page)
+
+    async def paginate(self, page: int = 1, per_page: int = 15) -> dict:
+        """Execute the query with pagination.
+
+        Runs a count query for the total, then fetches the page.
+
+        Args:
+            page: Page number (1-based).
+            per_page: Items per page.
+
+        Returns:
+            Dict with items, total, page, per_page, total_pages.
+        """
+        total = await self.count()
+        data = await self.for_page(page, per_page).get()
+        return {
+            "data": data,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": max(1, (total + per_page - 1) // per_page),
+        }
+
     def when(self, condition: bool, callback: Any) -> QueryBuilder[T]:
         """Conditionally apply a query modification.
 

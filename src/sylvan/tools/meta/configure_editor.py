@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from sylvan.tools.support.response import MetaBuilder, log_tool_call, wrap_response
+from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
 
 
 def _unlock_gate() -> None:
@@ -150,7 +150,7 @@ async def configure_claude_code(project_path: str) -> dict:
     Returns:
         Tool response with config content and workflow rules.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     project_dir = Path(project_path)
     settings_path = project_dir / ".claude" / "settings.local.json"
     settings_content = _claude_code_settings_content()
@@ -226,7 +226,7 @@ async def configure_cursor(project_path: str) -> dict:
     Returns:
         Tool response with config content and workflow rules.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     project_dir = Path(project_path)
     rules_path = project_dir / ".cursor" / "rules" / "sylvan.md"
     rules_content = _build_rules_markdown()
@@ -277,7 +277,7 @@ async def configure_windsurf(project_path: str) -> dict:
     Returns:
         Tool response with config content and workflow rules.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     project_dir = Path(project_path)
     rules_path = project_dir / ".windsurf" / "rules" / "sylvan.md"
     rules_content = _build_rules_markdown()
@@ -328,7 +328,7 @@ async def configure_copilot(project_path: str) -> dict:
     Returns:
         Tool response with config content and workflow rules.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     project_dir = Path(project_path)
     instructions_path = project_dir / ".github" / "copilot-instructions.md"
     rules_content = _build_rules_markdown()

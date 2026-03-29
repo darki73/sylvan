@@ -2,40 +2,16 @@
 
 import json
 
-from sylvan.database.orm import FileRecord, Repo, Symbol
-from sylvan.error_codes import IndexFileNotFoundError, RepoNotFoundError
-from sylvan.logging import get_logger
-from sylvan.tools.support.response import MetaBuilder, check_staleness, ensure_orm, log_tool_call, wrap_response
+from sylvan.error_codes import SylvanError
+from sylvan.services.symbol import SymbolService
+from sylvan.tools.support.response import (
+    check_staleness,
+    ensure_orm,
+    get_meta,
+    log_tool_call,
+    wrap_response,
+)
 from sylvan.tools.support.token_counting import count_tokens
-
-logger = get_logger(__name__)
-
-
-def _build_symbol_tree(items: list[dict]) -> list[dict]:
-    """Organise flat symbol entries into a parent-child tree structure.
-
-    Args:
-        items: Flat list of symbol dicts, each with ``symbol_id`` and
-            optional ``parent_symbol_id``.
-
-    Returns:
-        List of root-level symbol dicts, each with a ``children`` list.
-    """
-    root_symbols = []
-    by_id: dict[str, dict] = {}
-    for item in items:
-        symbol_id = item["symbol_id"]
-        if symbol_id in by_id:
-            logger.debug("duplicate_symbol_id_in_outline", symbol_id=symbol_id)
-        by_id[symbol_id] = {**item, "children": []}
-    for item in items:
-        node = by_id[item["symbol_id"]]
-        parent_id = item.get("parent_symbol_id")
-        if parent_id and parent_id in by_id:
-            by_id[parent_id]["children"].append(node)
-        else:
-            root_symbols.append(node)
-    return root_symbols
 
 
 @log_tool_call
@@ -53,37 +29,22 @@ async def get_file_outline(repo: str, file_path: str) -> dict:
         RepoNotFoundError: If the repository name is not indexed.
         IndexFileNotFoundError: If the file path does not exist in the repo's index.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    repo_obj = await Repo.where(name=repo).first()
-    if repo_obj is None:
-        raise RepoNotFoundError(repo=repo, _meta=meta.build())
+    try:
+        data = await SymbolService().file_outline(repo, file_path)
+    except SylvanError as exc:
+        exc._meta = meta.build()
+        raise
 
-    file_rec = await FileRecord.query().where(repo_id=repo_obj.id).where(path=file_path).first()
-    if file_rec is None:
-        raise IndexFileNotFoundError(file_path=file_path, repo=repo, _meta=meta.build())
+    repo_id = data.pop("repo_id")
+    file_rec = data.pop("file_rec")
+    symbol_count = data.pop("symbol_count")
 
-    symbols = await Symbol.in_repo(repo).in_file(file_path).order_by("symbols.line_start").get()
+    meta.set("symbol_count", symbol_count)
 
-    items = [
-        {
-            "symbol_id": symbol.symbol_id,
-            "name": symbol.name,
-            "kind": symbol.kind,
-            "signature": symbol.signature or "",
-            "line_start": symbol.line_start,
-            "line_end": symbol.line_end,
-            "parent_symbol_id": symbol.parent_symbol_id,
-        }
-        for symbol in symbols
-    ]
-
-    root_symbols = _build_symbol_tree(items)
-
-    meta.set("symbol_count", len(items))
-
-    returned_text = json.dumps(root_symbols, default=str)
+    returned_text = json.dumps(data["outline"], default=str)
     token_count = count_tokens(returned_text)
     returned_tokens = token_count if token_count is not None else max(1, len(returned_text) // 4)
     if file_rec.byte_size:
@@ -92,8 +53,8 @@ async def get_file_outline(repo: str, file_path: str) -> dict:
             method = "tiktoken_cl100k" if token_count is not None else "byte_estimate"
             meta.record_token_efficiency(returned_tokens, equivalent_tokens, method=method)
 
-    response = wrap_response({"file": file_path, "outline": root_symbols}, meta.build())
-    await check_staleness(repo_obj.id, response)
+    response = wrap_response(data, meta.build())
+    await check_staleness(repo_id, response)
     return response
 
 
@@ -112,63 +73,39 @@ async def get_file_outlines(repo: str, file_paths: list[str]) -> dict:
     Raises:
         RepoNotFoundError: If the repository name is not indexed.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    repo_obj = await Repo.where(name=repo).first()
-    if repo_obj is None:
-        raise RepoNotFoundError(repo=repo, _meta=meta.build())
+    try:
+        data = await SymbolService().file_outlines(repo, file_paths)
+    except SylvanError as exc:
+        exc._meta = meta.build()
+        raise
 
-    outlines = []
-    not_found = []
+    repo_id = data.pop("repo_id")
+
     returned_tokens = 0
     equivalent_tokens = 0
     used_tiktoken = False
 
-    for fp in file_paths:
-        file_rec = await FileRecord.query().where(repo_id=repo_obj.id).where(path=fp).first()
-        if file_rec is None:
-            not_found.append(fp)
-            continue
-
-        symbols = await Symbol.in_repo(repo).in_file(fp).order_by("symbols.line_start").get()
-
-        items = [
-            {
-                "symbol_id": s.symbol_id,
-                "name": s.name,
-                "kind": s.kind,
-                "signature": s.signature or "",
-                "line_start": s.line_start,
-                "line_end": s.line_end,
-                "parent_symbol_id": s.parent_symbol_id,
-            }
-            for s in symbols
-        ]
-
-        tree = _build_symbol_tree(items)
-        outline_text = json.dumps(tree, default=str)
+    cleaned_outlines = []
+    for outline_entry in data["outlines"]:
+        file_rec = outline_entry.pop("file_rec")
+        outline_text = json.dumps(outline_entry["outline"], default=str)
         token_count = count_tokens(outline_text)
         if token_count is not None:
             used_tiktoken = True
         returned_tokens += token_count if token_count is not None else max(1, len(outline_text) // 4)
         if file_rec.byte_size:
             equivalent_tokens += file_rec.byte_size // 4
-
-        outlines.append(
-            {
-                "file": fp,
-                "outline": tree,
-                "symbol_count": len(items),
-            }
-        )
+        cleaned_outlines.append(outline_entry)
 
     if returned_tokens > 0 and equivalent_tokens > 0:
         method = "tiktoken_cl100k" if used_tiktoken else "byte_estimate"
         meta.record_token_efficiency(returned_tokens, equivalent_tokens, method=method)
 
-    meta.set("found", len(outlines))
-    meta.set("not_found", len(not_found))
-    response = wrap_response({"outlines": outlines, "not_found": not_found}, meta.build())
-    await check_staleness(repo_obj.id, response)
+    meta.set("found", len(cleaned_outlines))
+    meta.set("not_found", len(data["not_found"]))
+    response = wrap_response({"outlines": cleaned_outlines, "not_found": data["not_found"]}, meta.build())
+    await check_staleness(repo_id, response)
     return response

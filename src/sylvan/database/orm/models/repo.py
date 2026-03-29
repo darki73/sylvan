@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from sylvan.database.orm.model.base import Model
 from sylvan.database.orm.primitives.fields import AutoPrimaryKey, Column
-from sylvan.database.orm.primitives.relations import HasMany
+from sylvan.database.orm.primitives.relations import BelongsToMany, HasMany
 from sylvan.database.orm.primitives.scopes import scope
 
 if TYPE_CHECKING:
@@ -52,8 +52,20 @@ class Repo(Model):
     version = Column(str, nullable=True)
     """Version string for library repos."""
 
-    files = HasMany("FileRecord", foreign_key="repo_id")
+    files = HasMany("FileRecord", foreign_key="repo_id", on_delete="cascade")
     """Files belonging to this repository."""
+
+    usage_stats = HasMany("UsageStats", foreign_key="repo_id", on_delete="cascade")
+    """Usage statistics for this repository."""
+
+    workspaces = BelongsToMany(
+        "Workspace",
+        pivot_table="workspace_repos",
+        foreign_key="repo_id",
+        related_key="workspace_id",
+        on_delete="detach",
+    )
+    """Workspaces this repository belongs to (many-to-many)."""
 
     @scope
     def libraries(query) -> QueryBuilder:

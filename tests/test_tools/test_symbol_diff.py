@@ -153,7 +153,7 @@ class TestGetSymbolDiff:
 
 class TestDiffSymbols:
     def test_empty_both(self):
-        from sylvan.tools.analysis.get_symbol_diff import _diff_symbols
+        from sylvan.services.analysis import _diff_symbols
 
         result = _diff_symbols([], [])
         assert result["added"] == []
@@ -162,7 +162,7 @@ class TestDiffSymbols:
         assert result["unchanged_count"] == 0
 
     def test_all_added(self):
-        from sylvan.tools.analysis.get_symbol_diff import _diff_symbols
+        from sylvan.services.analysis import _diff_symbols
 
         new = [{"qualified_name": "foo", "kind": "function", "signature": "foo()", "content_hash": "abc"}]
         result = _diff_symbols([], new)
@@ -170,14 +170,14 @@ class TestDiffSymbols:
         assert result["added"][0]["qualified_name"] == "foo"
 
     def test_all_removed(self):
-        from sylvan.tools.analysis.get_symbol_diff import _diff_symbols
+        from sylvan.services.analysis import _diff_symbols
 
         old = [{"qualified_name": "bar", "kind": "function", "signature": "bar()", "content_hash": "xyz"}]
         result = _diff_symbols(old, [])
         assert len(result["removed"]) == 1
 
     def test_changed_signature(self):
-        from sylvan.tools.analysis.get_symbol_diff import _diff_symbols
+        from sylvan.services.analysis import _diff_symbols
 
         old = [{"qualified_name": "f", "kind": "function", "signature": "f(a)", "content_hash": "111"}]
         new = [{"qualified_name": "f", "kind": "function", "signature": "f(a, b)", "content_hash": "222"}]

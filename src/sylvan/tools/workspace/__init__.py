@@ -1,15 +1,8 @@
 """Workspace management tools -- group repos, cross-repo operations."""
 
-from sylvan.database.orm import Repo, Symbol
-from sylvan.database.orm.runtime.connection_manager import get_backend
-from sylvan.database.workspace import (
-    async_add_repo_to_workspace,
-    async_create_workspace,
-    async_get_workspace,
-    async_get_workspace_repo_ids,
-)
+from sylvan.database.orm import Symbol
 from sylvan.error_codes import RepoNotFoundError, WorkspaceNotFoundError
-from sylvan.tools.support.response import MetaBuilder, ensure_orm, log_tool_call, wrap_response
+from sylvan.tools.support.response import ensure_orm, get_meta, log_tool_call, wrap_response
 
 
 @log_tool_call
@@ -27,29 +20,32 @@ async def add_to_workspace(workspace: str, repo: str) -> dict:
         WorkspaceNotFoundError: If the workspace does not exist.
         RepoNotFoundError: If the repository is not indexed.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    backend = get_backend()
+    from sylvan.services.workspace import WorkspaceService
 
-    ws = await async_get_workspace(backend, workspace)
-    if ws is None:
-        raise WorkspaceNotFoundError(workspace=workspace, _meta=meta.build())
-
-    repo_obj = await Repo.where(name=repo).first()
-    if repo_obj is None:
+    svc = WorkspaceService()
+    result = await svc.add_repo(workspace, repo)
+    if result is None:
+        ws = await WorkspaceService().find(workspace)
+        if ws is None:
+            raise WorkspaceNotFoundError(workspace=workspace, _meta=meta.build())
         raise RepoNotFoundError(repo=repo, _meta=meta.build())
 
-    await async_add_repo_to_workspace(backend, ws["id"], repo_obj.id)
+    meta.set("cross_repo_imports_resolved", result["cross_repo_imports_resolved"])
 
-    repo_ids = await async_get_workspace_repo_ids(backend, workspace)
-    from sylvan.analysis.impact.cross_repo import resolve_cross_repo_imports
-
-    resolved = await resolve_cross_repo_imports(repo_ids)
-
-    ws = await async_get_workspace(backend, workspace)
-    meta.set("cross_repo_imports_resolved", resolved)
-    return wrap_response(ws, meta.build())
+    ws = await WorkspaceService().with_repos().with_stats().find(workspace)
+    data = {
+        "id": ws.id,
+        "name": ws.name,
+        "description": ws.description or "",
+        "created_at": ws.created_at or "",
+        "repo_count": len(ws.repos_data or []),
+        **ws.stats,
+        "repos": ws.repos_data,
+    }
+    return wrap_response(data, meta.build())
 
 
 @log_tool_call
@@ -68,25 +64,23 @@ async def index_workspace(
     Returns:
         Tool response dict with per-repo results and ``_meta`` envelope.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    backend = get_backend()
-    ws_id = await async_create_workspace(backend, workspace, description)
-
     from sylvan.indexing.pipeline.orchestrator import index_folder
+    from sylvan.services.workspace import WorkspaceService
+
+    svc = WorkspaceService()
+    await svc.create(workspace, description)
 
     results = []
     for path in paths:
         result = await index_folder(path)
         results.append(result.to_dict())
         if result.repo_id:
-            await async_add_repo_to_workspace(backend, ws_id, result.repo_id)
+            await WorkspaceService().add_repo_by_id(workspace, result.repo_id)
 
-    repo_ids = await async_get_workspace_repo_ids(backend, workspace)
-    from sylvan.analysis.impact.cross_repo import resolve_cross_repo_imports
-
-    resolved = await resolve_cross_repo_imports(repo_ids)
+    resolved = await WorkspaceService().resolve_cross_repo(workspace)
 
     total_files = sum(r["files_indexed"] for r in results)
     total_symbols = sum(r["symbols_extracted"] for r in results)
@@ -127,11 +121,12 @@ async def workspace_blast_radius(
     Raises:
         WorkspaceNotFoundError: If the workspace is empty or does not exist.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    backend = get_backend()
-    repo_ids = await async_get_workspace_repo_ids(backend, workspace)
+    from sylvan.services.workspace import WorkspaceService
+
+    repo_ids = await WorkspaceService().get_repo_ids(workspace)
     if not repo_ids:
         raise WorkspaceNotFoundError(workspace=workspace, _meta=meta.build())
 
@@ -167,11 +162,12 @@ async def workspace_search(
     Raises:
         WorkspaceNotFoundError: If the workspace is empty or does not exist.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    backend = get_backend()
-    repo_ids = await async_get_workspace_repo_ids(backend, workspace)
+    from sylvan.services.workspace import WorkspaceService
+
+    repo_ids = await WorkspaceService().get_repo_ids(workspace)
     if not repo_ids:
         raise WorkspaceNotFoundError(workspace=workspace, _meta=meta.build())
 

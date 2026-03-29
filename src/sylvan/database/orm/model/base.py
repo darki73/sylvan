@@ -394,6 +394,60 @@ class Model(_CrudMixin, _QueryMixin, _BulkMixin, metaclass=ModelMeta):
             return id(self)
         return hash((self.__class__.__name__, pk))
 
+    async def attach(self, relation_name: str, *ids: int) -> None:
+        """Attach related models via a many-to-many pivot table.
+
+        Args:
+            relation_name: Name of the BelongsToMany relation.
+            *ids: Primary keys of the related models to attach.
+        """
+        from sylvan.database.orm.primitives.relations import BelongsToMany
+        from sylvan.database.orm.runtime.connection_manager import get_backend
+
+        rel = getattr(type(self), relation_name, None)
+        if not isinstance(rel, BelongsToMany):
+            raise ValueError(f"'{relation_name}' is not a BelongsToMany relation")
+
+        backend = get_backend()
+        local_value = getattr(self, rel.local_key)
+        for rid in ids:
+            await backend.execute(
+                f"INSERT OR IGNORE INTO {rel.pivot_table} ({rel.foreign_key}, {rel.related_key}) VALUES (?, ?)",
+                [local_value, rid],
+            )
+        await backend.commit()
+
+    async def detach(self, relation_name: str, *ids: int) -> None:
+        """Detach related models from a many-to-many pivot table.
+
+        If no IDs are given, detaches all.
+
+        Args:
+            relation_name: Name of the BelongsToMany relation.
+            *ids: Primary keys of the related models to detach. Empty = detach all.
+        """
+        from sylvan.database.orm.primitives.relations import BelongsToMany
+        from sylvan.database.orm.runtime.connection_manager import get_backend
+
+        rel = getattr(type(self), relation_name, None)
+        if not isinstance(rel, BelongsToMany):
+            raise ValueError(f"'{relation_name}' is not a BelongsToMany relation")
+
+        backend = get_backend()
+        local_value = getattr(self, rel.local_key)
+        if ids:
+            ph = ", ".join("?" for _ in ids)
+            await backend.execute(
+                f"DELETE FROM {rel.pivot_table} WHERE {rel.foreign_key} = ? AND {rel.related_key} IN ({ph})",
+                [local_value, *ids],
+            )
+        else:
+            await backend.execute(
+                f"DELETE FROM {rel.pivot_table} WHERE {rel.foreign_key} = ?",
+                [local_value],
+            )
+        await backend.commit()
+
     def __repr__(self) -> str:
         """Show class name and primary key value."""
         pk = getattr(self, self._pk_column, None)

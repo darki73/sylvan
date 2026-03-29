@@ -1,6 +1,6 @@
 """MCP tool: scaffold -- generate sylvan/ directory and agent instructions."""
 
-from sylvan.tools.support.response import MetaBuilder, log_tool_call, wrap_response
+from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
 
 
 @log_tool_call
@@ -24,18 +24,11 @@ async def scaffold(
     Returns:
         Tool response dict with scaffold status and ``_meta`` envelope.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
 
-    from pathlib import Path
+    from sylvan.services.meta import scaffold as _svc
 
-    from sylvan.scaffold.generator import async_scaffold_project
-
-    result = await async_scaffold_project(
-        repo,
-        agent=agent,
-        project_root=Path(root) if root else None,
-    )
-
+    result = await _svc(repo, agent=agent, root=root)
     meta.set("status", result.get("status", "error"))
     meta.set("files_created", result.get("files_created", 0))
     return wrap_response(result, meta.build())

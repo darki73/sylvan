@@ -1,15 +1,12 @@
 """MCP tool: get_symbol -- retrieve full source of a symbol."""
 
-from sylvan.context import get_context
-from sylvan.database.orm import Symbol
-from sylvan.error_codes import SourceNotAvailableError, SymbolNotFoundError
-from sylvan.indexing.source_code.extractor import compute_content_hash
+from sylvan.error_codes import SylvanError
+from sylvan.services.symbol import SymbolService
 from sylvan.tools.support.response import (
-    MetaBuilder,
     check_staleness,
     ensure_orm,
+    get_meta,
     log_tool_call,
-    record_savings,
     wrap_response,
 )
 
@@ -35,61 +32,46 @@ async def get_symbol(
         SymbolNotFoundError: If no symbol with the given ID exists.
         SourceNotAvailableError: If the symbol exists but its source blob is missing.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    ctx = get_context()
-    cache = ctx.cache
-    cache_key = f"Symbol:{symbol_id}:{repo or ''}"
-    found, symbol = cache.get(cache_key)
-    if not found:
-        query = Symbol.where(symbol_id=symbol_id).with_("file")
-        if repo:
-            query = (
-                query.join("files", "files.id = symbols.file_id")
-                .join("repos", "repos.id = files.repo_id")
-                .where("repos.name", repo)
-            )
-        symbol = await query.first()
-        if symbol is not None:
-            cache.put(cache_key, symbol)
-    if symbol is None:
-        raise SymbolNotFoundError(symbol_id=symbol_id, _meta=meta.build())
-
-    source = await symbol.get_source()
-    if not source:
-        raise SourceNotAvailableError(symbol_id=symbol_id, _meta=meta.build())
-
-    file_rec = symbol.file
-    context_lines = min(max(context_lines, 0), 50)
-    if context_lines > 0 and file_rec and symbol.line_start:
-        content = await file_rec.get_content()
-        if content:
-            all_lines = content.decode("utf-8", errors="replace").splitlines()
-            start = max(0, symbol.line_start - 1 - context_lines)
-            end = min(len(all_lines), (symbol.line_end or symbol.line_start) + context_lines)
-            source = "\n".join(all_lines[start:end])
-
-    session = ctx.session
-    session.record_symbol_access(symbol_id, await symbol._resolve_file_path())
-
-    result = await symbol.to_detail_dict()
+    svc = SymbolService().with_source().with_file()
+    if verify:
+        svc = svc.verified()
     if context_lines > 0:
-        result["source"] = source
-        result["context_lines"] = context_lines
+        svc = svc.with_context_lines(context_lines)
 
-    if verify and symbol.content_hash:
-        actual_hash = compute_content_hash(source.encode("utf-8"))
-        result["hash_verified"] = actual_hash == symbol.content_hash
-        if not result["hash_verified"]:
-            result["drift_warning"] = "Content has changed since last indexing"
+    try:
+        sym = await svc.find(symbol_id, repo=repo)
+    except SylvanError as exc:
+        exc._meta = meta.build()
+        raise
 
-    await record_savings(meta, source, file_rec, symbols_retrieved=1)
+    result = await sym._model.to_detail_dict()
+    if sym.context_lines and sym.context_lines > 0:
+        result["source"] = sym.source
+        result["context_lines"] = sym.context_lines
+
+    if sym.hash_verified is not None:
+        result["hash_verified"] = sym.hash_verified
+        if sym.drift_warning:
+            result["drift_warning"] = sym.drift_warning
+
+    if sym.source and sym.file_record:
+        from sylvan.tools.support.token_counting import count_tokens
+
+        file_content = await sym.file_record.get_content()
+        returned = count_tokens(sym.source)
+        if returned is not None and file_content:
+            file_text = file_content.decode("utf-8", errors="replace")
+            equivalent = count_tokens(file_text)
+            if equivalent and returned > 0 and equivalent > 0:
+                meta.record_token_efficiency(returned, equivalent)
 
     response = wrap_response(result, meta.build(), include_hints=True)
 
-    if file_rec:
-        await check_staleness(file_rec.repo_id, response)
+    if sym.file_record:
+        await check_staleness(sym.file_record.repo_id, response)
 
     return response
 
@@ -105,49 +87,39 @@ async def get_symbols(symbol_ids: list[str]) -> dict:
         Tool response dict with ``symbols`` list, ``not_found`` list,
         and ``_meta`` envelope.
     """
-    meta = MetaBuilder()
+    meta = get_meta()
     ensure_orm()
 
-    ctx = get_context()
-    cache = ctx.cache
-    results = []
-    not_found = []
+    svc = SymbolService().with_source().with_file()
+    found_results = await svc.find_many(symbol_ids)
+
+    found_ids = {r.symbol_id for r in found_results}
+    not_found = [sid for sid in symbol_ids if sid not in found_ids]
     repo_ids: set[int] = set()
 
-    for sid in symbol_ids:
-        cache_key = f"Symbol:{sid}"
-        found, symbol = cache.get(cache_key)
-        if not found:
-            symbol = await Symbol.where(symbol_id=sid).with_("file").first()
-            if symbol is not None:
-                cache.put(cache_key, symbol)
-        if symbol is None:
-            not_found.append(sid)
-            continue
+    symbols = []
+    for r in found_results:
+        if r.file_record:
+            repo_ids.add(r.file_record.repo_id)
+        file_path = await r._model._resolve_file_path()
+        symbols.append(
+            {
+                "symbol_id": r.symbol_id,
+                "name": r.name,
+                "kind": r.kind,
+                "language": r.language,
+                "file": file_path,
+                "signature": r.signature or "",
+                "source": r.source or "",
+            }
+        )
 
-        source = await symbol.get_source()
-        file_path = await symbol._resolve_file_path()
-        ctx.session.record_symbol_access(sid, file_path)
-        if symbol.file:
-            repo_ids.add(symbol.file.repo_id)
-        entry = {
-            "symbol_id": symbol.symbol_id,
-            "name": symbol.name,
-            "kind": symbol.kind,
-            "language": symbol.language,
-            "file": file_path,
-            "signature": symbol.signature or "",
-            "source": source or "",
-        }
-        results.append(entry)
+    data = {"symbols": symbols, "not_found": not_found}
 
-    meta.set("found", len(results))
+    meta.set("found", len(symbols))
     meta.set("not_found", len(not_found))
 
-    response = wrap_response(
-        {"symbols": results, "not_found": not_found},
-        meta.build(),
-    )
+    response = wrap_response(data, meta.build())
     for rid in repo_ids:
         await check_staleness(rid, response)
     return response

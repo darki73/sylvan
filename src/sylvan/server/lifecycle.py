@@ -77,16 +77,21 @@ class ServerLifecycle:
         from sylvan.cluster.state import get_cluster_state
 
         state = get_cluster_state()
-        if state.is_leader:
+        if not state.is_leader:
+            return
+
+        from sylvan.cluster.websocket import _followers
+
+        if _followers:
             with contextlib.suppress(Exception):
                 from sylvan.cluster.websocket import broadcast_step_down
 
                 await broadcast_step_down()
 
-            with contextlib.suppress(Exception):
-                from sylvan.cluster.discovery import release_leadership
+        with contextlib.suppress(Exception):
+            from sylvan.cluster.discovery import release_leadership
 
-                await release_leadership()
+            await release_leadership()
 
     def spawn(self, coro: Coroutine, *, name: str | None = None) -> asyncio.Task:
         """Spawn a background task owned by this lifecycle.

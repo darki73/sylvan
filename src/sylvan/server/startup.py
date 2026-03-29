@@ -157,17 +157,17 @@ def _register_signal_handlers() -> None:
         except Exception as exc:
             logger.warning("flush_all_failed_on_signal", error=str(exc))
         try:
-            from sylvan.cluster.discovery import release_leadership_sync
-
-            release_leadership_sync()
-        except Exception as exc:
-            logger.warning("release_leadership_failed_on_signal", error=str(exc))
-        try:
             from sylvan.server import _shutdown_backend_sync
 
             _shutdown_backend_sync()
         except Exception as exc:
             logger.warning("shutdown_backend_failed_on_signal", error=str(exc))
+        try:
+            from sylvan.cluster.discovery import release_leadership_sync
+
+            release_leadership_sync()
+        except Exception as exc:
+            logger.warning("release_leadership_failed_on_signal", error=str(exc))
         signal.signal(signum, signal.SIG_DFL)
         os.kill(os.getpid(), signum)
 
@@ -257,9 +257,9 @@ def main(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8420) ->
             flush_all()
         except Exception:  # noqa: S110 -- shutdown must not crash on cleanup
             pass
-        from sylvan.cluster.discovery import release_leadership_sync
-
-        release_leadership_sync()
         from sylvan.server import _shutdown_backend_sync
 
         _shutdown_backend_sync()
+        from sylvan.cluster.discovery import release_leadership_sync
+
+        release_leadership_sync()

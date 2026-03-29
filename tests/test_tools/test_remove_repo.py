@@ -67,27 +67,18 @@ async def indexed_repo(tmp_path):
 
 
 class TestRemoveRepoBasic:
-    async def test_removes_repo_and_returns_counts(self, indexed_repo):
+    async def test_removes_repo_and_returns_status(self, indexed_repo):
         from sylvan.tools.meta.remove_repo import remove_repo
 
         resp = await remove_repo(repo="test-repo")
 
         assert "_meta" in resp
-        assert "deleted" in resp
-        counts = resp["deleted"]
-        assert isinstance(counts, dict)
-        assert "repos" in counts
-        assert counts["repos"] == 1
-        assert "files" in counts
-        assert counts["files"] >= 2
-        assert "symbols" in counts
-        assert counts["symbols"] >= 3
+        assert resp["status"] == "removed"
+        assert resp["repo"] == "test-repo"
 
         meta = resp["_meta"]
         assert meta["repo"] == "test-repo"
         assert "repo_id" in meta
-        assert "total_deleted" in meta
-        assert meta["total_deleted"] > 0
 
     async def test_cascade_deletes_all_records(self, indexed_repo):
         from sylvan.database.orm import FileRecord, Repo, Symbol
@@ -135,7 +126,7 @@ class TestRemoveRepoErrors:
 
         # First remove succeeds
         resp = await remove_repo(repo="test-repo")
-        assert "deleted" in resp
+        assert resp["status"] == "removed"
 
         # Second remove should fail
         with pytest.raises(RepoNotFoundError):

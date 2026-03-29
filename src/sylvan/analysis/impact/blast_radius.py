@@ -7,6 +7,9 @@ from sylvan.database.orm import Symbol
 from sylvan.database.orm.models.blob import Blob
 from sylvan.database.orm.runtime.connection_manager import get_backend
 
+_MAX_CONFIRMED = 25
+_MAX_POTENTIAL = 25
+
 
 async def get_blast_radius(
     symbol_id: str,
@@ -64,7 +67,10 @@ async def get_blast_radius(
 
     confirmed = []
     potential = []
+    total_confirmed = 0
+    total_potential = 0
     depth_reached = 0
+    name_pattern = re.compile(r"\b" + re.escape(target_name) + r"\b")
 
     while queue:
         file_id, depth = queue.popleft()
@@ -82,25 +88,43 @@ async def get_blast_radius(
             continue
 
         text = content.decode("utf-8", errors="replace")
-        occurrences = len(re.findall(r"\b" + re.escape(target_name) + r"\b", text))
-
-        entry = {
-            "file": file_row["path"],
-            "depth": depth,
-            "occurrences": occurrences,
-        }
-
-        file_symbols = await (
-            Symbol.where(file_id=file_id).select("symbol_id", "name", "kind", "line_start").limit(10).get()
-        )
-        entry["symbols"] = [
-            {"symbol_id": s.symbol_id, "name": s.name, "kind": s.kind, "line_start": s.line_start} for s in file_symbols
-        ]
+        occurrences = len(name_pattern.findall(text))
 
         if occurrences > 0:
-            confirmed.append(entry)
+            total_confirmed += 1
+            if len(confirmed) < _MAX_CONFIRMED:
+                file_symbols = await (
+                    Symbol.where(file_id=file_id).select("symbol_id", "name", "kind", "line_start").get()
+                )
+                matching = [
+                    {"symbol_id": s.symbol_id, "name": s.name, "kind": s.kind, "line_start": s.line_start}
+                    for s in file_symbols
+                    if name_pattern.search(s.name) or s.name == target_name
+                ]
+                if not matching:
+                    matching = [
+                        {"symbol_id": s.symbol_id, "name": s.name, "kind": s.kind, "line_start": s.line_start}
+                        for s in file_symbols[:5]
+                    ]
+                confirmed.append(
+                    {
+                        "file": file_row["path"],
+                        "depth": depth,
+                        "occurrences": occurrences,
+                        "symbols": matching,
+                    }
+                )
         else:
-            potential.append(entry)
+            total_potential += 1
+            if len(potential) < _MAX_POTENTIAL:
+                potential.append(
+                    {
+                        "file": file_row["path"],
+                        "depth": depth,
+                        "occurrences": 0,
+                        "symbols": [],
+                    }
+                )
 
         if depth < max_depth:
             next_importers = await backend.fetch_all(
@@ -115,7 +139,7 @@ async def get_blast_radius(
                     queue.append((nfid, depth + 1))
                     visited_files.add(nfid)
 
-    return {
+    result: dict = {
         "symbol": {
             "symbol_id": symbol_id,
             "name": target_name,
@@ -125,5 +149,13 @@ async def get_blast_radius(
         "confirmed": confirmed,
         "potential": potential,
         "depth_reached": depth_reached,
-        "total_affected": len(confirmed) + len(potential),
+        "total_affected": total_confirmed + total_potential,
     }
+    if total_confirmed > _MAX_CONFIRMED or total_potential > _MAX_POTENTIAL:
+        result["truncated"] = {
+            "confirmed_total": total_confirmed,
+            "confirmed_shown": len(confirmed),
+            "potential_total": total_potential,
+            "potential_shown": len(potential),
+        }
+    return result
