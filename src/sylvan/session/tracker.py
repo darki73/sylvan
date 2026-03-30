@@ -40,7 +40,9 @@ class SessionTracker:
     _started_at: str = ""
     _tokens_returned: int = 0
     _tokens_avoided: int = 0
-    _workflow_loaded: bool = False
+    _editor: str | None = None
+    _setup_actions: list | None = None
+    _setup_checked: bool = False
     _project_path: str | None = None
     _efficiency_by_category: dict[str, dict] = field(
         default_factory=lambda: {cat: {"calls": 0, "returned": 0, "equivalent": 0} for cat in _EFFICIENCY_CATEGORIES}
@@ -54,6 +56,17 @@ class SessionTracker:
             from datetime import UTC, datetime
 
             self._started_at = datetime.now(UTC).isoformat()
+
+    @property
+    def _workflow_loaded(self) -> bool:
+        """True when setup check passed with no pending actions."""
+        return self._setup_checked and not self._setup_actions
+
+    @_workflow_loaded.setter
+    def _workflow_loaded(self, value: bool) -> None:
+        if value:
+            self._setup_actions = []
+            self._setup_checked = True
 
     def record_symbol_access(self, symbol_id: str, file_path: str | None = None) -> None:
         """Record that a symbol was retrieved.

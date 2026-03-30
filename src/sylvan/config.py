@@ -129,8 +129,6 @@ class ServerConfig:
     port: int = 8420
     max_concurrent_tools: int = 8
     request_timeout: int = 30
-    workflow_gate: bool = True
-    auto_configure: bool = False
 
 
 @dataclass(slots=True)

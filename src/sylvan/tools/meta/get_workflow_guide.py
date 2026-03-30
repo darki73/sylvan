@@ -1,126 +1,11 @@
 """MCP tool: get_workflow_guide -- teach the agent how to use sylvan effectively."""
 
-import json
+from dataclasses import asdict
 from pathlib import Path
 
 from sylvan.tools.meta.configure_editor import _with_update_check
+from sylvan.tools.meta.editor_setup import EditorKind, check_setup, detect_editor
 from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
-
-_REQUIRED_PERMISSION = "mcp__sylvan__*"
-
-_REQUIRED_HOOK = {
-    "type": "command",
-    "command": (
-        'echo \'{"hookSpecificOutput":{"hookEventName":"SubagentStart",'
-        '"additionalContext":"CRITICAL: Always try mcp__sylvan__* tools FIRST '
-        "before falling back to Read/Grep/Glob. "
-        "mcp__sylvan__search_symbols to find code, "
-        "mcp__sylvan__get_symbol to read source, "
-        "mcp__sylvan__get_file_outline to understand files, "
-        "mcp__sylvan__find_importers for dependencies, "
-        "mcp__sylvan__get_blast_radius before refactoring. "
-        "These return only the exact code you need and save 90%+ tokens. "
-        "Only fall back to Read/Grep if the repo is not indexed or sylvan "
-        "returns no results.\"}}'"
-    ),
-    "timeout": 5,
-}
-
-
-def _check_setup(cwd: Path) -> list[dict]:
-    """Check if .claude/settings.local.json is properly configured.
-
-    Args:
-        cwd: The current working directory to check for .claude/.
-
-    Returns:
-        List of setup actions needed. Empty if everything is configured.
-    """
-    actions = []
-    settings_path = cwd / ".claude" / "settings.local.json"
-
-    if not settings_path.exists():
-        actions.append(
-            {
-                "action": "create_settings",
-                "path": str(settings_path),
-                "detail": (
-                    "Create .claude/settings.local.json with permissions.allow "
-                    "containing 'mcp__sylvan__*' and a SubagentStart hook."
-                ),
-                "content": json.dumps(
-                    {
-                        "permissions": {"allow": [_REQUIRED_PERMISSION]},
-                        "hooks": {
-                            "SubagentStart": [
-                                {
-                                    "matcher": "*",
-                                    "hooks": [_REQUIRED_HOOK],
-                                }
-                            ],
-                        },
-                    },
-                    indent=2,
-                ),
-            }
-        )
-        return actions
-
-    try:
-        settings = json.loads(settings_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        actions.append(
-            {
-                "action": "fix_json",
-                "path": str(settings_path),
-                "detail": "Settings file exists but has invalid JSON. Fix it manually.",
-            }
-        )
-        return actions
-
-    # Check permission
-    allows = settings.get("permissions", {}).get("allow", [])
-    if _REQUIRED_PERMISSION not in allows:
-        actions.append(
-            {
-                "action": "add_permission",
-                "path": str(settings_path),
-                "detail": f"Add '{_REQUIRED_PERMISSION}' to permissions.allow array.",
-            }
-        )
-
-    # Check SubagentStart hook
-    hooks = settings.get("hooks", {})
-    subagent_hooks = hooks.get("SubagentStart", [])
-    has_sylvan_hook = False
-    for entry in subagent_hooks:
-        for hook in entry.get("hooks", []):
-            cmd = hook.get("command", "")
-            if "mcp__sylvan__" in cmd:
-                has_sylvan_hook = True
-                break
-
-    if not has_sylvan_hook:
-        actions.append(
-            {
-                "action": "add_subagent_hook",
-                "path": str(settings_path),
-                "detail": (
-                    "Add a SubagentStart hook that injects sylvan tool instructions "
-                    "into all subagents. Merge this into the existing hooks section."
-                ),
-                "hook_config": {
-                    "SubagentStart": [
-                        {
-                            "matcher": "*",
-                            "hooks": [_REQUIRED_HOOK],
-                        }
-                    ],
-                },
-            }
-        )
-
-    return actions
 
 
 @_with_update_check
@@ -159,7 +44,13 @@ async def get_workflow_guide(project_path: str | None = None) -> dict:
     if project_path:
         session._project_path = project_path
 
-    setup_actions = _check_setup(project_dir)
+    editor_name = getattr(session, "_editor", None)
+    if editor_name:
+        editor = detect_editor(editor_name)
+    else:
+        editor = EditorKind.CLAUDE_CODE
+
+    setup_actions = [asdict(a) for a in check_setup(editor, project_dir)]
 
     if not setup_actions:
         session._workflow_loaded = True

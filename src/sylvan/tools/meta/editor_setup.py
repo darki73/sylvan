@@ -1,0 +1,545 @@
+"""Centralized editor detection, setup checking, and configuration writing."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path  # noqa: TC003
+
+
+class EditorKind(Enum):
+    CLAUDE_CODE = "claude_code"
+    CURSOR = "cursor"
+    WINDSURF = "windsurf"
+    COPILOT = "copilot"
+    UNKNOWN = "unknown"
+
+
+_CLIENT_NAME_MAP: dict[str, EditorKind] = {
+    "claude-code": EditorKind.CLAUDE_CODE,
+    "cursor": EditorKind.CURSOR,
+    "windsurf": EditorKind.WINDSURF,
+    "copilot": EditorKind.COPILOT,
+    "github-copilot": EditorKind.COPILOT,
+    "vscode-copilot": EditorKind.COPILOT,
+}
+
+
+def detect_editor(client_name: str) -> EditorKind:
+    """Map a clientInfo.name string to an EditorKind."""
+    normalized = client_name.strip().lower()
+    if normalized in _CLIENT_NAME_MAP:
+        return _CLIENT_NAME_MAP[normalized]
+    for key, kind in _CLIENT_NAME_MAP.items():
+        if key in normalized:
+            return kind
+    return EditorKind.UNKNOWN
+
+
+@dataclass
+class SetupAction:
+    """A single configuration action needed for an editor."""
+
+    action: str
+    path: str
+    detail: str
+
+
+_REQUIRED_PERMISSION = "mcp__sylvan__*"
+
+_SUBAGENT_HOOK = {
+    "type": "command",
+    "command": (
+        'echo \'{"hookSpecificOutput":{"hookEventName":"SubagentStart",'
+        '"additionalContext":"CRITICAL: Always try mcp__sylvan__* tools FIRST '
+        "before falling back to Read/Grep/Glob. "
+        "mcp__sylvan__search_symbols to find code, "
+        "mcp__sylvan__get_symbol to read source, "
+        "mcp__sylvan__get_file_outline to understand files, "
+        "mcp__sylvan__find_importers for dependencies, "
+        "mcp__sylvan__get_blast_radius before refactoring. "
+        "These return only the exact code you need and save 90%+ tokens. "
+        "Only fall back to Read/Grep if the repo is not indexed or sylvan "
+        "returns no results.\"}}'"
+    ),
+    "timeout": 5,
+}
+
+_POST_TOOL_HOOK = {
+    "type": "command",
+    "command": (
+        'echo \'{"hookSpecificOutput":{"hookEventName":"PostToolUse",'
+        '"additionalContext":"You just edited a file. Run '
+        "mcp__sylvan__index_file to update the index so search results "
+        "stay fresh. Pass the repo name and the relative file path.\"}}'"
+    ),
+    "timeout": 5,
+}
+
+
+def _claude_code_settings_content() -> dict:
+    """Build the full settings.local.json content for Claude Code."""
+    return {
+        "permissions": {"allow": [_REQUIRED_PERMISSION]},
+        "hooks": {
+            "SubagentStart": [
+                {"matcher": "*", "hooks": [_SUBAGENT_HOOK]},
+            ],
+            "PostToolUse": [
+                {"matcher": "Edit|Write", "hooks": [_POST_TOOL_HOOK]},
+            ],
+        },
+    }
+
+
+def _build_rules_markdown() -> str:
+    """Build a markdown document with sylvan tool usage rules."""
+    return """\
+# Sylvan - Code Intelligence MCP Tools
+
+Always prefer sylvan MCP tools over reading files directly. Sylvan returns
+only the exact code you need, saving 90%+ tokens.
+
+## Tool Priority
+
+| Instead of | Use |
+|---|---|
+| Read/cat a file | `get_symbol` (returns exact function source) |
+| Grep/search | `search_symbols` (ranked, signature-level) |
+| Read for structure | `get_file_outline` (all symbols with signatures) |
+| Grep for imports | `find_importers` (resolved import graph) |
+
+## Workflow
+
+1. `index_folder` - index the project (run once, re-run after edits)
+2. `search_symbols` - find code by name or keyword
+3. `get_symbol` - read exact source by ID
+4. `get_blast_radius` - check impact before refactoring
+5. `find_importers` - find who uses a file/module
+
+## Libraries
+
+Before using a third-party package, index it first:
+```
+add_library(package="npm/htmx.org@2.0.8")
+search_symbols(query="morph swap", repo="htmx.org@2.0.8")
+```
+
+## After Editing Files
+
+IMPORTANT: After every Edit or Write operation, call `index_file` with the
+repo name and relative file path to update the index. Stale indexes cause
+search to miss your recent changes. This is the single most common mistake.
+
+## Tips
+
+- Every response includes `_hints.edit` with exact Read parameters for editing
+- Every response includes `_hints.next` with follow-up tool calls
+- Use `get_file_outline` before reading any file
+- Use `add_library` before integrating any third-party package
+- Use `get_blast_radius` before renaming or deleting anything
+"""
+
+
+def _has_sylvan_in_hooks(hook_entries: list) -> bool:
+    """Check if any hook entry contains a sylvan command."""
+    for entry in hook_entries:
+        for hook in entry.get("hooks", []):
+            if "sylvan" in hook.get("command", ""):
+                return True
+    return False
+
+
+def _check_claude_code(project_path: Path) -> list[SetupAction]:
+    """Check .claude/settings.local.json for required configuration."""
+    actions: list[SetupAction] = []
+    settings_path = project_path / ".claude" / "settings.local.json"
+
+    if not settings_path.exists():
+        actions.append(
+            SetupAction(
+                action="create_settings",
+                path=str(settings_path),
+                detail=(
+                    "Create .claude/settings.local.json with permissions, SubagentStart hook, and PostToolUse hook."
+                ),
+            )
+        )
+        return actions
+
+    try:
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        actions.append(
+            SetupAction(
+                action="fix_json",
+                path=str(settings_path),
+                detail="Settings file exists but has invalid JSON. Fix it manually.",
+            )
+        )
+        return actions
+
+    allows = settings.get("permissions", {}).get("allow", [])
+    if _REQUIRED_PERMISSION not in allows:
+        actions.append(
+            SetupAction(
+                action="add_permission",
+                path=str(settings_path),
+                detail=f"Add '{_REQUIRED_PERMISSION}' to permissions.allow array.",
+            )
+        )
+
+    hooks = settings.get("hooks", {})
+
+    if not _has_sylvan_in_hooks(hooks.get("SubagentStart", [])):
+        actions.append(
+            SetupAction(
+                action="add_subagent_hook",
+                path=str(settings_path),
+                detail="Add a SubagentStart hook that injects sylvan tool instructions into subagents.",
+            )
+        )
+
+    if not _has_sylvan_in_hooks(hooks.get("PostToolUse", [])):
+        actions.append(
+            SetupAction(
+                action="add_post_tool_hook",
+                path=str(settings_path),
+                detail="Add a PostToolUse hook that reminds the agent to reindex after edits.",
+            )
+        )
+
+    return actions
+
+
+def _check_hooks_file(hooks_path: Path, hook_keys: list[str]) -> list[SetupAction]:
+    """Check a hooks.json file for required sylvan hooks."""
+    actions: list[SetupAction] = []
+
+    if not hooks_path.exists():
+        actions.append(
+            SetupAction(
+                action="create_hooks",
+                path=str(hooks_path),
+                detail=f"Create {hooks_path.name} with sylvan MCP hooks.",
+            )
+        )
+        return actions
+
+    try:
+        data = json.loads(hooks_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        actions.append(
+            SetupAction(
+                action="fix_json",
+                path=str(hooks_path),
+                detail=f"{hooks_path.name} exists but has invalid JSON. Fix it manually.",
+            )
+        )
+        return actions
+
+    hooks = data.get("hooks", {})
+    for key in hook_keys:
+        if not _has_sylvan_in_hooks(hooks.get(key, [])):
+            actions.append(
+                SetupAction(
+                    action="add_hook",
+                    path=str(hooks_path),
+                    detail=f"Add sylvan hook to '{key}' in {hooks_path.name}.",
+                )
+            )
+
+    return actions
+
+
+def _check_rules_file(rules_path: Path) -> list[SetupAction]:
+    """Check if a rules markdown file exists."""
+    if not rules_path.exists():
+        return [
+            SetupAction(
+                action="create_rules",
+                path=str(rules_path),
+                detail=f"Create {rules_path.name} with sylvan workflow rules.",
+            )
+        ]
+    return []
+
+
+def _check_cursor(project_path: Path) -> list[SetupAction]:
+    """Check Cursor configuration files."""
+    actions: list[SetupAction] = []
+    hooks_path = project_path / ".cursor" / "hooks.json"
+    rules_path = project_path / ".cursor" / "rules" / "sylvan.md"
+    actions.extend(_check_hooks_file(hooks_path, ["beforeMCPExecution", "afterMCPExecution"]))
+    actions.extend(_check_rules_file(rules_path))
+    return actions
+
+
+def _check_windsurf(project_path: Path) -> list[SetupAction]:
+    """Check Windsurf configuration files."""
+    actions: list[SetupAction] = []
+    hooks_path = project_path / ".windsurf" / "hooks.json"
+    rules_path = project_path / ".windsurf" / "rules" / "sylvan.md"
+    actions.extend(_check_hooks_file(hooks_path, ["pre_mcp_tool_use", "post_mcp_tool_use"]))
+    actions.extend(_check_rules_file(rules_path))
+    return actions
+
+
+def _check_copilot(project_path: Path) -> list[SetupAction]:
+    """Check GitHub Copilot configuration files."""
+    actions: list[SetupAction] = []
+    hooks_path = project_path / ".github" / "hooks" / "sylvan.json"
+    instructions_path = project_path / ".github" / "copilot-instructions.md"
+
+    actions.extend(_check_hooks_file(hooks_path, ["SubagentStart", "PostToolUse"]))
+
+    if not instructions_path.exists():
+        actions.append(
+            SetupAction(
+                action="create_rules",
+                path=str(instructions_path),
+                detail="Create copilot-instructions.md with sylvan workflow rules.",
+            )
+        )
+    else:
+        try:
+            content = instructions_path.read_text(encoding="utf-8")
+            if "sylvan" not in content.lower():
+                actions.append(
+                    SetupAction(
+                        action="append_rules",
+                        path=str(instructions_path),
+                        detail="Append sylvan workflow rules to copilot-instructions.md.",
+                    )
+                )
+        except OSError:
+            pass
+
+    return actions
+
+
+_EDITOR_CHECKERS = {
+    EditorKind.CLAUDE_CODE: _check_claude_code,
+    EditorKind.CURSOR: _check_cursor,
+    EditorKind.WINDSURF: _check_windsurf,
+    EditorKind.COPILOT: _check_copilot,
+}
+
+
+def check_setup(editor: EditorKind, project_path: Path) -> list[SetupAction]:
+    """Check if an editor's project-level configuration is complete.
+
+    Returns a list of actions needed. Empty list means fully configured.
+    """
+    checker = _EDITOR_CHECKERS.get(editor)
+    if checker is None:
+        return []
+    return checker(project_path)
+
+
+_SETTINGS_FILES = {
+    EditorKind.CLAUDE_CODE: ".claude/settings.local.json",
+    EditorKind.CURSOR: ".cursor/hooks.json",
+    EditorKind.WINDSURF: ".windsurf/hooks.json",
+    EditorKind.COPILOT: ".github/hooks/sylvan.json",
+    EditorKind.UNKNOWN: "",
+}
+
+
+def get_settings_file(editor: EditorKind) -> str:
+    """Return the primary settings file path for elicitation messages."""
+    return _SETTINGS_FILES.get(editor, "")
+
+
+def build_elicitation_message(actions: list[SetupAction], settings_file: str) -> str:
+    """Build a context-aware elicitation message from the needed actions.
+
+    The message describes what sylvan needs and why, so the user can make
+    an informed decision in the elicitation prompt.
+    """
+    if not actions:
+        return ""
+
+    action_types = {a.action for a in actions}
+
+    if "create_settings" in action_types or "create_hooks" in action_types:
+        return (
+            f"Sylvan needs to create {settings_file} with permissions and hooks for tools and subagents to work. Allow?"
+        )
+
+    has_permission = "add_permission" in action_types
+    has_hooks = action_types & {"add_subagent_hook", "add_post_tool_hook", "add_hook"}
+    has_rules = action_types & {"create_rules", "append_rules"}
+
+    if has_permission and not has_hooks and not has_rules:
+        return f"Sylvan needs to add tool permissions to {settings_file}. Allow?"
+
+    if has_hooks and not has_permission and not has_rules:
+        return f"Sylvan has been updated and needs to add new hooks to {settings_file}. Allow?"
+
+    return f"Sylvan needs to update {settings_file} with missing permissions and hooks. Allow?"
+
+
+def _apply_claude_code(project_path: Path) -> None:
+    """Write or merge .claude/settings.local.json."""
+    settings_path = project_path / ".claude" / "settings.local.json"
+    settings_content = _claude_code_settings_content()
+
+    existing: dict = {}
+    if settings_path.exists():
+        try:
+            existing = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            existing = {}
+
+    allows = existing.setdefault("permissions", {}).setdefault("allow", [])
+    if _REQUIRED_PERMISSION not in allows:
+        allows.append(_REQUIRED_PERMISSION)
+
+    hooks = existing.setdefault("hooks", {})
+    for hook_type, hook_entries in settings_content["hooks"].items():
+        existing_hooks = hooks.setdefault(hook_type, [])
+        if not _has_sylvan_in_hooks(existing_hooks):
+            existing_hooks.extend(hook_entries)
+
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+
+
+def _build_cursor_hooks() -> dict:
+    """Build hooks.json content for Cursor."""
+    return {
+        "hooks": {
+            "beforeMCPExecution": [
+                {
+                    "matcher": "*",
+                    "hooks": [_SUBAGENT_HOOK],
+                }
+            ],
+            "afterMCPExecution": [
+                {
+                    "matcher": "Edit|Write",
+                    "hooks": [_POST_TOOL_HOOK],
+                }
+            ],
+        }
+    }
+
+
+def _build_windsurf_hooks() -> dict:
+    """Build hooks.json content for Windsurf."""
+    return {
+        "hooks": {
+            "pre_mcp_tool_use": [
+                {
+                    "matcher": "*",
+                    "hooks": [_SUBAGENT_HOOK],
+                }
+            ],
+            "post_mcp_tool_use": [
+                {
+                    "matcher": "Edit|Write",
+                    "hooks": [_POST_TOOL_HOOK],
+                }
+            ],
+        }
+    }
+
+
+def _build_copilot_hooks() -> dict:
+    """Build sylvan.json hook content for GitHub Copilot."""
+    return {
+        "hooks": {
+            "SubagentStart": [
+                {"matcher": "*", "hooks": [_SUBAGENT_HOOK]},
+            ],
+            "PostToolUse": [
+                {"matcher": "Edit|Write", "hooks": [_POST_TOOL_HOOK]},
+            ],
+        }
+    }
+
+
+def _merge_hooks_file(hooks_path: Path, new_hooks: dict) -> None:
+    """Write or merge a hooks.json file without destroying existing content."""
+    existing: dict = {}
+    if hooks_path.exists():
+        try:
+            existing = json.loads(hooks_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            existing = {}
+
+    existing_hooks = existing.setdefault("hooks", {})
+    for hook_type, hook_entries in new_hooks.get("hooks", {}).items():
+        entries = existing_hooks.setdefault(hook_type, [])
+        if not _has_sylvan_in_hooks(entries):
+            entries.extend(hook_entries)
+
+    hooks_path.parent.mkdir(parents=True, exist_ok=True)
+    hooks_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+
+
+def _apply_cursor(project_path: Path) -> None:
+    """Write Cursor hooks and rules files."""
+    hooks_path = project_path / ".cursor" / "hooks.json"
+    rules_path = project_path / ".cursor" / "rules" / "sylvan.md"
+
+    _merge_hooks_file(hooks_path, _build_cursor_hooks())
+
+    rules_path.parent.mkdir(parents=True, exist_ok=True)
+    rules_path.write_text(_build_rules_markdown(), encoding="utf-8")
+
+
+def _apply_windsurf(project_path: Path) -> None:
+    """Write Windsurf hooks and rules files."""
+    hooks_path = project_path / ".windsurf" / "hooks.json"
+    rules_path = project_path / ".windsurf" / "rules" / "sylvan.md"
+
+    _merge_hooks_file(hooks_path, _build_windsurf_hooks())
+
+    rules_path.parent.mkdir(parents=True, exist_ok=True)
+    rules_path.write_text(_build_rules_markdown(), encoding="utf-8")
+
+
+def _apply_copilot(project_path: Path) -> None:
+    """Write Copilot hooks and instructions files."""
+    hooks_path = project_path / ".github" / "hooks" / "sylvan.json"
+    instructions_path = project_path / ".github" / "copilot-instructions.md"
+
+    _merge_hooks_file(hooks_path, _build_copilot_hooks())
+
+    rules_content = _build_rules_markdown()
+    instructions_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if instructions_path.exists():
+        try:
+            existing = instructions_path.read_text(encoding="utf-8")
+            if "sylvan" not in existing.lower():
+                instructions_path.write_text(
+                    existing.rstrip() + "\n\n" + rules_content,
+                    encoding="utf-8",
+                )
+        except OSError:
+            instructions_path.write_text(rules_content, encoding="utf-8")
+    else:
+        instructions_path.write_text(rules_content, encoding="utf-8")
+
+
+_EDITOR_APPLIERS = {
+    EditorKind.CLAUDE_CODE: _apply_claude_code,
+    EditorKind.CURSOR: _apply_cursor,
+    EditorKind.WINDSURF: _apply_windsurf,
+    EditorKind.COPILOT: _apply_copilot,
+}
+
+
+def apply_setup(editor: EditorKind, project_path: Path) -> None:
+    """Write all needed configuration for the given editor.
+
+    Merges into existing files without destroying user settings.
+    Does nothing for unknown editors.
+    """
+    applier = _EDITOR_APPLIERS.get(editor)
+    if applier is not None:
+        applier(project_path)

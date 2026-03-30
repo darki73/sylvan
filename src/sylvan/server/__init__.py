@@ -292,6 +292,48 @@ async def list_tools() -> list[Tool]:
     """
     asyncio.ensure_future(_get_or_create_backend())
 
+    # Probe MCP client for editor and project info (protocol-driven setup)
+    try:
+        from urllib.parse import unquote
+
+        from sylvan.session.tracker import get_session as _list_session
+        from sylvan.tools.meta.editor_setup import EditorKind, check_setup, detect_editor
+
+        ctx = server.request_context
+        mcp_session = ctx.session
+        tracker = _list_session()
+
+        if not tracker._setup_checked:
+            client_name = ""
+            if mcp_session._client_params and mcp_session._client_params.clientInfo:
+                client_name = mcp_session._client_params.clientInfo.name or ""
+            editor = detect_editor(client_name)
+            tracker._editor = editor.value
+
+            project_path = None
+            try:
+                roots_result = await mcp_session.list_roots()
+                if roots_result.roots:
+                    uri = str(roots_result.roots[0].uri)
+                    if uri.startswith("file:///"):
+                        project_path = unquote(uri[8:] if uri[9:10] == ":" else uri[7:])
+            except Exception:
+                logger.debug("list_roots_unavailable")
+
+            if project_path:
+                tracker._project_path = project_path
+
+            if project_path and editor != EditorKind.UNKNOWN:
+                from pathlib import Path as _ListPath
+
+                tracker._setup_actions = check_setup(editor, _ListPath(project_path))
+            else:
+                tracker._setup_actions = []
+
+            tracker._setup_checked = True
+    except LookupError:
+        pass
+
     core_tools = [*CORE_TOOLS, *ANALYSIS_TOOLS, *SUPPORT_TOOLS]
     core_names = {t.name for t in core_tools}
 
@@ -366,9 +408,7 @@ async def _dispatch(name: str, arguments: dict) -> dict:
 
     await _get_or_create_backend()
 
-    # Gate: require workflow guide before real tools (checked early so
-    # followers don't proxy write tools before the agent sees the rules)
-    from sylvan.config import get_config as _get_gate_config
+    # Gate: if setup incomplete, elicit user permission before executing gated tools
     from sylvan.session.tracker import get_session as _early_session
 
     _ungated = {
@@ -387,25 +427,75 @@ async def _dispatch(name: str, arguments: dict) -> dict:
         "configure_windsurf",
         "configure_copilot",
     }
-    _gate_enabled = _get_gate_config().server.workflow_gate
-    if _gate_enabled and not _early_session()._workflow_loaded and name not in _ungated:
-        from sylvan.server.startup import get_update_info
 
-        gate_response = {
-            "setup_required": True,
-            "message": (
-                "Sylvan session is not configured. Call your editor's configure tool "
-                "(configure_claude_code, configure_cursor, configure_windsurf, or "
-                "configure_copilot) to set up and unlock all tools. Alternatively, "
-                "call get_workflow_guide for manual setup."
-            ),
-            "blocked_tool": name,
-            "blocked_args": arguments,
-        }
-        update = get_update_info()
-        if update:
-            gate_response["update_available"] = update
-        return gate_response
+    _session = _early_session()
+    if name not in _ungated and not _session._workflow_loaded and _session._setup_actions:
+        from sylvan.tools.meta.editor_setup import (
+            EditorKind,
+            apply_setup,
+            build_elicitation_message,
+            get_settings_file,
+        )
+
+        accepted = False
+        editor = EditorKind(_session._editor) if _session._editor else EditorKind.UNKNOWN
+
+        try:
+            ctx = server.request_context
+            mcp_session = ctx.session
+
+            has_elicitation = False
+            if mcp_session._client_params and mcp_session._client_params.capabilities:
+                has_elicitation = mcp_session._client_params.capabilities.elicitation is not None
+
+            if has_elicitation and _session._project_path:
+                settings_file = get_settings_file(editor)
+                message = build_elicitation_message(_session._setup_actions, settings_file)
+
+                result = await mcp_session.elicit(
+                    message=message,
+                    requestedSchema={
+                        "type": "object",
+                        "properties": {
+                            "confirm": {
+                                "type": "boolean",
+                                "description": "Allow sylvan to write configuration",
+                                "default": True,
+                            }
+                        },
+                    },
+                )
+
+                if result.action == "accept" and result.content and result.content.get("confirm"):
+                    from pathlib import Path as _GatePath
+
+                    apply_setup(editor, _GatePath(_session._project_path))
+                    _session._setup_actions = []
+                    accepted = True
+
+        except LookupError:
+            pass
+        except Exception as exc:
+            logger.warning("gate_elicitation_failed", error=str(exc))
+
+        if not accepted:
+            from sylvan.server.startup import get_update_info
+
+            gate_response = {
+                "setup_required": True,
+                "message": (
+                    "Sylvan session is not configured. Call your editor's configure tool "
+                    "(configure_claude_code, configure_cursor, configure_windsurf, or "
+                    "configure_copilot) to set up and unlock all tools. Alternatively, "
+                    "call get_workflow_guide for manual setup."
+                ),
+                "blocked_tool": name,
+                "blocked_args": arguments,
+            }
+            update = get_update_info()
+            if update:
+                gate_response["update_available"] = update
+            return gate_response
 
     # If we're a follower and this is a write tool, proxy to leader
     from sylvan.cluster import is_write_tool
