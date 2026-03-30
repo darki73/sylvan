@@ -15,7 +15,7 @@ Code intelligence platform for AI agents. Search, analyze, and navigate codebase
 
 AI agents burn tokens reading entire files when they need one function. They grep across directories to trace a dependency. They piece together call chains one file at a time. Every wasted read costs money and context window space.
 
-Sylvan indexes your codebase into a structured database of symbols, sections, and import relationships, then exposes it through 56 MCP tools. Your agent asks for what it needs and gets exactly that - function signatures, blast radius, dependency graphs, semantic search results. Typical token savings exceed 80%.
+Sylvan indexes your codebase into a structured database of symbols, sections, and import relationships, then exposes it through 57 MCP tools. Your agent asks for what it needs and gets exactly that - function signatures, blast radius, dependency graphs, semantic search results. Typical token savings exceed 80%.
 
 ## Dashboard
 
@@ -43,7 +43,7 @@ Sylvan indexes your codebase into a structured database of symbols, sections, an
 
 ## Features
 
-- 56 MCP tools for search, browsing, analysis, and refactoring
+- 57 MCP tools for search, browsing, analysis, and refactoring
 - 34 programming languages via tree-sitter
 - Hybrid search - full-text (FTS5) + vector similarity with ranked fusion
 - Blast radius analysis before any refactor

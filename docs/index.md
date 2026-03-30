@@ -1,6 +1,6 @@
 # Sylvan
 
-Sylvan is a code intelligence engine that gives AI agents fast, precise access to your codebase. Instead of reading entire files to find a single function or grepping across directories to trace a dependency, agents query sylvan's structured index and get back exactly the symbols, signatures, and relationships they need. The server parses your code with tree-sitter, stores it in a SQLite database with full-text and vector search, and exposes everything through 56 MCP tools. Typical token savings exceed 80%.
+Sylvan is a code intelligence engine that gives AI agents fast, precise access to your codebase. Instead of reading entire files to find a single function or grepping across directories to trace a dependency, agents query sylvan's structured index and get back exactly the symbols, signatures, and relationships they need. The server parses your code with tree-sitter, stores it in a SQLite database with full-text and vector search, and exposes everything through 57 MCP tools. Typical token savings exceed 80%.
 
 ```
 Agent: search_symbols("authentication middleware")
@@ -15,7 +15,7 @@ vs. Read("src/auth/middleware.py")
 
 ## Key features
 
-- **56 MCP tools** -- search, browse, analyze, and index code through a single server. Your agent never needs to fall back to Read/Grep/Glob.
+- **57 MCP tools** -- search, browse, analyze, and index code through a single server. Your agent never needs to fall back to Read/Grep/Glob.
 - **34 programming languages** -- tree-sitter parsing for Python, TypeScript, Go, Rust, Java, C#, and 28 more, plus 10 document formats (Markdown, RST, HTML, etc.).
 - **Hybrid search** -- combines full-text search (FTS5) with vector similarity (sqlite-vec) and reciprocal rank fusion for ranked results.
 - **Blast radius analysis** -- before renaming or deleting a function, see every file that would be affected, with confirmed vs. potential impact.
@@ -79,7 +79,7 @@ The agent can now search, browse, and analyze the code. See [Your First Project]
 
 - [Teaching Your Agent](for-your-agent/teaching-your-agent.md) -- the workflow guide, tool gate, and SubagentStart hook
 - [Subagent Access](for-your-agent/subagent-access.md) -- how subagents get MCP tool access
-- [The Tool Reference](for-your-agent/the-tool-reference.md) -- all 52 tools with parameters and return values
+- [The Tool Reference](for-your-agent/the-tool-reference.md) -- all 57 tools with parameters and return values
 
 ### Extending Sylvan
 

@@ -13,6 +13,7 @@ const links = [
     { to: "/workspaces", label: "Workspaces" },
     { to: "/repositories", label: "Repositories" },
     { to: "/libraries", label: "Libraries" },
+    { to: "/queue", label: "Queue" },
     { to: "/session", label: "Session" },
     { to: "/quality", label: "Quality" },
     { to: "/search", label: "Search" },

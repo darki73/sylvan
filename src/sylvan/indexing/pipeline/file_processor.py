@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from sylvan.database.orm import FileImport, FileRecord, Section, Symbol
-from sylvan.database.orm.models.blob import Blob
 from sylvan.indexing.discovery.file_discovery import hash_content
 from sylvan.indexing.source_code.import_extraction import extract_imports
 from sylvan.indexing.source_code.language_specs import detect_language
 from sylvan.indexing.source_code.parse_orchestration import parse_source_file
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from sylvan.indexing.pipeline.orchestrator import IndexResult
 
 
@@ -37,6 +38,339 @@ _DOC_EXTENSIONS = frozenset(
 """File extensions recognized as documentation formats."""
 
 
+@dataclass(slots=True)
+class FileProcessingResult:
+    """Extraction result from a single file - no DB, no async."""
+
+    relative_path: str
+    content_hash: str
+    content_bytes: bytes
+    byte_size: int
+    mtime: float
+    language: str | None
+    symbols: list = field(default_factory=list)
+    imports: list[dict] = field(default_factory=list)
+    sections: list = field(default_factory=list)
+    content_str: str = ""
+    parse_error: str | None = None
+    error: str | None = None
+    skipped: bool = False
+    skip_reason: str | None = None
+    has_content_handler: bool = False
+    deferred_parents: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _extract_file(
+    df_path: Path,
+    df_relative_path: str,
+    df_size: int,
+    df_mtime: float,
+    max_file_size: int,
+    repo_name: str,
+    existing_hash: str | None,
+    *,
+    force: bool = False,
+) -> FileProcessingResult:
+    """Sync extraction - reads file, parses symbols/imports/sections. No DB calls."""
+    try:
+        content_bytes = df_path.read_bytes()
+    except OSError as e:
+        return FileProcessingResult(
+            relative_path=df_relative_path,
+            content_hash="",
+            content_bytes=b"",
+            byte_size=0,
+            mtime=df_mtime,
+            language=None,
+            error=str(e),
+        )
+
+    if len(content_bytes) > max_file_size:
+        return FileProcessingResult(
+            relative_path=df_relative_path,
+            content_hash="",
+            content_bytes=content_bytes,
+            byte_size=len(content_bytes),
+            mtime=df_mtime,
+            language=None,
+            skipped=True,
+            skip_reason="exceeds_max_file_size",
+        )
+
+    content_hash = hash_content(content_bytes)
+
+    if not force and existing_hash is not None and existing_hash == content_hash:
+        return FileProcessingResult(
+            relative_path=df_relative_path,
+            content_hash=content_hash,
+            content_bytes=content_bytes,
+            byte_size=df_size,
+            mtime=df_mtime,
+            language=None,
+            skipped=True,
+            skip_reason="unchanged",
+        )
+
+    try:
+        content_str = content_bytes.decode("utf-8", errors="replace")
+    except Exception:
+        content_str = ""
+
+    language = detect_language(df_relative_path)
+
+    result = FileProcessingResult(
+        relative_path=df_relative_path,
+        content_hash=content_hash,
+        content_bytes=content_bytes,
+        content_str=content_str,
+        byte_size=df_size,
+        mtime=df_mtime,
+        language=language,
+    )
+
+    if not content_str:
+        return result
+
+    from sylvan.extensions import get_content_handler
+
+    if get_content_handler(df_relative_path, content_str):
+        result.has_content_handler = True
+
+    if language and not result.has_content_handler:
+        parse_result = parse_source_file(df_relative_path, content_str, language)
+        prefix = f"{repo_name}::"
+        for sym in parse_result.symbols:
+            sym.symbol_id = prefix + sym.symbol_id
+            if sym.parent_symbol_id:
+                sym.parent_symbol_id = prefix + sym.parent_symbol_id
+            result.symbols.append(sym)
+            if sym.parent_symbol_id:
+                result.deferred_parents.append((sym.symbol_id, sym.parent_symbol_id))
+
+        if parse_result.error:
+            result.parse_error = parse_result.error
+
+        for imp_dict in extract_imports(content_str, df_relative_path, language):
+            result.imports.append(imp_dict)
+
+    ext = "." + df_relative_path.rsplit(".", 1)[-1].lower() if "." in df_relative_path else ""
+    if ext in _DOC_EXTENSIONS:
+        try:
+            from sylvan.indexing.documents.parser import parse_document
+
+            result.sections = parse_document(content_str, df_relative_path, repo_name)
+        except ImportError:
+            pass
+        except Exception as e:
+            result.parse_error = f"doc_parse: {e}"
+
+    return result
+
+
+async def _persist_result(
+    result: FileProcessingResult,
+    repo_id: int,
+    repo_name: str,
+    existing_file_id: int | None,
+    index_result: IndexResult,
+) -> tuple[int, int, int]:
+    """Write extraction results to DB using bulk operations.
+
+    Returns (symbols_count, imports_count, sections_count).
+    """
+    from sylvan.database.orm import FileImport, FileRecord, Section, Symbol
+    from sylvan.database.orm.models.blob import Blob
+
+    await Blob.store(result.content_hash, result.content_bytes)
+
+    file_obj = await FileRecord.upsert(
+        conflict_columns=["repo_id", "path"],
+        update_columns=["language", "content_hash", "byte_size", "mtime"],
+        repo_id=repo_id,
+        path=result.relative_path,
+        language=result.language,
+        content_hash=result.content_hash,
+        byte_size=result.byte_size,
+        mtime=result.mtime,
+    )
+    file_id = file_obj.id
+
+    if existing_file_id is not None:
+        await _clear_stale_data(file_id)
+
+    if not result.content_str:
+        return 0, 0, 0
+
+    symbols_count = 0
+    imports_count = 0
+    sections_count = 0
+
+    if result.has_content_handler:
+        from sylvan.extensions import get_content_handler
+
+        handler = get_content_handler(result.relative_path, result.content_str)
+        if handler:
+            await handler(file_id, result.relative_path, result.content_str, index_result, repo_name)
+
+        if result.language:
+            await _store_code_symbols(
+                file_id,
+                result.relative_path,
+                result.content_str,
+                result.language,
+                repo_name,
+                index_result,
+            )
+            await _store_imports_legacy(
+                file_id,
+                result.content_str,
+                result.relative_path,
+                result.language,
+                index_result,
+            )
+    else:
+        if result.symbols:
+            sym_records = []
+            for sym in result.symbols:
+                sym_records.append(
+                    {
+                        "file_id": file_id,
+                        "symbol_id": sym.symbol_id,
+                        "name": sym.name,
+                        "qualified_name": sym.qualified_name,
+                        "kind": sym.kind,
+                        "language": sym.language,
+                        "signature": sym.signature,
+                        "docstring": sym.docstring,
+                        "summary": sym.summary,
+                        "decorators": sym.decorators or [],
+                        "keywords": sym.keywords or [],
+                        "line_start": sym.line_start,
+                        "line_end": sym.line_end,
+                        "byte_offset": sym.byte_offset,
+                        "byte_length": sym.byte_length,
+                        "content_hash": sym.content_hash,
+                    }
+                )
+            await Symbol.bulk_upsert(
+                sym_records,
+                conflict_columns=["symbol_id"],
+                update_columns=[
+                    "file_id",
+                    "name",
+                    "qualified_name",
+                    "kind",
+                    "language",
+                    "signature",
+                    "docstring",
+                    "summary",
+                    "decorators",
+                    "keywords",
+                    "line_start",
+                    "line_end",
+                    "byte_offset",
+                    "byte_length",
+                    "content_hash",
+                ],
+            )
+            symbols_count = len(sym_records)
+            index_result.symbols_extracted += symbols_count
+
+            if result.deferred_parents:
+                from sylvan.database.orm.runtime.connection_manager import get_backend
+
+                backend = get_backend()
+                for child_id, parent_id in result.deferred_parents:
+                    await backend.execute(
+                        "UPDATE symbols SET parent_symbol_id = ? WHERE symbol_id = ?",
+                        [parent_id, child_id],
+                    )
+
+        if result.imports:
+            imp_records = [
+                {
+                    "file_id": file_id,
+                    "specifier": imp["specifier"],
+                    "names": imp.get("names", []),
+                }
+                for imp in result.imports
+            ]
+            await FileImport.bulk_create(imp_records)
+            imports_count = len(imp_records)
+            index_result.imports_extracted += imports_count
+
+    if result.parse_error and "doc_parse" not in (result.parse_error or ""):
+        index_result.errors.append(
+            {
+                "error": "parse_error",
+                "path": result.relative_path,
+                "detail": result.parse_error,
+            }
+        )
+
+    if result.sections:
+        sec_records = []
+        content_str = result.content_str
+        for sec in result.sections:
+            body_text = content_str[sec.byte_start : sec.byte_end][:500] if sec.byte_start is not None else ""
+            sec_records.append(
+                {
+                    "file_id": file_id,
+                    "section_id": sec.section_id,
+                    "title": sec.title,
+                    "level": sec.level,
+                    "parent_section_id": sec.parent_section_id,
+                    "byte_start": sec.byte_start,
+                    "byte_end": sec.byte_end,
+                    "summary": sec.summary,
+                    "tags": sec.tags or [],
+                    "references": sec.references or [],
+                    "content_hash": sec.content_hash,
+                    "body_text": body_text,
+                }
+            )
+        await Section.bulk_create(sec_records)
+        sections_count = len(sec_records)
+        index_result.sections_extracted += sections_count
+
+    if result.parse_error and result.parse_error.startswith("doc_parse:"):
+        index_result.errors.append(
+            {
+                "error": "doc_parse_error",
+                "path": result.relative_path,
+                "detail": result.parse_error.removeprefix("doc_parse: "),
+            }
+        )
+
+    return symbols_count, imports_count, sections_count
+
+
+async def _clear_stale_data(file_id: int) -> None:
+    """Remove stale vec/quality rows and old symbols/imports/sections for a re-indexed file."""
+    import contextlib
+
+    from sylvan.database.orm import FileImport, Section, Symbol
+    from sylvan.database.orm.runtime.connection_manager import get_backend as _get_backend
+
+    symbol_ids = await Symbol.where(file_id=file_id).pluck("symbol_id")
+    section_ids = await Section.where(file_id=file_id).pluck("section_id")
+
+    _backend = _get_backend()
+    with contextlib.suppress(Exception):
+        for sid in symbol_ids:
+            await _backend.execute("DELETE FROM symbols_vec WHERE symbol_id = ?", [sid])
+    with contextlib.suppress(Exception):
+        for sid in section_ids:
+            await _backend.execute("DELETE FROM sections_vec WHERE section_id = ?", [sid])
+    with contextlib.suppress(Exception):
+        for sid in symbol_ids:
+            await _backend.execute("DELETE FROM quality WHERE symbol_id = ?", [sid])
+
+    await Symbol.where(file_id=file_id).delete()
+    await FileImport.where(file_id=file_id).delete()
+    await Section.where(file_id=file_id).delete()
+
+
 async def process_file(
     df: object,
     repo_id: int,
@@ -48,110 +382,46 @@ async def process_file(
 ) -> None:
     """Read, hash-check, parse, and store a single discovered file.
 
-    Args:
-        df: DiscoveredFile object with path, relative_path, size, mtime.
-        repo_id: Database ID of the repository.
-        repo_name: Display name of the repository.
-        max_file_size: Maximum file size in bytes.
-        result: IndexResult accumulator for counts and errors.
-        force: If True, re-extract even if the content hash is unchanged.
+    Backward-compatible wrapper that calls _extract_file then _persist_result.
     """
-    try:
-        content_bytes = df.path.read_bytes()
-    except OSError as e:
-        result.errors.append({"error": "read_error", "path": df.relative_path, "detail": str(e)})
-        return
+    from sylvan.database.orm import FileRecord
 
-    if len(content_bytes) > max_file_size:
-        return
-
-    content_hash = hash_content(content_bytes)
     existing = await FileRecord.where(repo_id=repo_id, path=df.relative_path).first()
+    existing_hash = existing.content_hash if existing else None
+    existing_file_id = existing.id if existing else None
 
-    if not force and await _file_unchanged(existing, content_hash):
-        return
-
-    await Blob.store(content_hash, content_bytes)
-    language = detect_language(df.relative_path)
-
-    file_obj = await FileRecord.upsert(
-        conflict_columns=["repo_id", "path"],
-        update_columns=["language", "content_hash", "byte_size", "mtime"],
-        repo_id=repo_id,
-        path=df.relative_path,
-        language=language,
-        content_hash=content_hash,
-        byte_size=df.size,
-        mtime=df.mtime,
+    extraction = _extract_file(
+        df.path,
+        df.relative_path,
+        df.size,
+        df.mtime,
+        max_file_size,
+        repo_name,
+        existing_hash,
+        force=force,
     )
-    file_id = file_obj.id
 
-    if existing:
-        import contextlib
-
-        from sylvan.database.orm.runtime.connection_manager import get_backend as _get_backend
-
-        symbol_ids = await Symbol.where(file_id=file_id).pluck("symbol_id")
-        section_ids = await Section.where(file_id=file_id).pluck("section_id")
-
-        _backend = _get_backend()
-        with contextlib.suppress(Exception):
-            for sid in symbol_ids:
-                await _backend.execute("DELETE FROM symbols_vec WHERE symbol_id = ?", [sid])
-        with contextlib.suppress(Exception):
-            for sid in section_ids:
-                await _backend.execute("DELETE FROM sections_vec WHERE section_id = ?", [sid])
-        with contextlib.suppress(Exception):
-            for sid in symbol_ids:
-                await _backend.execute("DELETE FROM quality WHERE symbol_id = ?", [sid])
-
-        await Symbol.where(file_id=file_id).delete()
-        await FileImport.where(file_id=file_id).delete()
-        await Section.where(file_id=file_id).delete()
-
-    try:
-        content_str = content_bytes.decode("utf-8", errors="replace")
-    except Exception:
-        content_str = ""
-
-    if not content_str:
-        result.files_indexed += 1
+    if extraction.error:
+        result.errors.append(
+            {
+                "error": "read_error",
+                "path": extraction.relative_path,
+                "detail": extraction.error,
+            }
+        )
         return
 
-    # Content handlers (e.g. k8s YAML) take priority over generic language parsing
-    from sylvan.extensions import get_content_handler
+    if extraction.skipped:
+        return
 
-    content_handler = get_content_handler(df.relative_path, content_str)
-    if content_handler:
-        await content_handler(file_id, df.relative_path, content_str, result)
-    elif language:
-        await _store_code_symbols(file_id, df.relative_path, content_str, language, result)
-        await _store_imports(file_id, content_str, df.relative_path, language, result)
-
-    await store_doc_sections(file_id, df.relative_path, content_str, repo_name, result)
+    await _persist_result(extraction, repo_id, repo_name, existing_file_id, result)
     result.files_indexed += 1
 
 
-async def _file_unchanged(existing: FileRecord | None, content_hash: str) -> bool:
-    """Return True if file content matches the stored hash.
-
-    Args:
-        existing: Previously stored FileRecord, or None.
-        content_hash: SHA-256 hash of the current file content.
-
-    Returns:
-        True if the file exists and content has not changed.
-    """
-    return existing is not None and existing.content_hash == content_hash
-
-
 async def _upsert_symbol_without_parent(sym: object, file_id: int) -> None:
-    """Insert a symbol without parent_symbol_id to avoid FK failures on unordered batches.
+    """Insert a symbol without parent_symbol_id to avoid FK failures on unordered batches."""
+    from sylvan.database.orm import Symbol
 
-    Args:
-        sym: Symbol validation object with all extraction fields.
-        file_id: Database ID of the file containing this symbol.
-    """
     await Symbol.upsert(
         conflict_columns=["symbol_id"],
         update_columns=[
@@ -195,23 +465,20 @@ async def _store_code_symbols(
     file_path: str,
     content: str,
     language: str,
+    repo_name: str,
     result: IndexResult,
 ) -> None:
-    """Parse source code and upsert extracted symbols.
-
-    Args:
-        file_id: Database ID of the file.
-        file_path: Relative file path.
-        content: File content as a string.
-        language: Detected language identifier.
-        result: IndexResult accumulator for counts and errors.
-    """
+    """Parse source code and upsert extracted symbols. Used by content handler path."""
     from sylvan.database.orm.runtime.connection_manager import get_backend
 
     parse_result = parse_source_file(file_path, content, language)
     deferred_parents: list[tuple[str, str]] = []
 
+    prefix = f"{repo_name}::"
     for sym in parse_result.symbols:
+        sym.symbol_id = prefix + sym.symbol_id
+        if sym.parent_symbol_id:
+            sym.parent_symbol_id = prefix + sym.parent_symbol_id
         sym.file_id = file_id
         await _upsert_symbol_without_parent(sym, file_id)
         if sym.parent_symbol_id:
@@ -236,22 +503,16 @@ async def _store_code_symbols(
         )
 
 
-async def _store_imports(
+async def _store_imports_legacy(
     file_id: int,
     content: str,
     file_path: str,
     language: str,
     result: IndexResult,
 ) -> None:
-    """Extract and store file-level imports.
+    """Extract and store file-level imports. Used by content handler path."""
+    from sylvan.database.orm import FileImport
 
-    Args:
-        file_id: Database ID of the file.
-        content: File content as a string.
-        file_path: Relative file path.
-        language: Detected language identifier.
-        result: IndexResult accumulator for counts.
-    """
     for imp_dict in extract_imports(content, file_path, language):
         await FileImport.create(
             file_id=file_id,
@@ -268,15 +529,9 @@ async def store_doc_sections(
     repo_name: str,
     result: IndexResult,
 ) -> None:
-    """Parse documentation sections from a file and store them.
+    """Parse documentation sections from a file and store them."""
+    from sylvan.database.orm import Section
 
-    Args:
-        file_id: Database ID of the file.
-        file_path: Relative file path.
-        content: File content as a string.
-        repo_name: Repository display name.
-        result: IndexResult accumulator for counts and errors.
-    """
     ext = "." + file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""
     if ext not in _DOC_EXTENSIONS:
         return

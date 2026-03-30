@@ -279,6 +279,7 @@ async def store_k8s_symbols(
     file_path: str,
     content: str,
     result: Any,
+    repo_name: str = "",
 ) -> None:
     """Parse k8s YAML and store resources as symbols with cross-references.
 
@@ -294,10 +295,12 @@ async def store_k8s_symbols(
     from sylvan.indexing.source_code.extractor import compute_content_hash
 
     resources = parse_k8s_file(content, file_path)
+    prefix = f"{repo_name}::" if repo_name else ""
 
     for r in resources:
         source_yaml = json.dumps(r["source_doc"], indent=2, ensure_ascii=False, default=str)
         source_bytes = source_yaml.encode("utf-8")
+        r["symbol_id"] = prefix + r["symbol_id"]
 
         await Symbol.upsert(
             conflict_columns=["symbol_id"],

@@ -53,12 +53,38 @@ class EmbeddingWorker(BaseWorker):
 
         backend = get_backend()
 
-        symbols = await Symbol.query().join("files", "files.id = symbols.file_id").where("files.repo_id", repo_id).get()
+        all_symbols = (
+            await Symbol.query().join("files", "files.id = symbols.file_id").where("files.repo_id", repo_id).get()
+        )
 
-        total = len(symbols)
-        if total == 0:
+        if not all_symbols:
             return {"embedded": 0, "repo": repo_name}
 
+        # Find which symbols already have vec entries (skip those).
+        import contextlib
+
+        existing_vec_ids: set[str] = set()
+        for sym in all_symbols:
+            with contextlib.suppress(Exception):
+                rows = await backend.fetch_all(
+                    "SELECT symbol_id FROM symbols_vec WHERE symbol_id = ?",
+                    [sym.symbol_id],
+                )
+                if rows:
+                    existing_vec_ids.add(sym.symbol_id)
+
+            # Clean up any orphaned unprefixed entries from pre-migration
+            unprefixed = sym.symbol_id.split("::", 1)[-1] if "::" in sym.symbol_id else None
+            if unprefixed and unprefixed != sym.symbol_id:
+                with contextlib.suppress(Exception):
+                    await backend.execute("DELETE FROM symbols_vec WHERE symbol_id = ?", [unprefixed])
+
+        symbols = [s for s in all_symbols if s.symbol_id not in existing_vec_ids]
+
+        if not symbols:
+            return {"embedded": 0, "skipped": len(all_symbols), "repo": repo_name}
+
+        total = len(symbols)
         self.report_progress(job, stage="embedding", repo=repo_name, total=total, current=0)
 
         batch_size = _detect_batch_size()
@@ -71,10 +97,11 @@ class EmbeddingWorker(BaseWorker):
             vectors = await asyncio.to_thread(provider.embed, texts)
 
             for sym, vec in zip(batch, vectors):
-                await backend.execute(
-                    "INSERT OR REPLACE INTO symbols_vec (symbol_id, embedding) VALUES (?, ?)",
-                    [sym.symbol_id, _serialize_vector(vec)],
-                )
+                with contextlib.suppress(Exception):
+                    await backend.execute(
+                        "INSERT INTO symbols_vec (symbol_id, embedding) VALUES (?, ?)",
+                        [sym.symbol_id, _serialize_vector(vec)],
+                    )
 
             embedded += len(batch)
             self.report_progress(

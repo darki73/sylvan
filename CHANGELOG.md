@@ -1,5 +1,60 @@
 # Changelog
 
+## 1.7.0
+
+### Workflow gate redesign
+
+- Gate uses MCP protocol primitives (clientInfo, list_roots, elicitation) instead of agent-driven flows
+- Server detects editor and project path during the MCP handshake, checks settings on disk
+- If not configured, elicits user directly ("Allow?") and writes files on accept
+- Context-aware elicitation messages based on what's missing
+- Supports Claude Code, Cursor, Windsurf, and GitHub Copilot
+- Removed `workflow_gate` and `auto_configure` config flags
+- `configure_*` tools now return `configured: true` when already set up
+
+### Non-blocking indexing pipeline
+
+- Two-phase architecture: extraction in thread pool, persistence on event loop
+- Discovery (`discover_files`) runs in `asyncio.to_thread`
+- File parsing (tree-sitter, import extraction) runs in `ThreadPoolExecutor` with parallel workers
+- DB writes use `bulk_upsert`/`bulk_create` instead of individual operations
+- Batched transactions (100 files per commit) instead of one giant transaction
+- `index_folder` and `index_file` routed through job queue when available
+- Dashboard, heartbeats, and followers stay responsive during indexing
+
+### Symbol ID uniqueness
+
+- Symbol IDs now prefixed with `repo_name::` for global uniqueness
+- Fixes data corruption when indexing multiple versions of the same library
+- Content handlers (Kubernetes, user extensions) receive `repo_name` parameter
+- Full re-index migrates existing repos to prefixed IDs
+
+### Library repair system
+
+- Startup scanner detects corrupted/stale library data from disk
+- Compares on-disk library sources against DB state (missing repo, no symbols, wrong prefix)
+- Nukes stale data and enqueues background repair jobs via `RepairLibraryWorker`
+- Self-healing: runs automatically on every server start, no manual intervention
+
+### Dashboard
+
+- Queue page: worker status, active/pending jobs, recent history, real-time WebSocket updates
+- Database section with vacuum button for reclaiming disk space
+- Library page: package manager filter pills, alphabetical sorting
+- Library mappings management: view, add, remove package-to-repo URL overrides
+
+### ORM
+
+- `Model.bulk_update()`: update multiple rows with different values per row using CASE/WHEN SQL
+
+### Other
+
+- `add_library`: resolve and fetch run in threads via `asyncio.to_thread`
+- Library URL overrides reload from disk on each resolve (no server restart needed)
+- Incremental embeddings: only new/changed symbols are embedded, existing ones are skipped
+- Orphaned vec entry cleanup during embedding generation
+- Fixed dependabot auto-approve workflow using PAT for PR approval
+
 ## 1.6.2
 
 - Fixed `add_library` blocking the event loop during package resolution and source fetching

@@ -62,6 +62,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/queue/': RouteRecordInfo<
+      '/queue/',
+      '/queue',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/repositories/': RouteRecordInfo<
       '/repositories/',
       '/repositories',
@@ -144,6 +151,12 @@ declare module 'vue-router/auto-routes' {
     'src/pages/quality/index.vue': {
       routes:
         | '/quality/'
+      views:
+        | never
+    }
+    'src/pages/queue/index.vue': {
+      routes:
+        | '/queue/'
       views:
         | never
     }
