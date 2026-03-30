@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.6.1
+
+### Workflow gate redesign
+
+- Gate now uses MCP protocol primitives instead of agent-driven configuration flows
+- Server detects editor (`clientInfo.name`) and project path (`list_roots()`) during handshake
+- Checks settings file on disk before any tool call - auto-unlocks if already configured
+- If not configured, elicits user permission directly ("Allow?") and writes files on accept
+- Context-aware elicitation messages based on what's missing (first time, permissions, hooks after update)
+- Supports Claude Code, Cursor, Windsurf, and GitHub Copilot with editor-specific checks and writes
+- Removed `workflow_gate` and `auto_configure` config flags
+- `configure_*` tools now check actual file state and return `configured: true` when already set up
+- Fixed infinite loop where followers couldn't unlock the gate
+
+### Dependabot
+
+- Fixed auto-approve workflow using PAT for PR approval (GITHUB_TOKEN cannot approve)
+
 ## 1.6.0
 
 ### Services layer
