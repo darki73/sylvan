@@ -312,3 +312,61 @@ class _BulkMixin:
             total += await backend.execute(_translate_sql(backend, sql), all_values)
 
         return total
+
+    @classmethod
+    async def bulk_update(
+        cls,
+        records: list[dict],
+        pk_column: str | None = None,
+    ) -> int:
+        """Update multiple rows with different values per row.
+
+        Each record must include the primary key and the columns to update.
+        Generates a single UPDATE ... SET col = CASE WHEN pk = ? THEN ? ... END
+        per batch, which is far more efficient than individual UPDATE calls.
+
+        Args:
+            records: List of dicts. Each must contain the PK and updated columns.
+            pk_column: Primary key column name (defaults to the model's PK).
+
+        Returns:
+            Number of records updated.
+        """
+        if not records:
+            return 0
+
+        from sylvan.database.orm.runtime.connection_manager import get_backend
+
+        backend = get_backend()
+
+        if pk_column is None:
+            pk_column = cls._pk_column
+
+        update_cols = [c for c in records[0] if c != pk_column]
+        if not update_cols:
+            return 0
+
+        batch_size = max(1, 999 // (len(update_cols) + 1))
+        total = 0
+
+        for i in range(0, len(records), batch_size):
+            batch = records[i : i + batch_size]
+            pk_values = [r[pk_column] for r in batch]
+            placeholders = ", ".join("?" for _ in pk_values)
+
+            set_clauses = []
+            params: list = []
+            for col in update_cols:
+                cases = " ".join("WHEN ? THEN ?" for _ in batch)
+                set_clauses.append(f"{col} = CASE {pk_column} {cases} ELSE {col} END")
+                for r in batch:
+                    instance = cls(**{pk_column: r[pk_column], col: r.get(col)})
+                    row_data = instance._to_dict()
+                    params.append(r[pk_column])
+                    params.append(row_data.get(col))
+
+            params.extend(pk_values)
+            sql = f"UPDATE {cls.__table__} SET {', '.join(set_clauses)} WHERE {pk_column} IN ({placeholders})"
+            total += await backend.execute(_translate_sql(backend, sql), params)
+
+        return total

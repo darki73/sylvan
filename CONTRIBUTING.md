@@ -38,7 +38,7 @@ src/sylvan/
     indexing/       Code + document indexing (pipeline, discovery, tree-sitter)
     analysis/       Code intelligence (blast radius, hierarchy, quality)
     search/         Embeddings (sqlite-vec storage + query)
-    tools/          MCP tool implementations (56 tools)
+    tools/          MCP tool implementations (57 tools)
     extensions/     User extension system
     cluster/        Multi-instance (discovery, heartbeat, proxy)
     dashboard/      Web dashboard (Starlette + HTMX)

@@ -1,6 +1,14 @@
-"""Top-level indexing coordinator -- discover files, then delegate processing."""
+"""Top-level indexing coordinator -- discover files, then delegate processing.
 
+Two-phase pipeline:
+  Phase 1 (threads): read files, hash, parse tree-sitter, extract imports/sections.
+  Phase 2 (event loop): batch-write results to DB in short transactions.
+"""
+
+import asyncio
+import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,10 +17,16 @@ from sylvan.config import get_config
 from sylvan.database.orm import Repo
 from sylvan.error_codes import IndexNotADirectoryError, PathTooBroadError
 from sylvan.indexing.discovery.file_discovery import DiscoveryResult, discover_files
-from sylvan.indexing.pipeline.file_processor import process_file
+from sylvan.indexing.pipeline.file_processor import _extract_file, _persist_result
 from sylvan.logging import get_logger
 
 logger = get_logger(__name__)
+
+_BATCH_SIZE = 100
+"""Files per DB transaction. Short transactions free the write lock between batches."""
+
+_MAX_WORKERS = min(4, os.cpu_count() or 2)
+"""Thread pool size for CPU-bound file parsing."""
 
 
 @dataclass(slots=True)
@@ -82,6 +96,10 @@ async def index_folder(
 ) -> IndexResult:
     """Index a local folder: discover files, parse, extract symbols, store.
 
+    Two-phase pipeline:
+      1. Discovery + extraction run in threads (non-blocking).
+      2. DB writes run on the event loop in batched transactions.
+
     Requires a SylvanContext with a backend to be set before calling.
 
     Args:
@@ -92,6 +110,7 @@ async def index_folder(
     Returns:
         An IndexResult with counts, errors, and timing information.
     """
+    from sylvan.database.orm import FileRecord
     from sylvan.database.orm.runtime.connection_manager import get_backend
 
     start = time.monotonic()
@@ -104,7 +123,13 @@ async def index_folder(
         name = root.name
     result.repo_name = name
 
-    discovery = discover_files(root=root, max_files=cfg.max_files_local, max_file_size=cfg.max_file_size)
+    # Phase 0: discovery in thread (subprocess + os.walk + stat)
+    discovery = await asyncio.to_thread(
+        discover_files,
+        root,
+        cfg.max_files_local,
+        cfg.max_file_size,
+    )
     result.files_skipped = discovery.total_skipped
     result.skipped_reasons = {k: len(v) for k, v in discovery.skipped.items()}
     result.git_head = discovery.git_head
@@ -114,23 +139,86 @@ async def index_folder(
         result.duration_ms = (time.monotonic() - start) * 1000
         return result
 
-    discovered_paths = {df.relative_path for df in discovery.files}
-
+    # Upsert repo record (needed for repo_id before anything else)
     backend = get_backend()
     async with backend.transaction():
         repo_id = await _upsert_repo(name, root, discovery)
         result.repo_id = repo_id
 
-        for discovered_file in discovery.files:
-            await process_file(discovered_file, repo_id, name, cfg.max_file_size, result, force=force)
+    # Pre-load existing file hashes in one query (avoid per-file DB lookups in threads)
+    existing_files = {f.path: f for f in await FileRecord.where(repo_id=repo_id).get()}
+    existing_hashes = {path: f.content_hash for path, f in existing_files.items()}
+
+    # Phase 1: extraction in thread pool (CPU-bound parsing, file I/O)
+    loop = asyncio.get_running_loop()
+    with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
+
+        def _make_task(df):
+            return _extract_file(
+                df.path,
+                df.relative_path,
+                df.size,
+                df.mtime,
+                cfg.max_file_size,
+                name,
+                existing_hashes.get(df.relative_path),
+                force=force,
+            )
+
+        futures = [loop.run_in_executor(pool, _make_task, df) for df in discovery.files]
+        extraction_results = await asyncio.gather(*futures, return_exceptions=True)
+
+    # Phase 2: persist in batched transactions on event loop
+    discovered_paths: set[str] = set()
+    for batch_start in range(0, len(extraction_results), _BATCH_SIZE):
+        batch = extraction_results[batch_start : batch_start + _BATCH_SIZE]
+        async with backend.transaction():
+            for file_result in batch:
+                if isinstance(file_result, BaseException):
+                    result.errors.append({"error": "extraction_error", "detail": str(file_result)})
+                    continue
+                if file_result.error:
+                    result.errors.append(
+                        {"error": "read_error", "path": file_result.relative_path, "detail": file_result.error}
+                    )
+                    continue
+                if file_result.skipped:
+                    discovered_paths.add(file_result.relative_path)
+                    continue
+
+                discovered_paths.add(file_result.relative_path)
+                existing_file = existing_files.get(file_result.relative_path)
+                existing_file_id = existing_file.id if existing_file else None
+
+                syms, imps, secs = await _persist_result(
+                    file_result,
+                    repo_id,
+                    name,
+                    existing_file_id,
+                    result,
+                )
+                result.files_indexed += 1
+                result.symbols_extracted += syms
+                result.imports_extracted += imps
+                result.sections_extracted += secs
+
+                if file_result.parse_error:
+                    result.errors.append(
+                        {
+                            "error": "parse_error",
+                            "path": file_result.relative_path,
+                            "detail": file_result.parse_error,
+                        }
+                    )
+
+    # Phase 3: cleanup + post-processing
+    async with backend.transaction():
         await _purge_deleted_files(repo_id, discovered_paths)
 
-    # Resolve import specifiers to file IDs after all files are indexed.
     from sylvan.indexing.pipeline.import_resolver import resolve_imports
 
     result.imports_resolved = await resolve_imports(repo_id)
 
-    # Enrich symbols with ecosystem context (e.g., dbt metadata).
     await _enrich_ecosystem_context(root, repo_id)
 
     result.duration_ms = (time.monotonic() - start) * 1000
@@ -264,9 +352,13 @@ async def _enrich_ecosystem_context(root: Path, repo_id: int) -> None:
 
     enrich_symbols(symbols, providers)
 
-    # Persist updated keywords back to the database.
-    for sym in symbols:
-        await sym.save()
+    records = [{"id": sym.id, "keywords": sym.keywords} for sym in symbols]
+    if records:
+        await Symbol.bulk_upsert(
+            records,
+            conflict_columns=["id"],
+            update_columns=["keywords"],
+        )
 
     logger.info(
         "ecosystem_context_enriched",

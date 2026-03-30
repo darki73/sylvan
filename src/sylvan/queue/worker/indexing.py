@@ -92,6 +92,6 @@ class IndexFileWorker(BaseWorker):
         Returns:
             Dict with indexing results.
         """
-        from sylvan.services.indexing import index_file
+        from sylvan.services.indexing import _index_file_direct
 
-        return await index_file(job.kwargs["repo"], job.kwargs["file_path"])
+        return await _index_file_direct(job.kwargs["repo"], job.kwargs["file_path"])

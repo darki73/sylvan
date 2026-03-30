@@ -94,6 +94,7 @@ def _discover_workers() -> None:
     """Import worker modules to trigger registration, then instantiate."""
     import sylvan.queue.worker.embedding
     import sylvan.queue.worker.indexing
+    import sylvan.queue.worker.library_repair
     import sylvan.queue.worker.summary  # noqa: F401
     from sylvan.queue.registry import get_all_worker_classes
 

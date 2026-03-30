@@ -26,7 +26,7 @@ export function useLibraries() {
             group.total_symbols += lib.symbols;
             if (lib.repo_url && !group.repo_url) group.repo_url = lib.repo_url;
         }
-        return [...groups.values()].sort((a, b) => b.total_symbols - a.total_symbols);
+        return [...groups.values()].sort((a, b) => a.package.localeCompare(b.package));
     });
 
     async function fetch() {

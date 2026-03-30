@@ -413,7 +413,28 @@ count = await Symbol.bulk_upsert(
     conflict_columns=["symbol_id"],
     update_columns=["name", "kind"],
 )
+
+# Update many rows with different values per row
+count = await Symbol.bulk_update(
+    records=[
+        {"id": 1, "summary": "Updated summary for foo"},
+        {"id": 2, "summary": "Updated summary for bar"},
+    ],
+)
+
+# Specify a custom primary key column
+count = await Symbol.bulk_update(
+    records=[
+        {"symbol_id": "a::foo#function", "summary": "new summary"},
+        {"symbol_id": "a::bar#function", "summary": "new summary"},
+    ],
+    pk_column="symbol_id",
+)
 ```
+
+`bulk_update` generates a single `UPDATE ... SET col = CASE WHEN pk = ? THEN ? ... END`
+statement per batch, which is far more efficient than individual `update()` calls when
+you need to set different values on each row.
 
 ## Raw SQL
 

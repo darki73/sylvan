@@ -162,6 +162,33 @@ Each workspace can have its own set of pinned library versions. This is covered
 in more detail in the multi-repo projects chapter.
 
 
+## Library mappings
+
+When automatic package-to-repository resolution picks the wrong source, you can
+override it with a manual mapping. Mappings can be managed three ways:
+
+- **Config file** -- add entries under `libraries.overrides` in `config.yaml`
+- **CLI** -- `sylvan library map pip/mypackage https://github.com/org/mypackage`
+- **Dashboard** -- the Libraries page has a mappings panel where you can add and
+  remove overrides directly
+
+To list all current mappings from the CLI:
+
+```bash
+sylvan library mappings
+```
+
+
+## Automatic repair
+
+On startup, the server scans all indexed libraries for corruption (missing
+symbols, incomplete indexes). If a library's source files are still on disk but
+its index is damaged, the server queues a repair job that re-indexes it
+automatically. This runs in the background and requires no manual intervention.
+
+You can monitor repair progress on the dashboard's Queue page.
+
+
 ## Removing a library
 
 To remove a library and free up disk space:

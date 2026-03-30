@@ -52,13 +52,14 @@ def register_content_handler(
     this handler should process the file. Handlers with higher priority
     run first. The first sniffer that returns True wins.
 
-    The handler is called with (file_id, file_path, content, result) and
-    is responsible for storing symbols and/or imports.
+    The handler is called with (file_id, file_path, content, result, repo_name)
+    and is responsible for storing symbols and/or imports. Symbol IDs must
+    be prefixed with ``repo_name::`` for global uniqueness.
 
     Args:
         name: Handler name for logging.
         sniffer: Function(file_path, content) -> bool.
-        handler: Async function(file_id, file_path, content, result).
+        handler: Async function(file_id, file_path, content, result, repo_name).
         priority: Higher runs first. Default 0.
     """
     _registered_content_handlers.append(

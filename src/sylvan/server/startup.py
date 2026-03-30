@@ -233,8 +233,29 @@ def main(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8420) ->
         All background tasks spawned via lifecycle.spawn() are
         automatically cancelled when the transport coroutine returns.
         """
-        async with ServerLifecycle():
+        async with ServerLifecycle() as lifecycle:
+            lifecycle.spawn(_repair_libraries_if_needed(), name="library-repair")
             await coro
+
+    async def _repair_libraries_if_needed():
+        """Check library health and enqueue repairs in the background."""
+        try:
+            from sylvan.server import _get_or_create_backend
+
+            await _get_or_create_backend()
+
+            from sylvan.libraries.repair import repair_libraries
+
+            result = await repair_libraries()
+            if result["repaired"]:
+                logger.info(
+                    "library_repair_complete",
+                    scanned=result["scanned"],
+                    repaired=len(result["repaired"]),
+                    errors=len(result["errors"]),
+                )
+        except Exception as exc:
+            logger.debug("library_repair_skipped", error=str(exc))
 
     try:
         match transport:

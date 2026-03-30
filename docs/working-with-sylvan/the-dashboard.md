@@ -132,9 +132,41 @@ The libraries page shows all indexed third-party libraries:
 - **Library list** -- each library with its name, version, package manager, and
   symbol count. The same data as the overview page but focused on libraries only.
 - **Source URLs** -- links to the git repository each library was fetched from.
+- **Manager filter** -- filter the library list by package manager (pip, npm,
+  cargo, go, composer). Only managers that have at least one indexed library
+  appear in the filter.
+- **Search filter** -- text search to narrow the list by library name.
+- **Add library** -- a form to index a new library directly from the dashboard.
+  Select the package manager, enter the package name (with optional version),
+  and submit.
+- **Library mappings** -- view and manage package-to-repo URL overrides. Add
+  new mappings (package spec and git URL) or delete existing ones. These
+  overrides are the same ones configured via `sylvan library map` or the
+  `libraries.overrides` config section.
 
-Use this page to verify that a library was indexed correctly and to check how
-many symbols it contains.
+Use this page to verify that a library was indexed correctly, to check how
+many symbols it contains, and to manage library source mappings.
+
+
+## Queue page
+
+The queue page shows the background job queue and database maintenance controls:
+
+- **Worker status** -- each registered worker (indexing, embeddings, summaries,
+  library repair) listed with its current state (idle, running), pending job
+  count, and completed job count.
+- **Active jobs** -- jobs currently being processed, with their type, target,
+  progress percentage, and elapsed time.
+- **Pending jobs** -- jobs waiting in the queue, ordered by priority. Indexing
+  jobs run at highest priority, followed by embeddings, then summaries.
+- **Database size** -- current size of the SQLite database file on disk.
+- **Vacuum button** -- triggers a SQLite VACUUM operation to reclaim disk space
+  after large deletions (removing repos or libraries). Shows the amount of space
+  freed after completion.
+
+The queue updates in real time via WebSocket. When you index a repository or add
+a library, the jobs appear on this page immediately and progress updates stream
+in as they are processed.
 
 
 ## Blast radius page

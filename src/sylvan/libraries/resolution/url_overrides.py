@@ -11,13 +11,29 @@ logger = get_logger(__name__)
 
 
 def load_overrides() -> dict[str, str]:
-    """Load package -> repo URL mappings from the global config.
+    """Load package -> repo URL mappings fresh from disk.
+
+    Reads the config YAML directly so overrides added by the CLI
+    or another process are visible without restarting the server.
 
     Returns:
         Dictionary mapping ``"manager/package"`` to repository URL strings.
     """
-    from sylvan.config import get_config
+    from sylvan.config import _sylvan_home, get_config
 
+    config_path = _sylvan_home() / "config.yaml"
+    if config_path.exists():
+        try:
+            import yaml
+
+            raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+            disk_overrides = raw.get("libraries", {}).get("overrides", {})
+            if isinstance(disk_overrides, dict):
+                cfg = get_config()
+                cfg.libraries.overrides.update(disk_overrides)
+                return dict(cfg.libraries.overrides)
+        except Exception:
+            logger.debug("overrides_reload_failed")
     return dict(get_config().overrides)
 
 

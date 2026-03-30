@@ -29,8 +29,6 @@ server:
   request_timeout: 30       # Seconds before returning server_busy
   dashboard_port: 32400     # Port for the web dashboard
   dashboard_random_port: false  # Use a random available port for the dashboard
-  workflow_gate: true           # Require setup before tools work
-  auto_configure: false         # Let sylvan write editor config files directly
 ```
 
 | Option | Default | Description |
@@ -42,8 +40,6 @@ server:
 | `request_timeout` | `30` | Seconds to wait for a tool slot before returning a `server_busy` error. |
 | `dashboard_port` | `32400` | Port for the built-in web dashboard. |
 | `dashboard_random_port` | `false` | When true, picks a random available port for the dashboard instead of using `dashboard_port`. |
-| `workflow_gate` | `true` | When true, tools are blocked until the agent calls a configure tool or `get_workflow_guide`. Set to `false` for SDK/pipeline usage. |
-| `auto_configure` | `false` | When true, configure tools write editor config files directly. When false (default), they return instructions for the agent to apply. |
 
 ## Database
 

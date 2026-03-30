@@ -482,6 +482,57 @@ async def _handle_get_libraries() -> dict:
     return {"libraries": lib_data}
 
 
+@_register("get_library_mappings")
+async def _handle_get_library_mappings() -> dict:
+    """Return all user-provided repo URL overrides.
+
+    Returns:
+        Dict with list of mapping entries.
+    """
+    from sylvan.libraries.resolution.url_overrides import list_overrides
+
+    overrides = list_overrides()
+    return {"mappings": [{"spec": key, "repo_url": url} for key, url in overrides.items()]}
+
+
+@_register("add_library_mapping")
+async def _handle_add_library_mapping(spec: str = "", repo_url: str = "") -> dict:
+    """Save a package-to-repo URL mapping.
+
+    Args:
+        spec: Package spec (e.g. "pip/tiktoken").
+        repo_url: Git repository URL.
+
+    Returns:
+        Dict with save status.
+    """
+    if not spec or not repo_url:
+        return {"error": "spec and repo_url are required"}
+
+    from sylvan.libraries.resolution.url_overrides import save_override
+
+    save_override(spec, repo_url)
+    return {"status": "saved", "spec": spec, "repo_url": repo_url}
+
+
+@_register("remove_library_mapping")
+async def _handle_remove_library_mapping(spec: str = "") -> dict:
+    """Remove a package-to-repo URL mapping.
+
+    Args:
+        spec: Package spec to remove.
+
+    Returns:
+        Dict with removal status.
+    """
+    from sylvan.libraries.resolution.url_overrides import remove_override
+
+    removed = remove_override(spec)
+    if removed:
+        return {"status": "removed", "spec": spec}
+    return {"status": "not_found", "spec": spec}
+
+
 @_register("add_library")
 async def _handle_add_library(package: str = "") -> dict:
     """Index a third-party library from a package manager.
@@ -725,6 +776,66 @@ async def _handle_workspace_remove_repo(name: str = "", repo_id: int = 0) -> dic
     if not await WorkspaceService().remove_repo_by_id(name, repo_id):
         return {"error": "workspace_not_found", "name": name}
     return {"ok": True}
+
+
+@_register("get_queue_status")
+async def _handle_get_queue_status() -> dict:
+    """Return current queue status.
+
+    Returns:
+        Dict with workers and recent completed jobs.
+    """
+    from sylvan.queue import status
+
+    return status()
+
+
+@_register("vacuum_database")
+async def _handle_vacuum_database() -> dict:
+    """Run VACUUM on the database to reclaim disk space.
+
+    Returns:
+        Dict with before/after file sizes.
+    """
+    from pathlib import Path as _DbPath
+
+    from sylvan.config import get_config
+    from sylvan.database.orm.runtime.connection_manager import get_backend
+
+    db_path = _DbPath(get_config().db_path)
+    size_before = db_path.stat().st_size
+
+    backend = get_backend()
+    conn = backend.connection
+
+    # VACUUM cannot run inside a transaction.
+    # Temporarily switch to autocommit, run VACUUM, switch back.
+    def _do_vacuum(raw):
+        old = raw.isolation_level
+        raw.isolation_level = None
+        raw.execute("VACUUM")
+        raw.isolation_level = old
+
+    await conn._execute(_do_vacuum, conn._connection)
+
+    size_after = db_path.stat().st_size
+    return {
+        "status": "complete",
+        "size_before": size_before,
+        "size_after": size_after,
+        "freed": size_before - size_after,
+    }
+
+
+@_register("get_database_size")
+async def _handle_get_database_size() -> dict:
+    """Return the current database file size."""
+    from pathlib import Path as _DbPath
+
+    from sylvan.config import get_config
+
+    db_path = _DbPath(get_config().db_path)
+    return {"size": db_path.stat().st_size}
 
 
 @_register("delete_workspace")

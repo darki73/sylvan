@@ -177,14 +177,12 @@ async def resolve_imports(repo_id: int) -> int:
                 resolved_count += 1
                 break
 
-    # Batch update inside a single transaction to avoid per-statement round-trips.
     if updates:
-        async with backend.transaction():
-            for file_id, import_id in updates:
-                await backend.execute(
-                    "UPDATE file_imports SET resolved_file_id = ? WHERE id = ?",
-                    [file_id, import_id],
-                )
+        from sylvan.database.orm import FileImport
+
+        await FileImport.bulk_update(
+            [{"id": import_id, "resolved_file_id": file_id} for file_id, import_id in updates],
+        )
 
     logger.info(
         "imports_resolved",

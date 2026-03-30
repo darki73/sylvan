@@ -222,6 +222,7 @@ class QueueRunner:
             worker._current_job = None
             if len(self._recent_jobs) > 50:
                 self._recent_jobs = self._recent_jobs[-50:]
+            emit("queue_status", self.status())
 
     def _find_worker(self, job_type: str) -> BaseWorker | None:
         """Find the worker for a job type.

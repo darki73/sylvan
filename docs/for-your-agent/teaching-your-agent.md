@@ -35,7 +35,7 @@ Once the guide is loaded, the session is marked as configured and the tool gate 
 
 ## 2. The Tool Gate
 
-Until `get_workflow_guide` has been called and the session is configured, **all gated tools return `setup_required: true`** instead of real results. The response looks like:
+Until the session is configured, **all gated tools return `setup_required: true`** instead of real results. The response looks like:
 
 ```json
 {
@@ -47,6 +47,19 @@ Until `get_workflow_guide` has been called and the session is configured, **all 
 ```
 
 This forces the agent to learn the rules before using the tools. It cannot skip straight to `search_symbols` or `get_symbol` without reading the workflow rules first.
+
+### How the gate unlocks
+
+The gate uses MCP protocol primitives to detect the editor and configure the session automatically:
+
+1. **Editor detection** -- the server reads `clientInfo.name` from the MCP handshake to identify which editor is connected (Claude Code, Cursor, Windsurf, GitHub Copilot).
+2. **Project path discovery** -- the server calls `list_roots()` to discover the project directory the agent is working in.
+3. **Settings check** -- the server checks if the editor's settings file already exists on disk with the correct content. If it does, the gate unlocks immediately with no agent interaction needed.
+4. **Elicitation** -- if settings are missing or incomplete, the server uses MCP elicitation to ask the user directly ("Allow sylvan to configure [editor]?"). On acceptance, it writes the settings files and unlocks the gate.
+
+This means the gate is transparent for returning users - if the settings file from a previous session is still in place, the gate opens silently on the first tool call. No `get_workflow_guide` call is needed in that case.
+
+For editors that do not support elicitation, or when the user declines, the gate falls back to the previous behavior: returning `setup_required` responses with instructions for the agent to follow.
 
 ### Why the gate exists
 
@@ -146,13 +159,15 @@ The file is named `settings.local.json` (not `settings.json`) because it contain
 
 The complete setup sequence, from first launch to a fully configured session:
 
-1. Agent calls `get_workflow_guide(project_path="/path/to/project")`
-2. Sylvan checks `.claude/settings.local.json` at the given path
-3. If missing or incomplete: returns `setup_actions` with the exact file content to create
-4. Agent creates or fixes the settings file
-5. Agent calls `get_workflow_guide` again
-6. Sylvan verifies the settings, loads the workflow rules, marks the session as configured
-7. All gated tools are now unlocked -- search, retrieval, analysis, etc.
+1. Agent calls any gated tool (e.g., `search_symbols`)
+2. The server detects the editor from `clientInfo.name` and the project path from `list_roots()`
+3. The server checks the editor's settings file on disk
+4. If already configured: the gate opens silently and the tool call proceeds normally
+5. If not configured: the server elicits user permission ("Allow sylvan to configure [editor]?")
+6. On acceptance, the server writes the settings files and unlocks the gate
+7. The original tool call proceeds, and all subsequent gated tools work normally
 8. Subagents spawned from this point forward receive the sylvan instructions automatically via the SubagentStart hook
 
-If the settings file already exists and is correct, steps 3-5 are skipped and the session is configured on the first call.
+For most users after the first session, the settings file persists and the gate opens transparently on step 4. The agent never sees a `setup_required` response.
+
+If the editor does not support MCP elicitation, or the user declines, calling `get_workflow_guide(project_path="/path/to/project")` or a `configure_*` tool still works as a manual fallback.

@@ -98,9 +98,9 @@ async def async_add_library(
     logger.info("fetching_source", dest=str(dest))
     await asyncio.to_thread(fetch_source, info.repo_url, info.tag, dest, timeout)
 
-    from sylvan.indexing.pipeline.orchestrator import index_folder
+    from sylvan.services.indexing import index_folder as _svc_index
 
-    result = await index_folder(str(dest), name=display_name)
+    result = await _svc_index(str(dest), name=display_name)
 
     backend = get_backend()
     repo = await Repo.where(name=display_name).first()
@@ -121,10 +121,10 @@ async def async_add_library(
         "package": info.name,
         "version": info.version,
         "repo_url": info.repo_url,
-        "files_indexed": result.files_indexed,
-        "symbols_extracted": result.symbols_extracted,
-        "sections_extracted": result.sections_extracted,
-        "duration_ms": result.duration_ms,
+        "files_indexed": result.get("files_indexed", 0),
+        "symbols_extracted": result.get("symbols_extracted", 0),
+        "sections_extracted": result.get("sections_extracted", 0),
+        "duration_ms": result.get("duration_ms", 0),
     }
 
 
