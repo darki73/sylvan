@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.2
+
+- Fixed `add_library` blocking the event loop during package resolution and source fetching
+- `resolve()` and `fetch_source()` now run in thread pool via `asyncio.to_thread()`
+
 ## 1.6.1
 
 ### Workflow gate redesign

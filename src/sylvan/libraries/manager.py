@@ -81,7 +81,7 @@ async def async_add_library(
     manager, name, version = parse_package_spec(spec)
 
     logger.info("resolving_package", manager=manager, name=name, version=version)
-    info = resolve(manager, name, version)
+    info = await asyncio.to_thread(resolve, manager, name, version)
     logger.info("package_resolved", name=info.name, version=info.version, repo_url=info.repo_url, tag=info.tag)
 
     display_name = f"{info.name}@{info.version}"
@@ -96,7 +96,7 @@ async def async_add_library(
 
     dest = get_library_path(manager, info.name, info.version)
     logger.info("fetching_source", dest=str(dest))
-    fetch_source(info.repo_url, info.tag, dest, timeout=timeout)
+    await asyncio.to_thread(fetch_source, info.repo_url, info.tag, dest, timeout)
 
     from sylvan.indexing.pipeline.orchestrator import index_folder
 
