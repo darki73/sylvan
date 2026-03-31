@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.8.0
+
+### Call graph
+
+- AST-based call site extraction from Python function bodies using tree-sitter
+- Two-pass resolution: name-based (instant) for simple calls and self.method, jedi (semantic) for dotted calls through inheritance
+- Jedi resolves inherited methods through MRO (e.g. `Repo.where` -> `_QueryMixin.where`)
+- Deduplication by specifier - each unique call resolved once, applied to all references
+- New `who_calls(symbol_id)` tool - find all callers of a function or method
+- New `calls_to(symbol_id)` tool - find all callees from within a function
+- `get_references` enhanced with call graph data and line numbers
+- References table gains `line` column for call site locations
+- `build_reference_graph` and `resolve_call_sites` run during indexing post-processing
+
+### Repo briefing
+
+- New `get_repo_briefing(repo)` tool - one-call orientation for unfamiliar repos
+- Returns repo stats (files, symbols, sections), directory tree with per-directory file counts, language breakdown, and raw manifest contents (pyproject.toml, package.json, go.mod, etc.)
+- Generated during indexing, served from cache on subsequent calls
+- Briefing stored as JSON in `repos.briefing` column (migration 003)
+
+### PEP 695 support for jedi/parso
+
+- Monkey-patches parso grammar to support `class Foo[T]:` and `def bar[T]():` syntax
+- Patches `Class.get_super_arglist` to handle shifted child indices from type_params
+- Enables jedi to resolve methods on generic classes through MRO
+- Patches applied at runtime before jedi initialization, no modifications to installed packages
+
+### Bug fixes
+
+- Search tools (`search_symbols`, `search_sections`, `search_text`) now coerce query to string, fixing crash when MCP client sends numeric values
+- Duplicate repo detection: indexing a subdirectory of an already-indexed repo reuses the existing record instead of creating a duplicate
+- `jedi` added as dependency for semantic call resolution
+
+### Upgrading from 1.7.0
+
+Run a **full re-index** from the dashboard after upgrading. The call graph and briefing are built during indexing - existing repos need a re-index to populate these.
+
 ## 1.7.0
 
 ### Workflow gate redesign

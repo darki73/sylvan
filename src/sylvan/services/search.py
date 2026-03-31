@@ -214,6 +214,7 @@ class SearchService:
         Raises:
             EmptyQueryError: If the query is empty or whitespace-only.
         """
+        query = str(query)
         ctx = get_context()
         session = ctx.session if ctx.session else get_session()
         session.record_query(query, "search_symbols")
@@ -368,6 +369,7 @@ class SearchService:
             Dict with 'matches' list, 'results_count', 'query', and
             token efficiency accumulators.
         """
+        query = str(query)
         max_results = _clamp(max_results, 1, 1000)
         context_lines = _clamp(context_lines, 0, 50)
 
@@ -444,6 +446,7 @@ class SearchService:
         Raises:
             EmptyQueryError: If the query is empty or whitespace-only.
         """
+        query = str(query)
         max_results = _clamp(max_results, 1, 1000)
 
         ctx = get_context()

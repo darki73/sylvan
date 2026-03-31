@@ -75,6 +75,8 @@ Add to your MCP client config:
 
 Your agent handles the rest - index a project, search for code, navigate with precision.
 
+> **Upgrading to 1.8.0?** Run a full re-index from the dashboard to build the call graph and repo briefing for existing repos.
+
 ## Documentation
 
 Full docs at [darki73.github.io/sylvan](https://darki73.github.io/sylvan/)

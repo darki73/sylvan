@@ -355,4 +355,37 @@ TOOLS: list[Tool] = [
             },
         },
     ),
+    Tool(
+        name="who_calls",
+        description=(
+            "Find all symbols that call a given function or method. Returns callers "
+            "with file paths, signatures, and line numbers. Use before changing a "
+            "function to see exactly what breaks. More precise than find_importers "
+            "which works at file level."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "symbol_id": {"type": "string", "description": "Symbol to find callers of"},
+                "max_results": {"type": "integer", "default": 50},
+            },
+            "required": ["symbol_id"],
+        },
+    ),
+    Tool(
+        name="calls_to",
+        description=(
+            "Find all symbols that a given function or method calls. Returns callees "
+            "with file paths, signatures, and line numbers. Use when debugging to "
+            "understand what a function depends on."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "symbol_id": {"type": "string", "description": "Symbol to find callees of"},
+                "max_results": {"type": "integer", "default": 50},
+            },
+            "required": ["symbol_id"],
+        },
+    ),
 ]

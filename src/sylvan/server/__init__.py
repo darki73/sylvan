@@ -660,6 +660,7 @@ def _get_handlers() -> dict[str, Callable[..., dict]]:
     Returns:
         Mapping of tool names to their handler callables.
     """
+    from sylvan.tools.analysis.calls_to import calls_to
     from sylvan.tools.analysis.find_importers import batch_find_importers, find_importers
     from sylvan.tools.analysis.get_blast_radius import batch_blast_radius, get_blast_radius
     from sylvan.tools.analysis.get_class_hierarchy import get_class_hierarchy
@@ -673,9 +674,11 @@ def _get_handlers() -> dict[str, Callable[..., dict]]:
     from sylvan.tools.analysis.get_symbol_diff import get_symbol_diff
     from sylvan.tools.analysis.rename_symbol import rename_symbol
     from sylvan.tools.analysis.search_columns import search_columns
+    from sylvan.tools.analysis.who_calls import who_calls
     from sylvan.tools.browsing.get_context_bundle import get_context_bundle
     from sylvan.tools.browsing.get_file_outline import get_file_outline, get_file_outlines
     from sylvan.tools.browsing.get_file_tree import get_file_tree
+    from sylvan.tools.browsing.get_repo_briefing import get_repo_briefing
     from sylvan.tools.browsing.get_repo_outline import get_repo_outline
     from sylvan.tools.browsing.get_section import get_section, get_sections
     from sylvan.tools.browsing.get_symbol import get_symbol, get_symbols
@@ -756,6 +759,7 @@ def _get_handlers() -> dict[str, Callable[..., dict]]:
         "get_toc": get_toc,
         "get_toc_tree": get_toc_tree,
         "get_repo_outline": get_repo_outline,
+        "get_repo_briefing": get_repo_briefing,
         "get_blast_radius": get_blast_radius,
         "batch_blast_radius": batch_blast_radius,
         "get_class_hierarchy": get_class_hierarchy,
@@ -771,6 +775,8 @@ def _get_handlers() -> dict[str, Callable[..., dict]]:
         "get_git_context": get_git_context,
         "get_recent_changes": get_recent_changes,
         "rename_symbol": rename_symbol,
+        "who_calls": who_calls,
+        "calls_to": calls_to,
         "search_text": search_text,
         "get_context_bundle": get_context_bundle,
         "suggest_queries": suggest_queries,
@@ -829,12 +835,15 @@ _TOOL_CATEGORIES: dict[str, str] = {
     "get_toc": "retrieval",
     "get_toc_tree": "retrieval",
     "get_repo_outline": "retrieval",
+    "get_repo_briefing": "retrieval",
     "get_file_tree": "retrieval",
     # analysis
     "get_blast_radius": "analysis",
     "batch_blast_radius": "analysis",
     "get_class_hierarchy": "analysis",
     "get_references": "analysis",
+    "who_calls": "analysis",
+    "calls_to": "analysis",
     "find_importers": "analysis",
     "batch_find_importers": "analysis",
     "get_related": "analysis",
