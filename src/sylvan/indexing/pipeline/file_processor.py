@@ -51,6 +51,7 @@ class FileProcessingResult:
     symbols: list = field(default_factory=list)
     imports: list[dict] = field(default_factory=list)
     sections: list = field(default_factory=list)
+    call_sites: list = field(default_factory=list)
     content_str: str = ""
     parse_error: str | None = None
     error: str | None = None
@@ -149,6 +150,16 @@ def _extract_file(
 
         if parse_result.error:
             result.parse_error = parse_result.error
+
+        if result.symbols:
+            from sylvan.indexing.source_code.call_extractor import extract_call_sites
+
+            result.call_sites = extract_call_sites(
+                parse_result.symbols,
+                content_str,
+                language,
+                repo_name,
+            )
 
         for imp_dict in extract_imports(content_str, df_relative_path, language):
             result.imports.append(imp_dict)
@@ -299,6 +310,21 @@ async def _persist_result(
             imports_count = len(imp_records)
             index_result.imports_extracted += imports_count
 
+        if result.call_sites:
+            from sylvan.database.orm import Reference
+
+            ref_records = [
+                {
+                    "source_symbol_id": cs.caller_symbol_id,
+                    "target_symbol_id": None,
+                    "target_specifier": cs.callee_name,
+                    "target_names": [],
+                    "line": cs.line,
+                }
+                for cs in result.call_sites
+            ]
+            await Reference.bulk_create(ref_records)
+
     if result.parse_error and "doc_parse" not in (result.parse_error or ""):
         index_result.errors.append(
             {
@@ -365,6 +391,9 @@ async def _clear_stale_data(file_id: int) -> None:
     with contextlib.suppress(Exception):
         for sid in symbol_ids:
             await _backend.execute("DELETE FROM quality WHERE symbol_id = ?", [sid])
+
+    for sid in symbol_ids:
+        await _backend.execute('DELETE FROM "references" WHERE source_symbol_id = ?', [sid])
 
     await Symbol.where(file_id=file_id).delete()
     await FileImport.where(file_id=file_id).delete()

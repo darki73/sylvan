@@ -211,7 +211,6 @@ async def index_folder(
                         }
                     )
 
-    # Phase 3: cleanup + post-processing
     async with backend.transaction():
         await _purge_deleted_files(repo_id, discovered_paths)
 
@@ -220,6 +219,15 @@ async def index_folder(
     result.imports_resolved = await resolve_imports(repo_id)
 
     await _enrich_ecosystem_context(root, repo_id)
+
+    from sylvan.analysis.structure.reference_graph import build_reference_graph, resolve_call_sites
+
+    await build_reference_graph(repo_id)
+    await resolve_call_sites(repo_id)
+
+    from sylvan.services.briefing import BriefingService
+
+    await BriefingService().generate(name)
 
     result.duration_ms = (time.monotonic() - start) * 1000
     return result
@@ -270,6 +278,9 @@ def _validate_path(folder_path: str, result: IndexResult) -> Path:
 async def _upsert_repo(name: str, root: Path, discovery: DiscoveryResult) -> int:
     """Create or update the repo record, return its ID.
 
+    If the new path is a child of an already-indexed repo (or vice versa),
+    reuses the existing record instead of creating a duplicate.
+
     Args:
         name: Repository display name.
         root: Resolved repository root path.
@@ -278,12 +289,54 @@ async def _upsert_repo(name: str, root: Path, discovery: DiscoveryResult) -> int
     Returns:
         Database ID of the upserted repository.
     """
+    root_str = str(root)
+
+    existing = await Repo.where(repo_type="local").where_not_null("source_path").get()
+    for repo in existing:
+        existing_path = repo.source_path
+        if not existing_path:
+            continue
+        # New path is inside an existing repo, or existing repo is inside new path
+        try:
+            Path(root_str).relative_to(existing_path)
+            # New path is a child - use the existing (broader) repo
+            logger.info(
+                "index_path_overlaps_existing",
+                new_path=root_str,
+                existing_path=existing_path,
+                existing_name=repo.name,
+                action="reusing_existing",
+            )
+            return repo.id
+        except ValueError:
+            pass
+        try:
+            Path(existing_path).relative_to(root_str)
+            # Existing repo is a child - update it to use the broader path
+            logger.info(
+                "index_path_overlaps_existing",
+                new_path=root_str,
+                existing_path=existing_path,
+                existing_name=repo.name,
+                action="expanding_to_parent",
+            )
+            now = datetime.now(UTC).isoformat()
+            await Repo.where(id=repo.id).update(
+                name=name,
+                source_path=root_str,
+                indexed_at=now,
+                git_head=discovery.git_head,
+            )
+            return repo.id
+        except ValueError:
+            pass
+
     now = datetime.now(UTC).isoformat()
     repo_obj = await Repo.upsert(
         conflict_columns=["source_path"],
         update_columns=["name", "indexed_at", "git_head"],
         name=name,
-        source_path=str(root),
+        source_path=root_str,
         indexed_at=now,
         git_head=discovery.git_head,
     )

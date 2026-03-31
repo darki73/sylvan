@@ -309,4 +309,22 @@ TOOLS: list[Tool] = [
             "required": ["symbol_id"],
         },
     ),
+    Tool(
+        name="get_repo_briefing",
+        description=(
+            "Structured orientation for a repository - stats (files, symbols, "
+            "sections), directory tree with per-directory file counts, language "
+            "breakdown, and raw manifest contents (pyproject.toml, package.json, "
+            "go.mod, etc). One call replaces the typical 5-10 orientation calls. "
+            "Use this FIRST on unfamiliar repos to understand scale, structure, "
+            "and stack before diving into search_symbols."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "repo": {"type": "string", "description": "Repository name"},
+            },
+            "required": ["repo"],
+        },
+    ),
 ]

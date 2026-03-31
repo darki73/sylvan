@@ -27,3 +27,6 @@ class Reference(Model):
 
     target_names = JsonColumn(list)
     """List of specific names referenced from the target."""
+
+    line = Column(int, nullable=True)
+    """1-based line number of the call site in the source file."""

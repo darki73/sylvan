@@ -52,6 +52,9 @@ class Repo(Model):
     version = Column(str, nullable=True)
     """Version string for library repos."""
 
+    briefing = Column(str, nullable=True)
+    """Pre-computed repo orientation data as JSON."""
+
     files = HasMany("FileRecord", foreign_key="repo_id", on_delete="cascade")
     """Files belonging to this repository."""
 
