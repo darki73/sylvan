@@ -65,29 +65,29 @@ async def indexed_repo(tmp_path):
 class TestGetSymbolDiff:
     async def test_repo_not_found(self, indexed_repo):
         from sylvan.error_codes import RepoNotFoundError
-        from sylvan.tools.analysis.get_symbol_diff import get_symbol_diff
+        from sylvan.tools.analysis.get_symbol_diff import GetSymbolDiff
 
         with pytest.raises(RepoNotFoundError):
-            await get_symbol_diff(repo="nonexistent")
+            await GetSymbolDiff().execute({"repo": "nonexistent"})
 
     async def test_source_unavailable(self, indexed_repo, tmp_path):
         from sylvan.database.orm import Repo
-        from sylvan.tools.analysis.get_symbol_diff import get_symbol_diff
+        from sylvan.tools.analysis.get_symbol_diff import GetSymbolDiff
 
         repo_obj = await Repo.where(name="diff-repo").first()
         await repo_obj.update(source_path=str(tmp_path / "gone"))
 
-        resp = await get_symbol_diff(repo="diff-repo")
+        resp = await GetSymbolDiff().execute({"repo": "diff-repo"})
         assert "source_unavailable" in resp.get("error", "")
 
     async def test_no_changes_same_content(self, indexed_repo):
         """When old content matches current, no symbols are added or removed."""
-        from sylvan.tools.analysis.get_symbol_diff import get_symbol_diff
+        from sylvan.tools.analysis.get_symbol_diff import GetSymbolDiff
 
         old_content = (indexed_repo / "math.py").read_text(encoding="utf-8")
 
         with patch("sylvan.git.run_git", return_value=old_content):
-            resp = await get_symbol_diff(repo="diff-repo", commit="HEAD~1")
+            resp = await GetSymbolDiff().execute({"repo": "diff-repo", "commit": "HEAD~1"})
 
         assert "_meta" in resp
         assert resp["summary"]["added"] == 0
@@ -97,10 +97,10 @@ class TestGetSymbolDiff:
 
     async def test_detects_added_symbols(self, indexed_repo):
         """When old file is empty, all current symbols are added."""
-        from sylvan.tools.analysis.get_symbol_diff import get_symbol_diff
+        from sylvan.tools.analysis.get_symbol_diff import GetSymbolDiff
 
         with patch("sylvan.git.run_git", return_value=""):
-            resp = await get_symbol_diff(repo="diff-repo", file_path="math.py")
+            resp = await GetSymbolDiff().execute({"repo": "diff-repo", "file_path": "math.py"})
 
         assert "_meta" in resp
         assert resp["summary"]["added"] >= 3
@@ -108,7 +108,7 @@ class TestGetSymbolDiff:
 
     async def test_detects_removed_symbols(self, indexed_repo):
         """When old file had extra symbols, they show as removed."""
-        from sylvan.tools.analysis.get_symbol_diff import get_symbol_diff
+        from sylvan.tools.analysis.get_symbol_diff import GetSymbolDiff
 
         old_content = (
             "def add(a, b):\n"
@@ -125,16 +125,16 @@ class TestGetSymbolDiff:
         )
 
         with patch("sylvan.git.run_git", return_value=old_content):
-            resp = await get_symbol_diff(repo="diff-repo", file_path="math.py")
+            resp = await GetSymbolDiff().execute({"repo": "diff-repo", "file_path": "math.py"})
 
         assert "_meta" in resp
         assert resp["summary"]["removed"] >= 1
 
     async def test_file_path_filter(self, indexed_repo):
-        from sylvan.tools.analysis.get_symbol_diff import get_symbol_diff
+        from sylvan.tools.analysis.get_symbol_diff import GetSymbolDiff
 
         with patch("sylvan.git.run_git", return_value=None):
-            resp = await get_symbol_diff(repo="diff-repo", file_path="math.py")
+            resp = await GetSymbolDiff().execute({"repo": "diff-repo", "file_path": "math.py"})
 
         assert "_meta" in resp
         meta = resp["_meta"]
@@ -142,10 +142,10 @@ class TestGetSymbolDiff:
 
     async def test_file_not_in_old_commit(self, indexed_repo):
         """When git show returns None, file didn't exist in old commit."""
-        from sylvan.tools.analysis.get_symbol_diff import get_symbol_diff
+        from sylvan.tools.analysis.get_symbol_diff import GetSymbolDiff
 
         with patch("sylvan.git.run_git", return_value=None):
-            resp = await get_symbol_diff(repo="diff-repo")
+            resp = await GetSymbolDiff().execute({"repo": "diff-repo"})
 
         assert "_meta" in resp
         assert resp["summary"]["added"] >= 3

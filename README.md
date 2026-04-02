@@ -44,7 +44,7 @@ Sylvan indexes your codebase into a structured database of symbols, sections, an
 ## Features
 
 - 57 MCP tools for search, browsing, analysis, and refactoring
-- 34 programming languages via tree-sitter
+- 39 programming languages via tree-sitter
 - Hybrid search - full-text (FTS5) + vector similarity with ranked fusion
 - Blast radius analysis before any refactor
 - Dependency graphs, call chains, class hierarchies

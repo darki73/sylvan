@@ -14,6 +14,11 @@ from tree_sitter_language_pack import get_parser
 
 from sylvan.database.validation import Symbol, make_symbol_id
 from sylvan.indexing.source_code.language_specs import LanguageSpec, get_spec
+from sylvan.indexing.source_code.stylesheet_extractor import (
+    extract_less_extras,
+    extract_scss_extras,
+    extract_stylus_extras,
+)
 from sylvan.indexing.source_code.symbol_details import (
     build_signature,
     extract_decorators,
@@ -128,6 +133,16 @@ def parse_file(content: str, filename: str, language: str) -> list[Symbol]:
 
     disambiguate_overloads(symbols)
     classify_methods(symbols)
+
+    if language == "scss":
+        extras, _ = extract_scss_extras(content, filename, symbols, tree=tree)
+        symbols.extend(extras)
+    elif language == "less":
+        extras, _ = extract_less_extras(content, filename, symbols, tree=tree)
+        symbols.extend(extras)
+    elif language == "stylus":
+        extras, _ = extract_stylus_extras(content, filename, symbols)
+        symbols.extend(extras)
 
     if vue_byte_offset:
         for sym in symbols:

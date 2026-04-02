@@ -193,7 +193,7 @@ class SectionService:
             else:
                 docs.setdefault(file_path, []).append(node)
 
-        tree = [{"file": fp, "sections": secs} for fp, secs in docs.items()]
+        tree = [{"doc_path": fp, "sections": secs} for fp, secs in docs.items()]
 
         result: dict = {
             "tree": tree,

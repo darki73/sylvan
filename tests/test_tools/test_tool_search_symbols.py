@@ -120,7 +120,7 @@ class TestSearchSymbolsEmpty:
 
 class TestSearchSymbolsSession:
     async def test_second_search_deprioritizes_seen_symbols(self, indexed_repo):
-        from sylvan.tools.browsing.get_symbol import get_symbol
+        from sylvan.tools.browsing.get_symbol import GetSymbol
         from sylvan.tools.search.search_symbols import search_symbols
 
         # First search
@@ -129,7 +129,7 @@ class TestSearchSymbolsSession:
         first_id = resp1["symbols"][0]["symbol_id"]
 
         # Retrieve the first symbol (marks it as seen)
-        await get_symbol(first_id)
+        await GetSymbol().execute({"symbol_id": first_id})
 
         # Second search should deprioritize the seen symbol
         resp2 = await search_symbols(query="hello")

@@ -29,7 +29,7 @@ search_symbols(query="parse_config")
       "signature": "def parse_config(path: Path, strict: bool = False) -> Config",
       "summary": "Parse a YAML config file into a Config object.",
       "repo": "my-project",
-      "line": 42
+      "line_start": 42
     }
   ],
   "_meta": {

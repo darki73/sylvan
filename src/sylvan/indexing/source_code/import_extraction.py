@@ -29,6 +29,9 @@ def extract_imports(content: str, file_path: str, language: str) -> list[dict]:
         "ruby": _extract_ruby_imports,
         "php": _extract_php_imports,
         "swift": _extract_swift_imports,
+        "scss": _extract_scss_imports,
+        "less": _extract_less_imports,
+        "stylus": _extract_stylus_imports,
     }
 
     extractor = extractors.get(language)
@@ -297,3 +300,37 @@ def _extract_swift_imports(content: str) -> list[dict]:
         List of import dicts with specifier and names.
     """
     return [{"specifier": m.group(1), "names": []} for m in _SWIFT_IMPORT_RE.finditer(content)]
+
+
+def _extract_scss_imports(content: str) -> list[dict]:
+    """Extract SCSS @use, @forward, and @import statements."""
+    from sylvan.indexing.source_code.stylesheet_extractor import (
+        _SCSS_FORWARD_RE,
+        _SCSS_IMPORT_RE,
+        _SCSS_USE_RE,
+    )
+
+    results: list[dict] = []
+    for m in _SCSS_USE_RE.finditer(content):
+        alias = m.group(2)
+        names = [alias] if alias and alias != "*" else []
+        results.append({"specifier": m.group(1), "names": names})
+    for m in _SCSS_FORWARD_RE.finditer(content):
+        results.append({"specifier": m.group(1), "names": []})
+    for m in _SCSS_IMPORT_RE.finditer(content):
+        results.append({"specifier": m.group(1), "names": []})
+    return results
+
+
+def _extract_less_imports(content: str) -> list[dict]:
+    """Extract LESS @import statements."""
+    from sylvan.indexing.source_code.stylesheet_extractor import _LESS_IMPORT_RE
+
+    return [{"specifier": m.group(1), "names": []} for m in _LESS_IMPORT_RE.finditer(content)]
+
+
+def _extract_stylus_imports(content: str) -> list[dict]:
+    """Extract Stylus @import/@require statements."""
+    from sylvan.indexing.source_code.stylesheet_extractor import _STYLUS_IMPORT_RE
+
+    return [{"specifier": m.group(1), "names": []} for m in _STYLUS_IMPORT_RE.finditer(content)]

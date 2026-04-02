@@ -1,52 +1,43 @@
-"""MCP tool: search_columns -- search ecosystem context column metadata."""
+"""MCP tool: search_columns."""
 
-from sylvan.tools.support.response import clamp, ensure_orm, get_meta, inject_meta, log_tool_call, wrap_response
+from sylvan.tools.base import HasQuery, HasRepo, Tool, ToolParams, schema_field
 
 
-@log_tool_call
-async def search_columns(
-    repo: str,
-    query: str,
-    model_pattern: str | None = None,
-    max_results: int = 20,
-) -> dict:
-    """Search column metadata from ecosystem context providers.
+class SearchColumns(Tool):
+    name = "search_columns"
+    category = "analysis"
+    description = (
+        "Search column metadata from ecosystem context providers (dbt, etc.). "
+        "Finds columns by name or description across all models. Use to answer "
+        "'what columns does this model have?' or 'where is this field defined?'"
+    )
 
-    Discovers providers (e.g. dbt) for the repository's source path and
-    searches their structured column metadata.
+    class Params(HasRepo, HasQuery, ToolParams):
+        model_pattern: str | None = schema_field(
+            default=None,
+            description="Glob pattern to filter model names",
+        )
+        max_results: int = schema_field(
+            default=20,
+            ge=1,
+            le=200,
+            description="Maximum results to return",
+        )
 
-    Args:
-        repo: Repository name.
-        query: Search query for column names or descriptions.
-        model_pattern: Optional glob pattern to filter model names.
-        max_results: Maximum results to return.
-
-    Returns:
-        Tool response dict with ``columns`` list and ``_meta`` envelope.
-
-    Raises:
-        RepoNotFoundError: If the repository is not indexed.
-    """
-    meta = get_meta()
-    max_results = clamp(max_results, 1, 200)
-    ensure_orm()
-
-    from sylvan.error_codes import SylvanError
-
-    try:
+    async def handle(self, p: Params) -> dict:
         from sylvan.services.analysis import AnalysisService
+        from sylvan.tools.base.meta import get_meta
 
         result = await AnalysisService().search_columns(
-            repo, query, model_pattern=model_pattern, max_results=max_results
+            p.repo, p.query, model_pattern=p.model_pattern, max_results=p.max_results
         )
-    except SylvanError as exc:
-        raise inject_meta(exc, meta) from exc
 
-    if "count" in result:
-        meta.set("count", result.pop("count"))
-    if "providers_found" in result:
-        meta.set("providers_found", result.pop("providers_found"))
-    if "providers" in result:
-        meta.set("providers", result.pop("providers"))
+        meta = get_meta()
+        if "count" in result:
+            meta.results_count(result.pop("count"))
+        if "providers_found" in result:
+            meta.extra("providers_found", result.pop("providers_found"))
+        if "providers" in result:
+            meta.extra("providers", result.pop("providers"))
 
-    return wrap_response(result, meta.build())
+        return result

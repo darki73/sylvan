@@ -371,29 +371,9 @@ async def _detect_staleness(repo_id: int) -> bool | None:
         return None
 
 
-_schema_ready = False
-"""Whether the ORM schema has been ensured on this process."""
-
-
 def reset_orm() -> None:
-    """Reset ORM state. Used by tests that change SYLVAN_HOME between runs."""
-    global _schema_ready
-    _schema_ready = False
+    """No-op, kept for backward compatibility."""
 
 
 def ensure_orm() -> None:
-    """Verify that the async storage backend is available in context.
-
-    The backend is set up by the server dispatch via SylvanContext
-    before any tool handler runs. This function exists as a guard
-    that confirms the backend is ready.
-    """
-    global _schema_ready
-    if _schema_ready:
-        return
-
-    from sylvan.context import get_context
-
-    ctx = get_context()
-    if ctx.backend is not None:
-        _schema_ready = True
+    """No-op, kept for backward compatibility with user extensions."""

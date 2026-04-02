@@ -1,34 +1,45 @@
 """MCP tool: scaffold -- generate sylvan/ directory and agent instructions."""
 
-from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
+from sylvan.tools.base import HasRepo, Tool, ToolParams, schema_field
 
 
-@log_tool_call
+class Scaffold(Tool):
+    name = "scaffold"
+    category = "meta"
+    description = (
+        "Generate sylvan/ project context directory and agent instructions. "
+        "Creates auto-generated architecture docs, quality reports, dependency maps, "
+        "and planning directories (future/working/completed). Also generates the "
+        "agent instruction file (CLAUDE.md or .cursorrules) that teaches the agent "
+        "how to use the sylvan/ directory. Run after indexing a project."
+    )
+
+    class Params(HasRepo, ToolParams):
+        agent: str = schema_field(
+            default="claude",
+            description="Agent format for instruction file",
+            enum=["claude", "cursor", "copilot", "generic"],
+        )
+        root: str | None = schema_field(
+            default=None,
+            description="Override project root path",
+        )
+
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.meta import scaffold as _svc
+        from sylvan.tools.base.meta import get_meta
+
+        result = await _svc(p.repo, agent=p.agent, root=p.root)
+        meta = get_meta()
+        meta.extra("status", result.get("status", "error"))
+        meta.extra("files_created", result.get("files_created", 0))
+        return {**result}
+
+
 async def scaffold(
     repo: str,
     agent: str = "claude",
     root: str | None = None,
+    **_kwargs: object,
 ) -> dict:
-    """Generate the sylvan/ project context directory and agent instructions.
-
-    Creates a structured directory in the project root with auto-generated
-    documentation, architecture maps, quality reports, and planning
-    directories.  Also generates the agent instruction file (CLAUDE.md,
-    .cursorrules, etc.) that references sylvan/ for deep context.
-
-    Args:
-        repo: Indexed repo name.
-        agent: Agent format (``"claude"``, ``"cursor"``, ``"copilot"``, ``"generic"``).
-        root: Override project root path.
-
-    Returns:
-        Tool response dict with scaffold status and ``_meta`` envelope.
-    """
-    meta = get_meta()
-
-    from sylvan.services.meta import scaffold as _svc
-
-    result = await _svc(repo, agent=agent, root=root)
-    meta.set("status", result.get("status", "error"))
-    meta.set("files_created", result.get("files_created", 0))
-    return wrap_response(result, meta.build())
+    return await Scaffold().execute({"repo": repo, "agent": agent, "root": root})

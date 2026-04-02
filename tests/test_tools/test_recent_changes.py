@@ -1,4 +1,4 @@
-"""Tests for sylvan.tools.analysis.get_recent_changes — MCP tool wrapper."""
+"""Tests for sylvan.tools.analysis.get_recent_changes."""
 
 from __future__ import annotations
 
@@ -58,13 +58,12 @@ async def indexed_repo(tmp_path):
 class TestGetRecentChangesRepoNotFound:
     async def test_repo_not_found(self, indexed_repo):
         from sylvan.error_codes import RepoNotFoundError
-        from sylvan.tools.analysis.get_recent_changes import get_recent_changes
+        from sylvan.tools.analysis.get_recent_changes import GetRecentChanges
 
         with pytest.raises(RepoNotFoundError) as exc_info:
-            await get_recent_changes(repo="nonexistent-repo")
+            await GetRecentChanges().execute({"repo": "nonexistent-repo"})
 
         resp = exc_info.value.to_dict()
-        assert "_meta" in resp
         assert resp["error"] == "repo_not_found"
 
 
@@ -72,29 +71,25 @@ class TestGetRecentChangesNoGitRepo:
     async def test_source_unavailable_returns_error(self, indexed_repo):
         """When source_path doesn't exist on disk, returns source_unavailable."""
         from sylvan.database.orm import Repo
-        from sylvan.tools.analysis.get_recent_changes import get_recent_changes
+        from sylvan.tools.analysis.get_recent_changes import GetRecentChanges
 
-        # Set source_path to a non-existent path so git can't run
         repo_obj = await Repo.where(name="test-repo").first()
         assert repo_obj is not None
         repo_obj.source_path = "/nonexistent/path/that/does/not/exist"
         await repo_obj.save()
 
-        resp = await get_recent_changes(repo="test-repo")
+        resp = await GetRecentChanges().execute({"repo": "test-repo"})
 
         assert "_meta" in resp
         assert resp["error"] == "source_unavailable"
 
     async def test_no_git_history_returns_empty(self, indexed_repo):
         """When source_path exists but is not a git repo, git commands fail gracefully."""
-        from sylvan.tools.analysis.get_recent_changes import get_recent_changes
+        from sylvan.tools.analysis.get_recent_changes import GetRecentChanges
 
-        # The tmp_path project dir exists but isn't a git repo,
-        # so get_changed_files will raise or return empty
-        resp = await get_recent_changes(repo="test-repo")
+        resp = await GetRecentChanges().execute({"repo": "test-repo"})
 
         assert "_meta" in resp
-        # Should either return empty results or an error — not crash
         if "error" not in resp:
             assert "files_changed" in resp
             assert isinstance(resp["files_changed"], list)
@@ -103,13 +98,11 @@ class TestGetRecentChangesNoGitRepo:
 
 class TestGetRecentChangesResponseStructure:
     async def test_meta_fields(self, indexed_repo):
-        from sylvan.tools.analysis.get_recent_changes import get_recent_changes
+        from sylvan.tools.analysis.get_recent_changes import GetRecentChanges
 
-        # Even if git fails, the response should have proper meta
-        resp = await get_recent_changes(repo="test-repo")
+        resp = await GetRecentChanges().execute({"repo": "test-repo"})
 
         assert "_meta" in resp
-        # Response should have either error structure or valid data structure
         if "error" not in resp:
             meta = resp["_meta"]
             assert "commits_back" in meta

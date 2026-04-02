@@ -240,10 +240,10 @@ class TestIndexWorkspaceTool:
         meta = resp["_meta"]
         assert "repos_indexed" in meta
         assert meta["repos_indexed"] == 2
-        assert "total_files" in meta
-        assert meta["total_files"] >= 2
-        assert "total_symbols" in meta
-        assert meta["total_symbols"] >= 2
+        assert "files_indexed" in meta
+        assert meta["files_indexed"] >= 2
+        assert "symbols_extracted" in meta
+        assert meta["symbols_extracted"] >= 2
 
 
 class TestWorkspaceSearchTool:

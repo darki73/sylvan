@@ -465,6 +465,8 @@ class SearchService:
         query_builder = query_builder.limit(max_results)
         sections_result = await query_builder.get()
 
+        from sylvan.tools.base.presenters import SectionPresenter
+
         formatted = []
         for section in sections_result:
             await section.load("file")
@@ -472,16 +474,10 @@ class SearchService:
             if file_rec:
                 await file_rec.load("repo")
             repo_obj = file_rec.repo if file_rec else None
-            formatted.append(
-                {
-                    "section_id": section.section_id,
-                    "title": section.title,
-                    "level": section.level,
-                    "summary": section.summary or "",
-                    "file": file_rec.path if file_rec else "",
-                    "repo": repo_obj.name if repo_obj else "",
-                }
-            )
+            d = SectionPresenter.standard(section, doc_path=file_rec.path if file_rec else "")
+            del d["tags"]
+            d["repo"] = repo_obj.name if repo_obj else ""
+            formatted.append(d)
 
         returned_text = json.dumps(formatted, default=str)
         returned_tokens = max(1, len(returned_text) // 4)

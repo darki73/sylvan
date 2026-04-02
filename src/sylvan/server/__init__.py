@@ -12,9 +12,7 @@ from mcp.server import Server
 from mcp.types import TextContent, Tool
 
 from sylvan.logging import get_logger
-from sylvan.tools.definitions.analysis import TOOLS as ANALYSIS_TOOLS
-from sylvan.tools.definitions.core import TOOLS as CORE_TOOLS
-from sylvan.tools.definitions.support import TOOLS as SUPPORT_TOOLS
+from sylvan.tools.base.tool import get_all_tools as _get_all_base_tools
 
 logger = get_logger(__name__)
 
@@ -334,8 +332,15 @@ async def list_tools() -> list[Tool]:
     except LookupError:
         pass
 
-    core_tools = [*CORE_TOOLS, *ANALYSIS_TOOLS, *SUPPORT_TOOLS]
+    _import_all_tool_modules()
+    core_tools = [t.to_mcp_tool() for t in _get_all_base_tools()]
     core_names = {t.name for t in core_tools}
+
+    # Server-level tools not in the registry
+    for name, desc, schema in _SERVER_TOOLS:
+        if name not in core_names:
+            core_tools.append(Tool(name=name, description=desc, inputSchema=schema))
+            core_names.add(name)
 
     from sylvan.extensions import get_registered_tools
 
@@ -542,10 +547,10 @@ async def _dispatch(name: str, arguments: dict) -> dict:
             try:
                 from datetime import UTC, datetime
 
-                from sylvan.tools.support.response import MetaBuilder, reset_meta, set_meta
+                from sylvan.tools.base.meta import ToolMeta, reset_meta, set_meta
 
-                _request_meta = MetaBuilder()
-                _request_meta.set("repo", arguments.get("repo") or arguments.get("workspace") or arguments.get("name"))
+                _request_meta = ToolMeta()
+                _request_meta.repo(arguments.get("repo") or arguments.get("workspace") or arguments.get("name"))
                 _meta_token = set_meta(_request_meta)
 
                 try:
@@ -650,162 +655,115 @@ async def _dispatch(name: str, arguments: dict) -> dict:
         reset_identity_map(_im_token)
 
 
+def _import_all_tool_modules() -> None:
+    """Import all tool modules so __init_subclass__ registers them."""
+    import sylvan.tools.analysis.calls_to
+    import sylvan.tools.analysis.find_importers
+    import sylvan.tools.analysis.get_blast_radius
+    import sylvan.tools.analysis.get_class_hierarchy
+    import sylvan.tools.analysis.get_dependency_graph
+    import sylvan.tools.analysis.get_git_context
+    import sylvan.tools.analysis.get_quality
+    import sylvan.tools.analysis.get_quality_report
+    import sylvan.tools.analysis.get_recent_changes
+    import sylvan.tools.analysis.get_references
+    import sylvan.tools.analysis.get_related
+    import sylvan.tools.analysis.get_symbol_diff
+    import sylvan.tools.analysis.rename_symbol
+    import sylvan.tools.analysis.search_columns
+    import sylvan.tools.analysis.who_calls
+    import sylvan.tools.browsing.get_context_bundle
+    import sylvan.tools.browsing.get_file_outline
+    import sylvan.tools.browsing.get_file_tree
+    import sylvan.tools.browsing.get_repo_briefing
+    import sylvan.tools.browsing.get_repo_outline
+    import sylvan.tools.browsing.get_section
+    import sylvan.tools.browsing.get_symbol
+    import sylvan.tools.browsing.get_toc
+    import sylvan.tools.indexing.index_file
+    import sylvan.tools.indexing.index_folder
+    import sylvan.tools.library.add
+    import sylvan.tools.library.check
+    import sylvan.tools.library.compare
+    import sylvan.tools.library.list
+    import sylvan.tools.library.remove
+    import sylvan.tools.meta.configure_editor
+    import sylvan.tools.meta.get_logs
+    import sylvan.tools.meta.get_server_config
+    import sylvan.tools.meta.get_workflow_guide
+    import sylvan.tools.meta.list_repos
+    import sylvan.tools.meta.remove_repo
+    import sylvan.tools.meta.scaffold
+    import sylvan.tools.meta.suggest_queries
+    import sylvan.tools.search.search_sections
+    import sylvan.tools.search.search_similar
+    import sylvan.tools.search.search_symbols
+    import sylvan.tools.search.search_text
+    import sylvan.tools.workspace
+    import sylvan.tools.workspace.pin_library  # noqa: F401
+
+
+_SERVER_TOOLS: list[tuple[str, str, dict]] = [
+    (
+        "get_session_stats",
+        "Usage statistics at three levels: current session, per-project lifetime, "
+        "and overall across all repos. Shows tokens returned vs avoided, tool calls, "
+        "symbols/sections retrieved. Optionally filter to a specific repo.",
+        {
+            "type": "object",
+            "properties": {
+                "repo": {"type": "string", "description": "Optional: show stats for a specific repo"},
+            },
+        },
+    ),
+    (
+        "get_dashboard_url",
+        "Get the URL for the Sylvan web dashboard. The dashboard provides "
+        "a visual overview of indexed repositories, quality reports, library "
+        "management, and interactive symbol search.",
+        {"type": "object", "properties": {}},
+    ),
+    (
+        "get_peak_status",
+        "Check if Claude is currently in peak or off-peak usage hours. "
+        "Peak: weekdays 13:00-19:00 UTC. Weekends are always off-peak. "
+        "Returns current status, time until next transition, and the peak window.",
+        {"type": "object", "properties": {}},
+    ),
+]
+
+
 @functools.cache
 def _get_handlers() -> dict[str, Callable[..., dict]]:
-    """Build the handler dispatch table.
+    """Build the handler dispatch table from the tool registry.
 
-    Imports are deferred to avoid loading all tool modules at import time.
-    After warmup, all modules are already cached so this is cheap.
-
-    Returns:
-        Mapping of tool names to their handler callables.
+    All Tool subclasses register themselves via __init_subclass__.
+    This function imports all tool modules (triggering registration),
+    then builds a handler dict that maps tool names to callables.
     """
-    from sylvan.tools.analysis.calls_to import calls_to
-    from sylvan.tools.analysis.find_importers import batch_find_importers, find_importers
-    from sylvan.tools.analysis.get_blast_radius import batch_blast_radius, get_blast_radius
-    from sylvan.tools.analysis.get_class_hierarchy import get_class_hierarchy
-    from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
-    from sylvan.tools.analysis.get_git_context import get_git_context
-    from sylvan.tools.analysis.get_quality import get_quality
-    from sylvan.tools.analysis.get_quality_report import get_quality_report
-    from sylvan.tools.analysis.get_recent_changes import get_recent_changes
-    from sylvan.tools.analysis.get_references import get_references
-    from sylvan.tools.analysis.get_related import get_related
-    from sylvan.tools.analysis.get_symbol_diff import get_symbol_diff
-    from sylvan.tools.analysis.rename_symbol import rename_symbol
-    from sylvan.tools.analysis.search_columns import search_columns
-    from sylvan.tools.analysis.who_calls import who_calls
-    from sylvan.tools.browsing.get_context_bundle import get_context_bundle
-    from sylvan.tools.browsing.get_file_outline import get_file_outline, get_file_outlines
-    from sylvan.tools.browsing.get_file_tree import get_file_tree
-    from sylvan.tools.browsing.get_repo_briefing import get_repo_briefing
-    from sylvan.tools.browsing.get_repo_outline import get_repo_outline
-    from sylvan.tools.browsing.get_section import get_section, get_sections
-    from sylvan.tools.browsing.get_symbol import get_symbol, get_symbols
-    from sylvan.tools.browsing.get_toc import get_toc, get_toc_tree
-    from sylvan.tools.indexing.index_file import index_file
-    from sylvan.tools.indexing.index_folder import index_folder
-    from sylvan.tools.library.add import add_library as add_library_tool
-    from sylvan.tools.library.check import check_library_versions
-    from sylvan.tools.library.compare import compare_library_versions
-    from sylvan.tools.library.list import list_libraries as list_libraries_tool
-    from sylvan.tools.library.remove import remove_library as remove_library_tool
-    from sylvan.tools.meta.configure_editor import (
-        configure_claude_code,
-        configure_copilot,
-        configure_cursor,
-        configure_windsurf,
-    )
-    from sylvan.tools.meta.get_logs import get_logs
-    from sylvan.tools.meta.get_server_config import get_server_config
-    from sylvan.tools.meta.get_workflow_guide import get_workflow_guide
-    from sylvan.tools.meta.list_repos import list_repos
-    from sylvan.tools.meta.remove_repo import remove_repo
-    from sylvan.tools.meta.scaffold import scaffold as scaffold_tool
-    from sylvan.tools.meta.suggest_queries import suggest_queries
-    from sylvan.tools.search.search_sections import search_sections
-    from sylvan.tools.search.search_similar import search_similar_symbols
-    from sylvan.tools.search.search_symbols import batch_search_symbols, search_symbols
-    from sylvan.tools.search.search_text import search_text
-    from sylvan.tools.workspace import (
-        add_to_workspace,
-        index_workspace,
-        workspace_blast_radius,
-        workspace_search,
-    )
-    from sylvan.tools.workspace.pin_library import pin_library
+    _import_all_tool_modules()
 
-    async def _list_repos_wrapper(**_kwargs: Any) -> dict:
-        """Wrap list_repos to accept and ignore empty kwargs from dispatch.
+    from sylvan.tools.base.tool import get_registry
 
-        Returns:
-            Tool response dict from list_repos.
-        """
-        return await list_repos()
+    registry = get_registry()
+    handlers: dict[str, Callable[..., dict]] = {}
 
-    async def _list_libraries_wrapper(**_kwargs: Any) -> dict:
-        """Wrap list_libraries to accept and ignore empty kwargs from dispatch.
+    def _make_handler(tool: Any) -> Callable[..., dict]:
+        async def handler(**kw: Any) -> dict:
+            return await tool.execute(kw)
 
-        Returns:
-            Tool response dict from list_libraries.
-        """
-        return await list_libraries_tool()
+        return handler
+
+    for name, tool_cls in registry.items():
+        handlers[name] = _make_handler(tool_cls())
 
     async def _get_session_stats(**kwargs: Any) -> dict:
-        """Handle get_session_stats with custom argument unpacking.
-
-        Args:
-            **kwargs: Optional 'repo' key to filter stats to a specific project.
-
-        Returns:
-            Usage stats dict at session, project, and overall levels.
-        """
         return await _get_usage_stats(kwargs)
 
-    handlers = {
-        "index_folder": index_folder,
-        "index_file": index_file,
-        "search_symbols": search_symbols,
-        "batch_search_symbols": batch_search_symbols,
-        "get_symbol": get_symbol,
-        "get_symbols": get_symbols,
-        "get_file_outline": get_file_outline,
-        "get_file_outlines": get_file_outlines,
-        "get_file_tree": get_file_tree,
-        "list_repos": _list_repos_wrapper,
-        "search_sections": search_sections,
-        "get_section": get_section,
-        "get_sections": get_sections,
-        "get_toc": get_toc,
-        "get_toc_tree": get_toc_tree,
-        "get_repo_outline": get_repo_outline,
-        "get_repo_briefing": get_repo_briefing,
-        "get_blast_radius": get_blast_radius,
-        "batch_blast_radius": batch_blast_radius,
-        "get_class_hierarchy": get_class_hierarchy,
-        "get_references": get_references,
-        "find_importers": find_importers,
-        "batch_find_importers": batch_find_importers,
-        "get_dependency_graph": get_dependency_graph,
-        "get_symbol_diff": get_symbol_diff,
-        "search_columns": search_columns,
-        "get_related": get_related,
-        "get_quality": get_quality,
-        "get_quality_report": get_quality_report,
-        "get_git_context": get_git_context,
-        "get_recent_changes": get_recent_changes,
-        "rename_symbol": rename_symbol,
-        "who_calls": who_calls,
-        "calls_to": calls_to,
-        "search_text": search_text,
-        "get_context_bundle": get_context_bundle,
-        "suggest_queries": suggest_queries,
-        "get_session_stats": _get_session_stats,
-        "scaffold": scaffold_tool,
-        "add_library": add_library_tool,
-        "check_library_versions": check_library_versions,
-        "compare_library_versions": compare_library_versions,
-        "list_libraries": _list_libraries_wrapper,
-        "remove_library": remove_library_tool,
-        "index_workspace": index_workspace,
-        "workspace_search": workspace_search,
-        "workspace_blast_radius": workspace_blast_radius,
-        "add_to_workspace": add_to_workspace,
-        "pin_library": pin_library,
-        "get_dashboard_url": _get_dashboard_url,
-        "get_peak_status": _get_peak_status,
-        "get_logs": get_logs,
-        "get_workflow_guide": get_workflow_guide,
-        "get_server_config": get_server_config,
-        "configure_claude_code": configure_claude_code,
-        "configure_cursor": configure_cursor,
-        "configure_windsurf": configure_windsurf,
-        "configure_copilot": configure_copilot,
-        "search_similar_symbols": search_similar_symbols,
-        "remove_repo": remove_repo,
-    }
+    handlers["get_session_stats"] = _get_session_stats
+    handlers["get_dashboard_url"] = _get_dashboard_url
+    handlers["get_peak_status"] = _get_peak_status
 
-    # Merge extension tool handlers (cannot overwrite core tools)
     from sylvan.extensions import get_registered_tools
 
     for name, info in get_registered_tools().items():
@@ -817,86 +775,15 @@ def _get_handlers() -> dict[str, Callable[..., dict]]:
     return handlers
 
 
-_TOOL_CATEGORIES: dict[str, str] = {
-    # search
-    "search_symbols": "search",
-    "batch_search_symbols": "search",
-    "search_text": "search",
-    "search_sections": "search",
-    "search_similar_symbols": "search",
-    # retrieval
-    "get_symbol": "retrieval",
-    "get_symbols": "retrieval",
-    "get_section": "retrieval",
-    "get_sections": "retrieval",
-    "get_context_bundle": "retrieval",
-    "get_file_outline": "retrieval",
-    "get_file_outlines": "retrieval",
-    "get_toc": "retrieval",
-    "get_toc_tree": "retrieval",
-    "get_repo_outline": "retrieval",
-    "get_repo_briefing": "retrieval",
-    "get_file_tree": "retrieval",
-    # analysis
-    "get_blast_radius": "analysis",
-    "batch_blast_radius": "analysis",
-    "get_class_hierarchy": "analysis",
-    "get_references": "analysis",
-    "who_calls": "analysis",
-    "calls_to": "analysis",
-    "find_importers": "analysis",
-    "batch_find_importers": "analysis",
-    "get_related": "analysis",
-    "get_quality": "analysis",
-    "get_quality_report": "analysis",
-    "get_dependency_graph": "analysis",
-    "get_symbol_diff": "analysis",
-    "search_columns": "analysis",
-    "get_git_context": "analysis",
-    "get_recent_changes": "analysis",
-    "rename_symbol": "analysis",
-    # indexing
-    "index_folder": "indexing",
-    "index_file": "indexing",
-    "index_workspace": "indexing",
-    # meta
-    "list_repos": "meta",
-    "suggest_queries": "meta",
-    "get_session_stats": "meta",
-    "get_logs": "meta",
-    "get_server_config": "meta",
-    "get_workflow_guide": "meta",
-    "configure_claude_code": "meta",
-    "configure_cursor": "meta",
-    "configure_windsurf": "meta",
-    "configure_copilot": "meta",
-    "scaffold": "meta",
-    "get_dashboard_url": "meta",
-    "get_peak_status": "meta",
-    "add_library": "meta",
-    "list_libraries": "meta",
-    "remove_library": "meta",
-    "check_library_versions": "meta",
-    "compare_library_versions": "meta",
-    "add_to_workspace": "meta",
-    "workspace_search": "meta",
-    "workspace_blast_radius": "meta",
-    "pin_library": "meta",
-    "remove_repo": "meta",
-}
-"""Mapping of tool names to efficiency categories."""
-
-
 def _tool_category(name: str) -> str:
-    """Get the efficiency category for a tool name.
+    """Get the efficiency category for a tool from the registry."""
+    from sylvan.tools.base.tool import get_registry
 
-    Args:
-        name: MCP tool name.
-
-    Returns:
-        Category string ('search', 'retrieval', 'analysis', 'indexing', or 'meta').
-    """
-    return _TOOL_CATEGORIES.get(name, "meta")
+    registry = get_registry()
+    tool_cls = registry.get(name)
+    if tool_cls:
+        return tool_cls.category
+    return "meta"
 
 
 async def _get_dashboard_url(**_kwargs: object) -> dict:

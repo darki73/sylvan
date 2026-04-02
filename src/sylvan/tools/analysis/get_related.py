@@ -1,36 +1,33 @@
-"""MCP tool: get_related -- find related symbols by co-location and naming."""
+"""MCP tool: get_related."""
 
-from sylvan.tools.support.response import clamp, ensure_orm, get_meta, inject_meta, log_tool_call, wrap_response
+from sylvan.tools.base import HasSymbol, Tool, ToolParams, schema_field
 
 
-@log_tool_call
-async def get_related(symbol_id: str, max_results: int = 10) -> dict:
-    """Find symbols related to a given symbol.
+class GetRelated(Tool):
+    name = "get_related"
+    category = "analysis"
+    description = (
+        "Find symbols related to a given symbol -- by co-location, shared imports, "
+        "or name similarity. Useful for discovering related code to understand context."
+    )
 
-    Scoring signals:
-    - Same file: weight 3.0
-    - Shared imports: weight 1.5
-    - Name token overlap: weight 0.5
+    class Params(HasSymbol, ToolParams):
+        max_results: int = schema_field(
+            default=10,
+            ge=1,
+            le=100,
+            description="Maximum results to return",
+        )
 
-    Args:
-        symbol_id: The symbol to find relations for.
-        max_results: Maximum results to return.
-
-    Returns:
-        Tool response dict with ``related`` list and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    max_results = clamp(max_results, 1, 100)
-    ensure_orm()
-
-    from sylvan.error_codes import SylvanError
-
-    try:
+    async def handle(self, p: Params) -> dict:
         from sylvan.services.analysis import AnalysisService
+        from sylvan.tools.base.meta import get_meta
 
-        result = await AnalysisService().related(symbol_id, max_results=max_results)
-    except SylvanError as exc:
-        raise inject_meta(exc, meta) from exc
+        result = await AnalysisService().related(p.symbol_id, max_results=p.max_results)
+        get_meta().results_count(len(result["related"]))
 
-    meta.set("count", len(result["related"]))
-    return wrap_response(result, meta.build())
+        if result["related"]:
+            first = result["related"][0]
+            self.hints().next_symbol(first["symbol_id"]).apply(result)
+
+        return result

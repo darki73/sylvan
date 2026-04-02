@@ -135,8 +135,12 @@ LANGUAGE_EXTENSIONS: dict[str, str] = {
     ".gd": "gdscript",
     # Gleam
     ".gleam": "gleam",
-    # CSS
+    # CSS / Stylesheets
     ".css": "css",
+    ".scss": "scss",
+    ".sass": "scss",
+    ".less": "less",
+    ".styl": "stylus",
     # TOML
     ".toml": "toml",
     # YAML
@@ -735,15 +739,82 @@ LANGUAGE_REGISTRY: dict[str, LanguageSpec] = {
         },
         docstring_strategy="preceding_comment",
     ),
+    "css": LanguageSpec(
+        ts_language="css",
+        symbol_node_types={
+            "rule_set": "type",
+            "media_statement": "type",
+            "keyframes_statement": "function",
+            "import_statement": "constant",
+        },
+        name_fields={
+            "rule_set": "selectors",
+            "keyframes_statement": "name",
+            "media_statement": "condition",
+        },
+        docstring_strategy="preceding_comment",
+    ),
+    "scss": LanguageSpec(
+        ts_language="scss",
+        symbol_node_types={
+            "rule_set": "type",
+            "mixin_statement": "function",
+            "function_statement": "function",
+            "media_statement": "type",
+            "keyframes_statement": "function",
+            "include_statement": "constant",
+            "placeholder": "type",
+        },
+        name_fields={
+            "rule_set": "selectors",
+            "mixin_statement": "name",
+            "function_statement": "name",
+            "keyframes_statement": "name",
+        },
+        param_fields={
+            "mixin_statement": "parameters",
+            "function_statement": "parameters",
+        },
+        docstring_strategy="preceding_comment",
+    ),
+    "less": LanguageSpec(
+        ts_language="css",
+        symbol_node_types={
+            "rule_set": "type",
+            "media_statement": "type",
+            "keyframes_statement": "function",
+            "import_statement": "constant",
+        },
+        name_fields={
+            "rule_set": "selectors",
+            "keyframes_statement": "name",
+        },
+        docstring_strategy="preceding_comment",
+    ),
+    "stylus": LanguageSpec(
+        ts_language="css",
+        symbol_node_types={
+            "rule_set": "type",
+            "media_statement": "type",
+            "keyframes_statement": "function",
+        },
+        name_fields={
+            "rule_set": "selectors",
+            "keyframes_statement": "name",
+        },
+        docstring_strategy="preceding_comment",
+    ),
 }
 """Language extraction specs indexed by language identifier."""
 
 CUSTOM_EXTRACTION_LANGUAGES: frozenset[str] = frozenset(
     {
         "asm",
-        "vue",
-        "css",
+        "less",
+        "scss",
+        "stylus",
         "toml",
+        "vue",
         "yaml",
     }
 )

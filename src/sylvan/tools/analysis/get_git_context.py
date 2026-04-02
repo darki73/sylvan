@@ -1,34 +1,32 @@
-"""MCP tool: get_git_context -- git blame, change history, branch diffs."""
+"""MCP tool: get_git_context."""
 
-from sylvan.tools.support.response import ensure_orm, get_meta, inject_meta, log_tool_call, wrap_response
+from sylvan.tools.base import HasOptionalFilePath, HasOptionalSymbol, HasRepo, Tool, ToolParams
 
 
-@log_tool_call
-async def get_git_context(
-    repo: str,
-    file_path: str | None = None,
-    symbol_id: str | None = None,
-) -> dict:
-    """Get git context for a file or symbol: blame, change frequency, recent commits.
+class GetGitContext(Tool):
+    name = "get_git_context"
+    category = "analysis"
+    description = (
+        "Get git blame, change frequency, and recent commits for a file or symbol. "
+        "Answers 'who last touched this?' and 'how often does this change?' "
+        "without running git commands manually."
+    )
 
-    Args:
-        repo: Repository name.
-        file_path: File to get git context for.
-        symbol_id: Symbol to get blame for (alternative to *file_path*).
+    class Params(HasRepo, HasOptionalFilePath, HasOptionalSymbol, ToolParams):
+        pass
 
-    Returns:
-        Tool response dict with blame/commit data and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
-
-    from sylvan.error_codes import SylvanError
-
-    try:
+    async def handle(self, p: Params) -> dict:
         from sylvan.services.git import GitService
 
-        result = await GitService().context(repo, file_path=file_path, symbol_id=symbol_id)
-    except SylvanError as exc:
-        raise inject_meta(exc, meta) from exc
+        result = await GitService().context(p.repo, file_path=p.file_path, symbol_id=p.symbol_id)
 
-    return wrap_response(result, meta.build())
+        blame = result.get("blame", [])
+        file_path = result.get("file", "")
+        if blame and file_path:
+            first_entry = blame[0] if isinstance(blame, list) else None
+            if first_entry and first_entry.get("line_start"):
+                self.hints().read(
+                    file_path, first_entry["line_start"], first_entry.get("line_end", first_entry["line_start"])
+                ).apply(result)
+
+        return result

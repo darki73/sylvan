@@ -1,37 +1,28 @@
 """MCP tool: suggest_queries -- intelligent query suggestions for exploring a repo."""
 
-from sylvan.tools.support.response import ensure_orm, get_meta, inject_meta, log_tool_call, wrap_response
+from sylvan.tools.base import HasRepo, Tool, ToolParams
 
 
-@log_tool_call
-async def suggest_queries(repo: str) -> dict:
-    """Suggest useful queries for exploring an indexed repository.
+class SuggestQueries(Tool):
+    name = "suggest_queries"
+    category = "meta"
+    description = (
+        "Not sure where to start? This suggests the best queries for exploring "
+        "a repo -- key entry points, popular classes, unexplored areas, docs. "
+        "Session-aware: adapts based on what you've already looked at."
+    )
 
-    Based on:
-    - Repository structure (top symbols, entry points, key files)
-    - Session context (what the agent has already explored)
-    - Common exploration patterns
+    class Params(HasRepo, ToolParams):
+        pass
 
-    Args:
-        repo: Repository name.
-
-    Returns:
-        Tool response dict with ``suggestions`` list and ``_meta`` envelope.
-
-    Raises:
-        RepoNotFoundError: If the repository is not indexed.
-    """
-    meta = get_meta()
-    ensure_orm()
-
-    from sylvan.error_codes import SylvanError
-
-    try:
+    async def handle(self, p: Params) -> dict:
         from sylvan.services.meta import suggest_queries as _svc
+        from sylvan.tools.base.meta import get_meta
 
-        result = await _svc(repo)
-    except SylvanError as exc:
-        raise inject_meta(exc, meta) from exc
+        result = await _svc(p.repo)
+        get_meta().extra("suggestion_count", len(result["suggestions"]))
+        return {**result}
 
-    meta.set("suggestion_count", len(result["suggestions"]))
-    return wrap_response(result, meta.build())
+
+async def suggest_queries(repo: str, **_kwargs: object) -> dict:
+    return await SuggestQueries().execute({"repo": repo})

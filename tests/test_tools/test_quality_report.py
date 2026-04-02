@@ -78,15 +78,15 @@ async def indexed_project(tmp_path):
 class TestGetQualityReport:
     async def test_repo_not_found(self, indexed_project):
         from sylvan.error_codes import RepoNotFoundError
-        from sylvan.tools.analysis.get_quality_report import get_quality_report
+        from sylvan.tools.analysis.get_quality_report import GetQualityReport
 
         with pytest.raises(RepoNotFoundError):
-            await get_quality_report(repo="nonexistent")
+            await GetQualityReport().execute({"repo": "nonexistent"})
 
     async def test_report_structure(self, indexed_project):
-        from sylvan.tools.analysis.get_quality_report import get_quality_report
+        from sylvan.tools.analysis.get_quality_report import GetQualityReport
 
-        resp = await get_quality_report(repo="quality-repo")
+        resp = await GetQualityReport().execute({"repo": "quality-repo"})
 
         assert "_meta" in resp
         assert resp["repository"] == "quality-repo"
@@ -134,9 +134,9 @@ class TestGetQualityReport:
         assert "groups" in dup
 
     async def test_meta_fields(self, indexed_project):
-        from sylvan.tools.analysis.get_quality_report import get_quality_report
+        from sylvan.tools.analysis.get_quality_report import GetQualityReport
 
-        resp = await get_quality_report(repo="quality-repo")
+        resp = await GetQualityReport().execute({"repo": "quality-repo"})
         meta = resp["_meta"]
 
         assert "gate_passed" in meta
@@ -147,9 +147,9 @@ class TestGetQualityReport:
         assert "duplicate_groups" in meta
 
     async def test_coverage_values_are_percentages(self, indexed_project):
-        from sylvan.tools.analysis.get_quality_report import get_quality_report
+        from sylvan.tools.analysis.get_quality_report import GetQualityReport
 
-        resp = await get_quality_report(repo="quality-repo")
+        resp = await GetQualityReport().execute({"repo": "quality-repo"})
 
         test_cov = resp["coverage"]["test_coverage_percent"]
         doc_cov = resp["documentation"]["doc_coverage_percent"]

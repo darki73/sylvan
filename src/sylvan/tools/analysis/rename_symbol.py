@@ -1,37 +1,46 @@
-"""MCP tool: rename_symbol -- find all edit locations for renaming a symbol."""
+"""MCP tool: rename_symbol."""
 
-from sylvan.tools.support.response import ensure_orm, get_meta, log_tool_call, wrap_response
+from sylvan.tools.base import HasSymbol, Tool, ToolParams, schema_field
 
 
-@log_tool_call
-async def rename_symbol(symbol_id: str, new_name: str) -> dict:
-    """Find all files and lines where a symbol name appears for renaming.
+class RenameSymbol(Tool):
+    name = "rename_symbol"
+    category = "analysis"
+    description = (
+        "Find all edit locations needed to rename a symbol. Returns exact "
+        "file/line/old_text/new_text for each occurrence so the agent can "
+        "apply edits directly. Uses blast radius to find affected files."
+    )
 
-    Looks up the symbol, uses blast radius analysis to find affected files,
-    then scans each file for occurrences of the old name. Returns exact
-    edit locations (file, line, old_text, new_text) for the agent to apply.
+    class Params(HasSymbol, ToolParams):
+        new_name: str = schema_field(
+            description="Desired new name (must be a valid identifier)",
+        )
 
-    Args:
-        symbol_id: The symbol identifier to rename.
-        new_name: The desired new name for the symbol.
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.analysis import AnalysisService
+        from sylvan.tools.base.meta import get_meta
 
-    Returns:
-        Tool response dict with ``edits`` list, ``symbol`` info,
-        and ``_meta`` envelope with counts.
-    """
-    meta = get_meta()
-    ensure_orm()
+        result = await AnalysisService().rename_symbol(p.symbol_id, p.new_name)
 
-    from sylvan.services.analysis import AnalysisService
+        if "error" in result:
+            return result
 
-    result = await AnalysisService().rename_symbol(symbol_id, new_name)
+        meta = get_meta()
+        meta.extra("affected_files", result.pop("affected_files"))
+        meta.extra("total_edits", result.pop("total_edits"))
+        meta.extra("old_name", result["symbol"]["name"])
+        meta.extra("new_name", result["new_name"])
 
-    if "error" in result:
-        return wrap_response(result, meta.build())
+        edits = result.get("edits", [])
+        if edits:
+            affected_files = {e["file"] for e in edits}
+            hints = self.hints()
+            for fp in list(affected_files)[:5]:
+                hints.reindex("", fp)
+            test_files = [fp for fp in affected_files if "test" in fp.lower()]
+            if test_files:
+                hints.test_files(test_files)
+            hints.apply(result)
 
-    meta.set("affected_files", result.pop("affected_files"))
-    meta.set("total_edits", result.pop("total_edits"))
-    meta.set("old_name", result["symbol"]["name"])
-    meta.set("new_name", result["new_name"])
-
-    return wrap_response(result, meta.build())
+        return result

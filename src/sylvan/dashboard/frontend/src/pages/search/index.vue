@@ -11,7 +11,7 @@ interface SearchResult {
     language: string;
     file: string;
     signature: string;
-    line: number;
+    line_start: number;
     repo: string;
 }
 
@@ -238,7 +238,7 @@ onMounted(loadRepos);
                             <div class="shrink-0 text-right">
                                 <span class="px-1.5 py-0.5 rounded text-[9px] font-mono bg-surface-2 text-text-dim border border-border">{{ sym.repo }}</span>
                                 <div class="text-[10px] font-mono text-text-faint truncate max-w-[200px] mt-0.5">
-                                    {{ sym.file }}:{{ sym.line }}
+                                    {{ sym.file }}:{{ sym.line_start }}
                                 </div>
                             </div>
                         </div>

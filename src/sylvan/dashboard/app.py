@@ -420,6 +420,7 @@ async def _search_symbols(query: str, repo_name: str | None = None) -> list[dict
         List of matching symbol dicts.
     """
     from sylvan.database.orm import Symbol
+    from sylvan.tools.base.presenters import SymbolPresenter
 
     if not query or len(query) < 2:
         return []
@@ -431,7 +432,6 @@ async def _search_symbols(query: str, repo_name: str | None = None) -> list[dict
 
     results = await qb.get()
 
-    # Build repo cache to avoid N+1 on repo lookups
     from sylvan.database.orm import Repo
 
     repo_ids = {sym.file.repo_id for sym in results if sym.file}
@@ -444,19 +444,10 @@ async def _search_symbols(query: str, repo_name: str | None = None) -> list[dict
     symbols = []
     for sym in results:
         file_rec = sym.file
-        symbols.append(
-            {
-                "symbol_id": sym.symbol_id,
-                "name": sym.name,
-                "qualified_name": sym.qualified_name,
-                "kind": sym.kind,
-                "language": sym.language,
-                "file": file_rec.path if file_rec else "",
-                "signature": sym.signature or "",
-                "line": sym.line_start,
-                "repo": repo_map.get(file_rec.repo_id, "") if file_rec else "",
-            }
-        )
+        d = SymbolPresenter.standard(sym, file_path=file_rec.path if file_rec else "")
+        del d["summary"]
+        d["repo"] = repo_map.get(file_rec.repo_id, "") if file_rec else ""
+        symbols.append(d)
     return symbols
 
 

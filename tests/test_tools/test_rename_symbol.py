@@ -1,4 +1,4 @@
-"""Tests for sylvan.tools.analysis.rename_symbol — MCP tool wrapper."""
+"""Tests for sylvan.tools.analysis.rename_symbol."""
 
 from __future__ import annotations
 
@@ -76,10 +76,10 @@ async def _find_symbol_id(name: str) -> str:
 
 class TestRenameSymbolBasic:
     async def test_returns_edits_for_target_file(self, indexed_repo):
-        from sylvan.tools.analysis.rename_symbol import rename_symbol
+        from sylvan.tools.analysis.rename_symbol import RenameSymbol
 
         sid = await _find_symbol_id("UserAccount")
-        resp = await rename_symbol(symbol_id=sid, new_name="CustomerAccount")
+        resp = await RenameSymbol().execute({"symbol_id": sid, "new_name": "CustomerAccount"})
 
         assert "_meta" in resp
         assert "edits" in resp
@@ -103,28 +103,26 @@ class TestRenameSymbolBasic:
         assert "CustomerAccount" in edit["new_text"]
 
     async def test_rename_finds_edits_in_defining_file(self, indexed_repo):
-        from sylvan.tools.analysis.rename_symbol import rename_symbol
+        from sylvan.tools.analysis.rename_symbol import RenameSymbol
 
         sid = await _find_symbol_id("UserAccount")
-        resp = await rename_symbol(symbol_id=sid, new_name="CustomerAccount")
+        resp = await RenameSymbol().execute({"symbol_id": sid, "new_name": "CustomerAccount"})
 
         assert "_meta" in resp
         assert "edits" in resp
 
-        # At minimum, the defining file should have edits
         meta = resp["_meta"]
         assert meta["affected_files"] >= 1
         assert meta["total_edits"] >= 1
 
-        # All edits should replace old name with new name
         for edit in resp["edits"]:
             assert "UserAccount" not in edit["new_text"] or "CustomerAccount" in edit["new_text"]
 
     async def test_symbol_info_in_response(self, indexed_repo):
-        from sylvan.tools.analysis.rename_symbol import rename_symbol
+        from sylvan.tools.analysis.rename_symbol import RenameSymbol
 
         sid = await _find_symbol_id("UserAccount")
-        resp = await rename_symbol(symbol_id=sid, new_name="CustomerAccount")
+        resp = await RenameSymbol().execute({"symbol_id": sid, "new_name": "CustomerAccount"})
 
         sym = resp["symbol"]
         assert sym["symbol_id"] == sid
@@ -137,39 +135,41 @@ class TestRenameSymbolBasic:
 
 class TestRenameSymbolErrors:
     async def test_symbol_not_found(self, indexed_repo):
-        from sylvan.tools.analysis.rename_symbol import rename_symbol
+        from sylvan.tools.analysis.rename_symbol import RenameSymbol
 
-        resp = await rename_symbol(
-            symbol_id="nonexistent::sym#function",
-            new_name="new_name",
+        resp = await RenameSymbol().execute(
+            {
+                "symbol_id": "nonexistent::sym#function",
+                "new_name": "new_name",
+            }
         )
 
         assert "_meta" in resp
         assert resp["error"] == "symbol_not_found"
 
     async def test_same_name_returns_error(self, indexed_repo):
-        from sylvan.tools.analysis.rename_symbol import rename_symbol
+        from sylvan.tools.analysis.rename_symbol import RenameSymbol
 
         sid = await _find_symbol_id("UserAccount")
-        resp = await rename_symbol(symbol_id=sid, new_name="UserAccount")
+        resp = await RenameSymbol().execute({"symbol_id": sid, "new_name": "UserAccount"})
 
         assert "_meta" in resp
         assert resp["error"] == "same_name"
 
     async def test_invalid_identifier_returns_error(self, indexed_repo):
-        from sylvan.tools.analysis.rename_symbol import rename_symbol
+        from sylvan.tools.analysis.rename_symbol import RenameSymbol
 
         sid = await _find_symbol_id("UserAccount")
-        resp = await rename_symbol(symbol_id=sid, new_name="123bad")
+        resp = await RenameSymbol().execute({"symbol_id": sid, "new_name": "123bad"})
 
         assert "_meta" in resp
         assert resp["error"] == "invalid_name"
 
     async def test_empty_name_returns_error(self, indexed_repo):
-        from sylvan.tools.analysis.rename_symbol import rename_symbol
+        from sylvan.tools.analysis.rename_symbol import RenameSymbol
 
         sid = await _find_symbol_id("UserAccount")
-        resp = await rename_symbol(symbol_id=sid, new_name="")
+        resp = await RenameSymbol().execute({"symbol_id": sid, "new_name": ""})
 
         assert "_meta" in resp
         assert resp["error"] == "invalid_name"

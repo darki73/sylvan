@@ -31,6 +31,7 @@ from sylvan.error_codes import (
 )
 from sylvan.indexing.source_code.extractor import compute_content_hash
 from sylvan.logging import get_logger
+from sylvan.tools.base.presenters import SymbolPresenter
 
 logger = get_logger(__name__)
 
@@ -301,18 +302,7 @@ class SymbolService:
 
         symbols = await Symbol.in_repo(repo_name).in_file(file_path).order_by("symbols.line_start").get()
 
-        items = [
-            {
-                "symbol_id": symbol.symbol_id,
-                "name": symbol.name,
-                "kind": symbol.kind,
-                "signature": symbol.signature or "",
-                "line_start": symbol.line_start,
-                "line_end": symbol.line_end,
-                "parent_symbol_id": symbol.parent_symbol_id,
-            }
-            for symbol in symbols
-        ]
+        items = [SymbolPresenter.outline(symbol) for symbol in symbols]
 
         root_symbols = _build_symbol_tree(items)
 
@@ -352,18 +342,7 @@ class SymbolService:
 
             symbols = await Symbol.in_repo(repo_name).in_file(fp).order_by("symbols.line_start").get()
 
-            items = [
-                {
-                    "symbol_id": s.symbol_id,
-                    "name": s.name,
-                    "kind": s.kind,
-                    "signature": s.signature or "",
-                    "line_start": s.line_start,
-                    "line_end": s.line_end,
-                    "parent_symbol_id": s.parent_symbol_id,
-                }
-                for s in symbols
-            ]
+            items = [SymbolPresenter.outline(s) for s in symbols]
 
             tree = _build_symbol_tree(items)
             outlines.append(

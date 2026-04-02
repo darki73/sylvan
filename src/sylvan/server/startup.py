@@ -19,18 +19,27 @@ def warm_up() -> None:
     logger.info("warmup_starting")
 
     from sylvan.tools.analysis import (  # noqa: F401
+        calls_to,
         find_importers,
         get_blast_radius,
         get_class_hierarchy,
+        get_dependency_graph,
         get_git_context,
         get_quality,
+        get_quality_report,
+        get_recent_changes,
         get_references,
         get_related,
+        get_symbol_diff,
+        rename_symbol,
+        search_columns,
+        who_calls,
     )
     from sylvan.tools.browsing import (  # noqa: F401
         get_context_bundle,
         get_file_outline,
         get_file_tree,
+        get_repo_briefing,
         get_repo_outline,
         get_section,
         get_symbol,

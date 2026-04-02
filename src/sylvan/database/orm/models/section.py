@@ -145,7 +145,7 @@ class Section(Model):
             "title": self.title,
             "level": self.level,
             "summary": self.summary or "",
-            "file": await self._resolve_file_path(),
+            "doc_path": await self._resolve_file_path(),
         }
         if include_repo:
             result["repo"] = await self._resolve_repo_name()

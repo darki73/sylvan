@@ -1,4 +1,4 @@
-"""Tests for sylvan.tools analysis tools — blast radius, hierarchy, refs, etc."""
+"""Tests for sylvan.tools analysis tools - blast radius, hierarchy, refs, etc."""
 
 from __future__ import annotations
 
@@ -88,10 +88,10 @@ async def _find_symbol_id(name):
 
 class TestGetBlastRadius:
     async def test_returns_confirmed_and_potential(self, indexed_repo):
-        from sylvan.tools.analysis.get_blast_radius import get_blast_radius
+        from sylvan.tools.analysis.get_blast_radius import GetBlastRadius
 
         sid = await _find_symbol_id("Animal")
-        resp = await get_blast_radius(sid)
+        resp = await GetBlastRadius().execute({"symbol_id": sid})
 
         assert "_meta" in resp
         assert "confirmed" in resp or "error" not in resp
@@ -105,9 +105,9 @@ class TestGetBlastRadius:
             assert "potential_count" in meta
 
     async def test_not_found_symbol(self, indexed_repo):
-        from sylvan.tools.analysis.get_blast_radius import get_blast_radius
+        from sylvan.tools.analysis.get_blast_radius import GetBlastRadius
 
-        resp = await get_blast_radius("nonexistent::sym#function")
+        resp = await GetBlastRadius().execute({"symbol_id": "nonexistent::sym#function"})
 
         assert "_meta" in resp
         assert "error" in resp or "symbol" in resp
@@ -115,9 +115,9 @@ class TestGetBlastRadius:
 
 class TestGetClassHierarchy:
     async def test_returns_ancestors_and_descendants(self, indexed_repo):
-        from sylvan.tools.analysis.get_class_hierarchy import get_class_hierarchy
+        from sylvan.tools.analysis.get_class_hierarchy import GetClassHierarchy
 
-        resp = await get_class_hierarchy(class_name="Dog")
+        resp = await GetClassHierarchy().execute({"class_name": "Dog"})
 
         assert "_meta" in resp
         if "target" in resp:
@@ -135,18 +135,18 @@ class TestGetClassHierarchy:
             assert "Animal" in ancestor_names
 
     async def test_class_not_found(self, indexed_repo):
-        from sylvan.tools.analysis.get_class_hierarchy import get_class_hierarchy
+        from sylvan.tools.analysis.get_class_hierarchy import GetClassHierarchy
 
-        resp = await get_class_hierarchy(class_name="NonExistentClass")
+        resp = await GetClassHierarchy().execute({"class_name": "NonExistentClass"})
 
         assert "_meta" in resp
         assert "error" in resp
         assert resp["error"] == "class_not_found"
 
     async def test_filter_by_repo(self, indexed_repo):
-        from sylvan.tools.analysis.get_class_hierarchy import get_class_hierarchy
+        from sylvan.tools.analysis.get_class_hierarchy import GetClassHierarchy
 
-        resp = await get_class_hierarchy(class_name="Dog", repo="test-repo")
+        resp = await GetClassHierarchy().execute({"class_name": "Dog", "repo": "test-repo"})
         assert "_meta" in resp
         if "target" in resp:
             assert resp["target"]["name"] == "Dog"
@@ -154,10 +154,10 @@ class TestGetClassHierarchy:
 
 class TestGetReferences:
     async def test_returns_list(self, indexed_repo):
-        from sylvan.tools.analysis.get_references import get_references
+        from sylvan.tools.analysis.get_references import GetReferences
 
         sid = await _find_symbol_id("Animal")
-        resp = await get_references(sid, direction="to")
+        resp = await GetReferences().execute({"symbol_id": sid, "direction": "to"})
 
         assert "_meta" in resp
         assert "references" in resp
@@ -166,15 +166,15 @@ class TestGetReferences:
         assert resp["symbol_id"] == sid
 
         meta = resp["_meta"]
-        assert "count" in meta
+        assert "results_count" in meta
         assert "direction" in meta
         assert meta["direction"] == "to"
 
     async def test_direction_from(self, indexed_repo):
-        from sylvan.tools.analysis.get_references import get_references
+        from sylvan.tools.analysis.get_references import GetReferences
 
         sid = await _find_symbol_id("main")
-        resp = await get_references(sid, direction="from")
+        resp = await GetReferences().execute({"symbol_id": sid, "direction": "from"})
 
         assert "_meta" in resp
         assert "references" in resp
@@ -183,9 +183,9 @@ class TestGetReferences:
 
 class TestFindImporters:
     async def test_returns_importers(self, indexed_repo):
-        from sylvan.tools.analysis.find_importers import find_importers
+        from sylvan.tools.analysis.find_importers import FindImporters
 
-        resp = await find_importers(repo="test-repo", file_path="base.py")
+        resp = await FindImporters().execute({"repo": "test-repo", "file_path": "base.py"})
 
         assert "_meta" in resp
         if "error" not in resp:
@@ -193,26 +193,25 @@ class TestFindImporters:
             assert "file" in resp
             assert isinstance(resp["importers"], list)
             meta = resp["_meta"]
-            assert "count" in meta
+            assert "results_count" in meta
 
     async def test_file_not_found(self, indexed_repo):
         from sylvan.error_codes import IndexFileNotFoundError
-        from sylvan.tools.analysis.find_importers import find_importers
+        from sylvan.tools.analysis.find_importers import FindImporters
 
         with pytest.raises(IndexFileNotFoundError) as exc_info:
-            await find_importers(repo="test-repo", file_path="nonexistent.py")
+            await FindImporters().execute({"repo": "test-repo", "file_path": "nonexistent.py"})
 
         resp = exc_info.value.to_dict()
-        assert "_meta" in resp
         assert resp["error"] == "file_not_found"
 
 
 class TestGetRelated:
     async def test_returns_scored_results(self, indexed_repo):
-        from sylvan.tools.analysis.get_related import get_related
+        from sylvan.tools.analysis.get_related import GetRelated
 
         sid = await _find_symbol_id("speak")
-        resp = await get_related(sid)
+        resp = await GetRelated().execute({"symbol_id": sid})
 
         assert "_meta" in resp
         if "error" not in resp:
@@ -220,7 +219,7 @@ class TestGetRelated:
             assert "symbol_id" in resp
             assert isinstance(resp["related"], list)
             meta = resp["_meta"]
-            assert "count" in meta
+            assert "results_count" in meta
 
             for r in resp["related"]:
                 assert "symbol_id" in r
@@ -230,39 +229,38 @@ class TestGetRelated:
 
     async def test_symbol_not_found(self, indexed_repo):
         from sylvan.error_codes import SymbolNotFoundError
-        from sylvan.tools.analysis.get_related import get_related
+        from sylvan.tools.analysis.get_related import GetRelated
 
         with pytest.raises(SymbolNotFoundError) as exc_info:
-            await get_related("nonexistent::sym#function")
+            await GetRelated().execute({"symbol_id": "nonexistent::sym#function"})
 
         resp = exc_info.value.to_dict()
-        assert "_meta" in resp
         assert resp["error"] == "symbol_not_found"
 
 
 class TestGetQuality:
     async def test_returns_metrics(self, indexed_repo):
-        from sylvan.tools.analysis.get_quality import get_quality
+        from sylvan.tools.analysis.get_quality import GetQuality
 
-        resp = await get_quality(repo="test-repo")
+        resp = await GetQuality().execute({"repo": "test-repo"})
 
         assert "_meta" in resp
         assert "symbols" in resp
         assert isinstance(resp["symbols"], list)
         meta = resp["_meta"]
-        assert "count" in meta
+        assert "results_count" in meta
 
     async def test_repo_not_found(self, indexed_repo):
         from sylvan.error_codes import RepoNotFoundError
-        from sylvan.tools.analysis.get_quality import get_quality
+        from sylvan.tools.analysis.get_quality import GetQuality
 
         with pytest.raises(RepoNotFoundError):
-            await get_quality(repo="nonexistent-repo")
+            await GetQuality().execute({"repo": "nonexistent-repo"})
 
     async def test_filter_undocumented(self, indexed_repo):
-        from sylvan.tools.analysis.get_quality import get_quality
+        from sylvan.tools.analysis.get_quality import GetQuality
 
-        resp = await get_quality(repo="test-repo", undocumented_only=True)
+        resp = await GetQuality().execute({"repo": "test-repo", "undocumented_only": True})
 
         assert "_meta" in resp
         assert "symbols" in resp

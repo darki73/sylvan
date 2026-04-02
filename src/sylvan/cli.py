@@ -513,6 +513,7 @@ async def _async_export(repo: str, output: str, format: str) -> None:
     from sylvan.database.backends.sqlite.backend import SQLiteBackend
     from sylvan.database.migrations.runner import run_migrations
     from sylvan.database.orm import FileImport, FileRecord, Repo, Section, Symbol
+    from sylvan.tools.base.presenters import FilePresenter, SectionPresenter
 
     cfg = get_config()
     backend = SQLiteBackend(cfg.db_path)
@@ -569,14 +570,7 @@ async def _async_export(repo: str, output: str, format: str) -> None:
         section_dicts = []
         for s in sections:
             file_path = await s._resolve_file_path()
-            section_dicts.append(
-                {
-                    "section_id": s.section_id,
-                    "title": s.title,
-                    "level": s.level,
-                    "file": file_path,
-                }
-            )
+            section_dicts.append(SectionPresenter.brief(s) | {"doc_path": file_path})
 
         data = {
             "repo": {
@@ -585,7 +579,7 @@ async def _async_export(repo: str, output: str, format: str) -> None:
                 "indexed_at": repo_obj.indexed_at,
                 "git_head": repo_obj.git_head,
             },
-            "files": [{"path": f.path, "language": f.language} for f in files],
+            "files": [FilePresenter.brief(f) for f in files],
             "symbols": symbol_dicts,
             "sections": section_dicts,
             "imports": [{"file_id": i.file_id, "specifier": i.specifier} for i in imports],

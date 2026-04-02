@@ -1,41 +1,35 @@
 """MCP tool: get_repo_outline -- high-level summary of an indexed repo."""
 
-from sylvan.error_codes import SylvanError
-from sylvan.services.symbol import SymbolService
-from sylvan.tools.support.response import (
-    check_staleness,
-    ensure_orm,
-    get_meta,
-    log_tool_call,
-    wrap_response,
+from __future__ import annotations
+
+from sylvan.tools.base import (
+    HasRepo,
+    Tool,
+    ToolParams,
 )
 
 
-@log_tool_call
-async def get_repo_outline(repo: str) -> dict:
-    """Get a high-level outline of an indexed repository.
+class GetRepoOutline(Tool):
+    name = "get_repo_outline"
+    category = "retrieval"
+    description = (
+        "START HERE when exploring an unfamiliar repo. Returns a high-level "
+        "summary: file count, languages, symbol breakdown by kind, documentation "
+        "coverage. Use this to orient before diving into search_symbols or get_toc."
+    )
 
-    Shows file count, symbol count by kind, language distribution,
-    and documentation overview.
+    class Params(HasRepo, ToolParams):
+        pass
 
-    Args:
-        repo: Repository name.
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.symbol import SymbolService
+        from sylvan.tools.base.meta import get_meta
+        from sylvan.tools.support.response import check_staleness
 
-    Returns:
-        Tool response dict with repo statistics and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
+        result = await SymbolService().repo_outline(p.repo)
 
-    try:
-        result = await SymbolService().repo_outline(repo)
-    except SylvanError as exc:
-        exc._meta = meta.build()
-        raise
+        repo_id = result.pop("repo_id")
 
-    repo_id = result.pop("repo_id")
-
-    meta.set("repo", repo)
-    response = wrap_response(result, meta.build())
-    await check_staleness(repo_id, response)
-    return response
+        get_meta().repo(p.repo)
+        await check_staleness(repo_id, result)
+        return result

@@ -73,9 +73,9 @@ async def indexed_repo(tmp_path):
 
 class TestGetFileOutline:
     async def test_returns_hierarchical_structure(self, indexed_repo):
-        from sylvan.tools.browsing.get_file_outline import get_file_outline
+        from sylvan.tools.browsing.get_file_outline import GetFileOutline
 
-        resp = await get_file_outline(repo="test-repo", file_path="main.py")
+        resp = await GetFileOutline().execute({"repo": "test-repo", "file_path": "main.py"})
 
         assert "outline" in resp
         assert "file" in resp
@@ -100,21 +100,20 @@ class TestGetFileOutline:
 
     async def test_nonexistent_file_raises_file_not_found(self, indexed_repo):
         from sylvan.error_codes import IndexFileNotFoundError
-        from sylvan.tools.browsing.get_file_outline import get_file_outline
+        from sylvan.tools.browsing.get_file_outline import GetFileOutline
 
         with pytest.raises(IndexFileNotFoundError) as exc_info:
-            await get_file_outline(repo="test-repo", file_path="nonexistent.py")
+            await GetFileOutline().execute({"repo": "test-repo", "file_path": "nonexistent.py"})
 
         resp = exc_info.value.to_dict()
         assert resp["error"] == "file_not_found"
-        assert "_meta" in resp
 
 
 class TestGetFileTree:
     async def test_returns_directory_tree(self, indexed_repo):
-        from sylvan.tools.browsing.get_file_tree import get_file_tree
+        from sylvan.tools.browsing.get_file_tree import GetFileTree
 
-        resp = await get_file_tree(repo="test-repo")
+        resp = await GetFileTree().execute({"repo": "test-repo"})
 
         assert "tree" in resp
         assert "_meta" in resp
@@ -135,8 +134,8 @@ class TestListRepos:
 
         assert "repos" in resp
         assert "_meta" in resp
-        assert "count" in resp["_meta"]
-        assert resp["_meta"]["count"] >= 1
+        assert "results_count" in resp["_meta"]
+        assert resp["_meta"]["results_count"] >= 1
 
         repos = resp["repos"]
         assert isinstance(repos, list)
@@ -148,9 +147,9 @@ class TestListRepos:
 
 class TestGetRepoOutline:
     async def test_shows_languages_and_kinds(self, indexed_repo):
-        from sylvan.tools.browsing.get_repo_outline import get_repo_outline
+        from sylvan.tools.browsing.get_repo_outline import GetRepoOutline
 
-        resp = await get_repo_outline(repo="test-repo")
+        resp = await GetRepoOutline().execute({"repo": "test-repo"})
 
         assert "_meta" in resp
         assert "repo" in resp
@@ -170,10 +169,10 @@ class TestGetRepoOutline:
 
     async def test_repo_not_found(self, indexed_repo):
         from sylvan.error_codes import RepoNotFoundError
-        from sylvan.tools.browsing.get_repo_outline import get_repo_outline
+        from sylvan.tools.browsing.get_repo_outline import GetRepoOutline
 
         with pytest.raises(RepoNotFoundError):
-            await get_repo_outline(repo="nonexistent-repo")
+            await GetRepoOutline().execute({"repo": "nonexistent-repo"})
 
 
 class TestSuggestQueries:

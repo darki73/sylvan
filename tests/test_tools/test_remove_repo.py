@@ -117,7 +117,6 @@ class TestRemoveRepoErrors:
             await remove_repo(repo="nonexistent-repo")
 
         resp = exc_info.value.to_dict()
-        assert "_meta" in resp
         assert resp["error"] == "repo_not_found"
 
     async def test_double_remove_fails(self, indexed_repo):

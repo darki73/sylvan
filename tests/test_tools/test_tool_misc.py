@@ -119,10 +119,10 @@ class TestSearchText:
 
 class TestGetContextBundle:
     async def test_returns_symbol_plus_siblings_and_imports(self, indexed_repo):
-        from sylvan.tools.browsing.get_context_bundle import get_context_bundle
+        from sylvan.tools.browsing.get_context_bundle import GetContextBundle
 
         sid = await _find_symbol_id("greet")
-        resp = await get_context_bundle(sid)
+        resp = await GetContextBundle().execute({"symbol_id": sid})
 
         assert "_meta" in resp
         assert "symbol" in resp
@@ -146,20 +146,19 @@ class TestGetContextBundle:
 
     async def test_symbol_not_found(self, indexed_repo):
         from sylvan.error_codes import SymbolNotFoundError
-        from sylvan.tools.browsing.get_context_bundle import get_context_bundle
+        from sylvan.tools.browsing.get_context_bundle import GetContextBundle
 
         with pytest.raises(SymbolNotFoundError) as exc_info:
-            await get_context_bundle("nonexistent::sym#function")
+            await GetContextBundle().execute({"symbol_id": "nonexistent::sym#function"})
 
         resp = exc_info.value.to_dict()
-        assert "_meta" in resp
         assert resp["error"] == "symbol_not_found"
 
     async def test_without_imports(self, indexed_repo):
-        from sylvan.tools.browsing.get_context_bundle import get_context_bundle
+        from sylvan.tools.browsing.get_context_bundle import GetContextBundle
 
         sid = await _find_symbol_id("greet")
-        resp = await get_context_bundle(sid, include_imports=False)
+        resp = await GetContextBundle().execute({"symbol_id": sid, "include_imports": False})
 
         assert "symbol" in resp
         assert "imports" not in resp
@@ -168,24 +167,24 @@ class TestGetContextBundle:
 class TestGetGitContext:
     async def test_non_git_repo_returns_graceful_error(self, indexed_repo):
         """A non-git indexed folder should return a graceful error."""
-        from sylvan.tools.analysis.get_git_context import get_git_context
+        from sylvan.tools.analysis.get_git_context import GetGitContext
 
-        resp = await get_git_context(repo="test-repo", file_path="main.py")
+        resp = await GetGitContext().execute({"repo": "test-repo", "file_path": "main.py"})
 
         assert "_meta" in resp
         assert isinstance(resp, dict)
 
     async def test_repo_not_found(self, indexed_repo):
         from sylvan.error_codes import RepoNotFoundError
-        from sylvan.tools.analysis.get_git_context import get_git_context
+        from sylvan.tools.analysis.get_git_context import GetGitContext
 
         with pytest.raises(RepoNotFoundError):
-            await get_git_context(repo="nonexistent-repo", file_path="main.py")
+            await GetGitContext().execute({"repo": "nonexistent-repo", "file_path": "main.py"})
 
     async def test_no_file_or_symbol_returns_error(self, indexed_repo):
-        from sylvan.tools.analysis.get_git_context import get_git_context
+        from sylvan.tools.analysis.get_git_context import GetGitContext
 
-        resp = await get_git_context(repo="test-repo")
+        resp = await GetGitContext().execute({"repo": "test-repo"})
 
         assert "_meta" in resp
         assert "error" in resp
@@ -240,9 +239,9 @@ class TestFindImportersHasImporters:
                     )
             await backend.commit()
 
-            from sylvan.tools.analysis.find_importers import find_importers
+            from sylvan.tools.analysis.find_importers import FindImporters
 
-            resp = await find_importers(repo="imp-test", file_path="b.py")
+            resp = await FindImporters().execute({"repo": "imp-test", "file_path": "b.py"})
             assert len(resp["importers"]) >= 1
             for imp in resp["importers"]:
                 assert "has_importers" in imp

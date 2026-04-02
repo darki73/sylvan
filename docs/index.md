@@ -16,7 +16,7 @@ vs. Read("src/auth/middleware.py")
 ## Key features
 
 - **57 MCP tools** -- search, browse, analyze, and index code through a single server. Your agent never needs to fall back to Read/Grep/Glob.
-- **34 programming languages** -- tree-sitter parsing for Python, TypeScript, Go, Rust, Java, C#, and 28 more, plus 10 document formats (Markdown, RST, HTML, etc.).
+- **39 programming languages** -- tree-sitter parsing for Python, TypeScript, Go, Rust, Java, C#, and 33 more (including CSS, SCSS, LESS, Stylus), plus 10 document formats (Markdown, RST, HTML, etc.).
 - **Hybrid search** -- combines full-text search (FTS5) with vector similarity (sqlite-vec) and reciprocal rank fusion for ranked results.
 - **Blast radius analysis** -- before renaming or deleting a function, see every file that would be affected, with confirmed vs. potential impact.
 - **Dependency graphs** -- trace imports, find callers, and map relationships across files and repos.

@@ -1,4 +1,4 @@
-"""Tests for sylvan.tools.browsing.get_symbol — MCP tool wrapper."""
+"""Tests for sylvan.tools.browsing.get_symbol -- MCP tool wrapper."""
 
 from __future__ import annotations
 
@@ -73,10 +73,10 @@ async def _find_symbol_id(name):
 
 class TestGetSymbol:
     async def test_returns_source_code(self, indexed_repo):
-        from sylvan.tools.browsing.get_symbol import get_symbol
+        from sylvan.tools.browsing.get_symbol import GetSymbol
 
         sid = await _find_symbol_id("hello")
-        resp = await get_symbol(sid)
+        resp = await GetSymbol().execute({"symbol_id": sid})
 
         assert "source" in resp
         assert "def hello" in resp["source"]
@@ -92,30 +92,29 @@ class TestGetSymbol:
         assert isinstance(resp["decorators"], list)
 
     async def test_get_symbol_with_verify(self, indexed_repo):
-        from sylvan.tools.browsing.get_symbol import get_symbol
+        from sylvan.tools.browsing.get_symbol import GetSymbol
 
         sid = await _find_symbol_id("hello")
-        resp = await get_symbol(sid, verify=True)
+        resp = await GetSymbol().execute({"symbol_id": sid, "verify": True})
 
         assert "source" in resp
         assert "_meta" in resp
 
     async def test_get_symbol_not_found(self, indexed_repo):
         from sylvan.error_codes import SymbolNotFoundError
-        from sylvan.tools.browsing.get_symbol import get_symbol
+        from sylvan.tools.browsing.get_symbol import GetSymbol
 
         with pytest.raises(SymbolNotFoundError) as exc_info:
-            await get_symbol("nonexistent::symbol#method")
+            await GetSymbol().execute({"symbol_id": "nonexistent::symbol#method"})
 
         resp = exc_info.value.to_dict()
         assert resp["error"] == "symbol_not_found"
-        assert "_meta" in resp
 
     async def test_response_has_meta_with_savings(self, indexed_repo):
-        from sylvan.tools.browsing.get_symbol import get_symbol
+        from sylvan.tools.browsing.get_symbol import GetSymbol
 
         sid = await _find_symbol_id("hello")
-        resp = await get_symbol(sid)
+        resp = await GetSymbol().execute({"symbol_id": sid})
 
         assert "_meta" in resp
         meta = resp["_meta"]
@@ -127,28 +126,26 @@ class TestGetSymbol:
             assert "bytes_avoided" in savings
 
     async def test_response_has_hints(self, indexed_repo):
-        from sylvan.tools.browsing.get_symbol import get_symbol
+        from sylvan.tools.browsing.get_symbol import GetSymbol
 
         sid = await _find_symbol_id("hello")
 
-        # First access to seed the session
-        await get_symbol(sid)
+        await GetSymbol().execute({"symbol_id": sid})
 
-        # Second access should have hints (working_files populated)
         sid2 = await _find_symbol_id("Foo")
-        resp2 = await get_symbol(sid2)
+        resp2 = await GetSymbol().execute({"symbol_id": sid2})
 
         assert "_meta" in resp2
 
 
 class TestGetSymbolsBatch:
     async def test_batch_returns_multiple(self, indexed_repo):
-        from sylvan.tools.browsing.get_symbol import get_symbols
+        from sylvan.tools.browsing.get_symbol import GetSymbols
 
         sid_hello = await _find_symbol_id("hello")
         sid_foo = await _find_symbol_id("Foo")
 
-        resp = await get_symbols([sid_hello, sid_foo])
+        resp = await GetSymbols().execute({"symbol_ids": [sid_hello, sid_foo]})
 
         assert "symbols" in resp
         assert "not_found" in resp
@@ -167,22 +164,22 @@ class TestGetSymbolsBatch:
             assert "source" in s
 
     async def test_batch_with_not_found(self, indexed_repo):
-        from sylvan.tools.browsing.get_symbol import get_symbols
+        from sylvan.tools.browsing.get_symbol import GetSymbols
 
         sid_hello = await _find_symbol_id("hello")
         fake_id = "nonexistent::symbol#function"
 
-        resp = await get_symbols([sid_hello, fake_id])
+        resp = await GetSymbols().execute({"symbol_ids": [sid_hello, fake_id]})
 
         assert "_meta" in resp
         assert resp["_meta"]["found"] == 1
-        assert resp["_meta"]["not_found"] == 1
+        assert resp["_meta"]["not_found_count"] == 1
         assert fake_id in resp["not_found"]
 
     async def test_batch_empty_list(self, indexed_repo):
-        from sylvan.tools.browsing.get_symbol import get_symbols
+        from sylvan.tools.browsing.get_symbol import GetSymbols
 
-        resp = await get_symbols([])
+        resp = await GetSymbols().execute({"symbol_ids": []})
 
         assert "symbols" in resp
         assert resp["symbols"] == []

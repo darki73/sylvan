@@ -1,7 +1,8 @@
-"""MCP tools: configure_* - per-editor setup to unlock the workflow gate."""
+"""MCP tools: configure_* -- per-editor setup to unlock the workflow gate."""
 
 from pathlib import Path
 
+from sylvan.tools.base import HasProjectPath, Tool, ToolParams
 from sylvan.tools.meta.editor_setup import (
     EditorKind,
     SetupAction,
@@ -9,7 +10,6 @@ from sylvan.tools.meta.editor_setup import (
     _claude_code_settings_content,
     check_setup,
 )
-from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
 
 
 def _unlock_gate() -> None:
@@ -91,40 +91,34 @@ def _actions_to_dicts(actions: list[SetupAction]) -> list[dict]:
     return [{"action": a.action, "path": a.path, "detail": a.detail} for a in actions]
 
 
-@_with_update_check
-@log_tool_call
-async def configure_claude_code(project_path: str) -> dict:
-    """Configure Claude Code to use sylvan tools.
+class ConfigureClaudeCode(Tool):
+    name = "configure_claude_code"
+    category = "meta"
+    description = (
+        "Configure Claude Code to use sylvan tools. Creates or updates "
+        ".claude/settings.local.json with mcp__sylvan__* permission and "
+        "SubagentStart hook. Call this instead of get_workflow_guide if "
+        "you are running inside Claude Code."
+    )
 
-    Checks current setup state, unlocks the workflow gate, and returns
-    instructions if configuration is needed.
+    class Params(HasProjectPath, ToolParams):
+        pass
 
-    Args:
-        project_path: Absolute path to the user's project directory.
+    async def handle(self, p: Params) -> dict:
+        project_dir = Path(p.project_path)
+        settings_path = project_dir / ".claude" / "settings.local.json"
+        actions = check_setup(EditorKind.CLAUDE_CODE, project_dir)
+        _unlock_gate()
 
-    Returns:
-        Tool response with config content and workflow rules.
-    """
-    meta = get_meta()
-    project_dir = Path(project_path)
-    settings_path = project_dir / ".claude" / "settings.local.json"
-    actions = check_setup(EditorKind.CLAUDE_CODE, project_dir)
-
-    _unlock_gate()
-
-    if not actions:
-        return wrap_response(
-            {
+        if not actions:
+            return {
                 "editor": "claude_code",
                 "configured": True,
                 "path": str(settings_path),
                 "rules": _get_workflow_rules(),
-            },
-            meta.build(),
-        )
+            }
 
-    return wrap_response(
-        {
+        return {
             "editor": "claude_code",
             "configured": False,
             "path": str(settings_path),
@@ -136,45 +130,37 @@ async def configure_claude_code(project_path: str) -> dict:
             ),
             "content": _claude_code_settings_content(),
             "rules": _get_workflow_rules(),
-        },
-        meta.build(),
+        }
+
+
+class ConfigureCursor(Tool):
+    name = "configure_cursor"
+    category = "meta"
+    description = (
+        "Configure Cursor to use sylvan tools. Creates "
+        ".cursor/rules/sylvan.md with tool usage instructions. "
+        "Call this instead of get_workflow_guide if you are running "
+        "inside Cursor."
     )
 
+    class Params(HasProjectPath, ToolParams):
+        pass
 
-@_with_update_check
-@log_tool_call
-async def configure_cursor(project_path: str) -> dict:
-    """Configure Cursor to use sylvan tools.
+    async def handle(self, p: Params) -> dict:
+        project_dir = Path(p.project_path)
+        rules_path = project_dir / ".cursor" / "rules" / "sylvan.md"
+        actions = check_setup(EditorKind.CURSOR, project_dir)
+        _unlock_gate()
 
-    Checks current setup state, unlocks the workflow gate, and returns
-    instructions if configuration is needed.
-
-    Args:
-        project_path: Absolute path to the user's project directory.
-
-    Returns:
-        Tool response with config content and workflow rules.
-    """
-    meta = get_meta()
-    project_dir = Path(project_path)
-    rules_path = project_dir / ".cursor" / "rules" / "sylvan.md"
-    actions = check_setup(EditorKind.CURSOR, project_dir)
-
-    _unlock_gate()
-
-    if not actions:
-        return wrap_response(
-            {
+        if not actions:
+            return {
                 "editor": "cursor",
                 "configured": True,
                 "path": str(rules_path),
                 "rules": _get_workflow_rules(),
-            },
-            meta.build(),
-        )
+            }
 
-    return wrap_response(
-        {
+        return {
             "editor": "cursor",
             "configured": False,
             "path": str(rules_path),
@@ -184,45 +170,37 @@ async def configure_cursor(project_path: str) -> dict:
             ),
             "content": _build_rules_markdown(),
             "rules": _get_workflow_rules(),
-        },
-        meta.build(),
+        }
+
+
+class ConfigureWindsurf(Tool):
+    name = "configure_windsurf"
+    category = "meta"
+    description = (
+        "Configure Windsurf to use sylvan tools. Creates "
+        ".windsurf/rules/sylvan.md with tool usage instructions. "
+        "Call this instead of get_workflow_guide if you are running "
+        "inside Windsurf."
     )
 
+    class Params(HasProjectPath, ToolParams):
+        pass
 
-@_with_update_check
-@log_tool_call
-async def configure_windsurf(project_path: str) -> dict:
-    """Configure Windsurf to use sylvan tools.
+    async def handle(self, p: Params) -> dict:
+        project_dir = Path(p.project_path)
+        rules_path = project_dir / ".windsurf" / "rules" / "sylvan.md"
+        actions = check_setup(EditorKind.WINDSURF, project_dir)
+        _unlock_gate()
 
-    Checks current setup state, unlocks the workflow gate, and returns
-    instructions if configuration is needed.
-
-    Args:
-        project_path: Absolute path to the user's project directory.
-
-    Returns:
-        Tool response with config content and workflow rules.
-    """
-    meta = get_meta()
-    project_dir = Path(project_path)
-    rules_path = project_dir / ".windsurf" / "rules" / "sylvan.md"
-    actions = check_setup(EditorKind.WINDSURF, project_dir)
-
-    _unlock_gate()
-
-    if not actions:
-        return wrap_response(
-            {
+        if not actions:
+            return {
                 "editor": "windsurf",
                 "configured": True,
                 "path": str(rules_path),
                 "rules": _get_workflow_rules(),
-            },
-            meta.build(),
-        )
+            }
 
-    return wrap_response(
-        {
+        return {
             "editor": "windsurf",
             "configured": False,
             "path": str(rules_path),
@@ -232,45 +210,37 @@ async def configure_windsurf(project_path: str) -> dict:
             ),
             "content": _build_rules_markdown(),
             "rules": _get_workflow_rules(),
-        },
-        meta.build(),
+        }
+
+
+class ConfigureCopilot(Tool):
+    name = "configure_copilot"
+    category = "meta"
+    description = (
+        "Configure GitHub Copilot to use sylvan tools. Creates "
+        ".github/copilot-instructions.md with tool routing rules. "
+        "Call this instead of get_workflow_guide if you are running "
+        "inside GitHub Copilot."
     )
 
+    class Params(HasProjectPath, ToolParams):
+        pass
 
-@_with_update_check
-@log_tool_call
-async def configure_copilot(project_path: str) -> dict:
-    """Configure GitHub Copilot to use sylvan tools.
+    async def handle(self, p: Params) -> dict:
+        project_dir = Path(p.project_path)
+        instructions_path = project_dir / ".github" / "copilot-instructions.md"
+        actions = check_setup(EditorKind.COPILOT, project_dir)
+        _unlock_gate()
 
-    Checks current setup state, unlocks the workflow gate, and returns
-    instructions if configuration is needed.
-
-    Args:
-        project_path: Absolute path to the user's project directory.
-
-    Returns:
-        Tool response with config content and workflow rules.
-    """
-    meta = get_meta()
-    project_dir = Path(project_path)
-    instructions_path = project_dir / ".github" / "copilot-instructions.md"
-    actions = check_setup(EditorKind.COPILOT, project_dir)
-
-    _unlock_gate()
-
-    if not actions:
-        return wrap_response(
-            {
+        if not actions:
+            return {
                 "editor": "copilot",
                 "configured": True,
                 "path": str(instructions_path),
                 "rules": _get_workflow_rules(),
-            },
-            meta.build(),
-        )
+            }
 
-    return wrap_response(
-        {
+        return {
             "editor": "copilot",
             "configured": False,
             "path": str(instructions_path),
@@ -281,6 +251,34 @@ async def configure_copilot(project_path: str) -> dict:
             ),
             "content": _build_rules_markdown(),
             "rules": _get_workflow_rules(),
-        },
-        meta.build(),
-    )
+        }
+
+
+async def _inject_update(result: dict) -> dict:
+    """Add update_available to a tool response if an update exists."""
+    from sylvan.server.startup import get_update_info
+
+    update = get_update_info()
+    if update:
+        result["update_available"] = update
+    return result
+
+
+async def configure_claude_code(project_path: str, **_kwargs: object) -> dict:
+    result = await ConfigureClaudeCode().execute({"project_path": project_path})
+    return await _inject_update(result)
+
+
+async def configure_cursor(project_path: str, **_kwargs: object) -> dict:
+    result = await ConfigureCursor().execute({"project_path": project_path})
+    return await _inject_update(result)
+
+
+async def configure_windsurf(project_path: str, **_kwargs: object) -> dict:
+    result = await ConfigureWindsurf().execute({"project_path": project_path})
+    return await _inject_update(result)
+
+
+async def configure_copilot(project_path: str, **_kwargs: object) -> dict:
+    result = await ConfigureCopilot().execute({"project_path": project_path})
+    return await _inject_update(result)

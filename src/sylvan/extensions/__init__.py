@@ -18,6 +18,11 @@ def register_tool(
 ) -> Callable:
     """Register a custom MCP tool from an extension.
 
+    .. deprecated::
+        Use ``sylvan.tools.base.Tool`` subclass instead. Extension files
+        that define a Tool subclass are auto-discovered and registered.
+        This decorator will be removed in a future version.
+
     Args:
         name: Tool name (must be unique across core + extensions).
         description: Tool description shown to the agent.
@@ -26,6 +31,15 @@ def register_tool(
     Returns:
         Decorator that registers the function as a tool handler.
     """
+    import warnings
+
+    warnings.warn(
+        f"@register_tool('{name}') is deprecated. "
+        "Define a sylvan.tools.base.Tool subclass instead - it will be "
+        "auto-discovered when the extension file is imported.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     def decorator(func: Callable) -> Callable:
         _registered_tools[name] = {
