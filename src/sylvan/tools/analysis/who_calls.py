@@ -1,28 +1,42 @@
-"""MCP tool: who_calls - find all symbols that call a given function."""
+"""MCP tool: who_calls."""
 
-from sylvan.tools.support.response import ensure_orm, get_meta, log_tool_call, wrap_response
+from sylvan.tools.base import HasSymbol, Tool, ToolParams, schema_field
 
 
-@log_tool_call
-async def who_calls(symbol_id: str, max_results: int = 50) -> dict:
-    """Find all symbols that call a given function or method.
-
-    Args:
-        symbol_id: The symbol to find callers of.
-        max_results: Maximum number of results to return.
-
-    Returns:
-        Tool response dict with callers list and _meta envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
-
-    from sylvan.analysis.structure.reference_graph import get_references_to
-
-    refs = await get_references_to(symbol_id)
-    refs = refs[:max_results]
-    meta.set("count", len(refs))
-    return wrap_response(
-        {"callers": refs, "symbol_id": symbol_id},
-        meta.build(),
+class WhoCalls(Tool):
+    name = "who_calls"
+    category = "analysis"
+    description = (
+        "Find all symbols that call a given function or method. Returns callers "
+        "with file paths, signatures, and line numbers. Use before changing a "
+        "function to see exactly what breaks. More precise than find_importers "
+        "which works at file level."
     )
+
+    class Params(HasSymbol, ToolParams):
+        max_results: int = schema_field(
+            default=50,
+            ge=1,
+            le=1000,
+            description="Maximum results to return",
+        )
+
+    async def handle(self, p: Params) -> dict:
+        from sylvan.analysis.structure.reference_graph import get_references_to
+        from sylvan.tools.base.meta import get_meta
+
+        refs = await get_references_to(p.symbol_id)
+        refs = refs[: p.max_results]
+        get_meta().results_count(len(refs))
+        result = {
+            "callers": refs,
+            "symbol_id": p.symbol_id,
+        }
+
+        if refs:
+            first = refs[0]
+            sid = first.get("source_symbol_id")
+            if sid:
+                self.hints().next_symbol(sid).apply(result)
+
+        return result

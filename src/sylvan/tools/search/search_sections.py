@@ -1,47 +1,81 @@
 """MCP tool: search_sections -- search indexed documentation sections."""
 
-from sylvan.error_codes import SylvanError
-from sylvan.services.search import SearchService
-from sylvan.tools.support.response import ensure_orm, get_meta, log_tool_call, wrap_response
+from __future__ import annotations
+
+from typing import Any
+
+from sylvan.tools.base import (
+    HasDocPath,
+    HasOptionalRepo,
+    HasQuery,
+    MeasureMethod,
+    Tool,
+    ToolParams,
+    schema_field,
+)
+from sylvan.tools.base.meta import get_meta
 
 
-@log_tool_call
-async def search_sections(
-    query: str,
-    repo: str | None = None,
-    doc_path: str | None = None,
-    max_results: int = 10,
-) -> dict:
-    """Search indexed documentation sections by title, summary, or tags.
+class SearchSections(Tool):
+    name = "search_sections"
+    category = "search"
+    description = (
+        "PREFERRED over Read/Grep for finding documentation. Searches indexed "
+        "doc sections (markdown, RST, HTML, OpenAPI, etc.) by title, summary, "
+        "or tags. Returns section summaries without reading files. Use this to "
+        "find configuration docs, API references, or any documentation section."
+    )
 
-    Args:
-        query: Search query string.
-        repo: Filter to a specific repository name.
-        doc_path: Filter to a specific document path.
-        max_results: Maximum results to return.
+    class Params(HasQuery, HasOptionalRepo, HasDocPath, ToolParams):
+        max_results: int = schema_field(
+            default=10,
+            ge=1,
+            le=1000,
+            description="Maximum results to return",
+        )
 
-    Returns:
-        Tool response dict with ``sections`` list and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
+    async def handle(self, p: Params) -> dict:
+        from sylvan.error_codes import SylvanError
+        from sylvan.services.search import SearchService
 
-    try:
-        data = await SearchService().sections(query, repo=repo, doc_path=doc_path, max_results=max_results)
-    except SylvanError as exc:
-        exc._meta = meta.build()
-        raise
+        try:
+            data = await SearchService().sections(
+                p.query,
+                repo=p.repo,
+                doc_path=p.doc_path,
+                max_results=p.max_results,
+            )
+        except SylvanError as exc:
+            exc._meta = {}
+            raise
 
-    meta.set("results_count", data["results_count"])
-    meta.set("query", data["query"])
+        self._data = data
 
-    returned_tokens = data["returned_tokens"]
-    equivalent_tokens = data["equivalent_tokens"]
-    if returned_tokens > 0 and equivalent_tokens > 0:
-        meta.record_token_efficiency(returned_tokens, equivalent_tokens, method="byte_estimate")
+        result: dict[str, Any] = {"sections": data["sections"]}
 
-    repo_id = data["repo_id"]
-    if repo_id:
-        meta.set("repo_id", repo_id)
+        meta = get_meta()
+        meta.results_count(data["results_count"])
+        meta.query(data["query"])
 
-    return wrap_response({"sections": data["sections"]}, meta.build())
+        repo_id = data["repo_id"]
+        if repo_id:
+            meta.repo_id(repo_id)
+
+        if result["sections"]:
+            first = result["sections"][0]
+            self.hints().next_tool("get_section", f"get_section(section_id='{first['section_id']}')").apply(result)
+
+        return result
+
+    def measure(self, result: dict) -> tuple[int, int]:
+        data = getattr(self, "_data", None)
+        if data is None:
+            return 0, 0
+        return data.get("returned_tokens", 0), data.get("equivalent_tokens", 0)
+
+    def measure_method(self) -> str:
+        return MeasureMethod.BYTE_ESTIMATE
+
+
+async def search_sections(**kwargs: Any) -> dict:
+    return await SearchSections().execute(kwargs)

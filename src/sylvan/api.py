@@ -202,7 +202,7 @@ class Sylvan:
         Returns:
             A list of dicts, each containing ``symbol_id``, ``name``,
             ``qualified_name``, ``kind``, ``language``, ``file``,
-            ``signature``, and ``line``.
+            ``signature``, and ``line_start``.
         """
 
         async def _do() -> list[dict]:
@@ -226,7 +226,7 @@ class Sylvan:
                     "language": s.language,
                     "file": await s._resolve_file_path(),
                     "signature": s.signature or "",
-                    "line": s.line_start,
+                    "line_start": s.line_start,
                 }
                 for s in results
             ]
@@ -357,9 +357,9 @@ class Sylvan:
         """
 
         async def _do() -> dict:
-            from sylvan.tools.analysis.get_blast_radius import get_blast_radius
+            from sylvan.tools.analysis.get_blast_radius import GetBlastRadius
 
-            return await get_blast_radius(symbol_id=symbol_id)
+            return await GetBlastRadius().execute({"symbol_id": symbol_id})
 
         return self._run(_do())
 
@@ -380,9 +380,9 @@ class Sylvan:
         """
 
         async def _do() -> list[dict]:
-            from sylvan.tools.analysis.find_importers import find_importers
+            from sylvan.tools.analysis.find_importers import FindImporters
 
-            result = await find_importers(repo=repo, file_path=file_path)
+            result = await FindImporters().execute({"repo": repo, "file_path": file_path})
             return result.get("importers", [])
 
         return self._run(_do())
@@ -403,9 +403,9 @@ class Sylvan:
         """
 
         async def _do() -> dict:
-            from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
+            from sylvan.tools.analysis.get_dependency_graph import GetDependencyGraph
 
-            return await get_dependency_graph(repo=repo, file_path=file_path)
+            return await GetDependencyGraph().execute({"repo": repo, "file_path": file_path})
 
         return self._run(_do())
 
@@ -425,9 +425,9 @@ class Sylvan:
         """
 
         async def _do() -> dict:
-            from sylvan.tools.analysis.get_class_hierarchy import get_class_hierarchy
+            from sylvan.tools.analysis.get_class_hierarchy import GetClassHierarchy
 
-            return await get_class_hierarchy(repo=repo, class_name=class_name)
+            return await GetClassHierarchy().execute({"class_name": class_name, "repo": repo})
 
         return self._run(_do())
 

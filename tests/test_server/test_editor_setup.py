@@ -66,6 +66,7 @@ class TestCheckSetupClaudeCode:
             "hooks": {
                 "SubagentStart": [{"matcher": "*", "hooks": [{"command": "echo sylvan"}]}],
                 "PostToolUse": [{"matcher": "Edit|Write", "hooks": [{"command": "echo sylvan reindex"}]}],
+                "UserPromptSubmit": [{"matcher": "*", "hooks": [{"command": "echo hookEventName"}]}],
             },
         }
         (settings_dir / "settings.local.json").write_text(json.dumps(settings), encoding="utf-8")
@@ -80,6 +81,7 @@ class TestCheckSetupClaudeCode:
             "hooks": {
                 "SubagentStart": [{"matcher": "*", "hooks": [{"command": "echo sylvan"}]}],
                 "PostToolUse": [{"matcher": "Edit|Write", "hooks": [{"command": "echo sylvan"}]}],
+                "UserPromptSubmit": [{"matcher": "*", "hooks": [{"command": "echo hookEventName"}]}],
             },
         }
         (settings_dir / "settings.local.json").write_text(json.dumps(settings), encoding="utf-8")
@@ -95,6 +97,7 @@ class TestCheckSetupClaudeCode:
             "hooks": {
                 "SubagentStart": [],
                 "PostToolUse": [{"matcher": "Edit|Write", "hooks": [{"command": "echo sylvan"}]}],
+                "UserPromptSubmit": [{"matcher": "*", "hooks": [{"command": "echo hookEventName"}]}],
             },
         }
         (settings_dir / "settings.local.json").write_text(json.dumps(settings), encoding="utf-8")
@@ -102,6 +105,7 @@ class TestCheckSetupClaudeCode:
         action_types = {a.action for a in actions}
         assert "add_subagent_hook" in action_types
         assert "add_post_tool_hook" not in action_types
+        assert "add_time_hook" not in action_types
 
     def test_missing_post_tool_hook(self, tmp_path):
         settings_dir = tmp_path / ".claude"
@@ -111,6 +115,7 @@ class TestCheckSetupClaudeCode:
             "hooks": {
                 "SubagentStart": [{"matcher": "*", "hooks": [{"command": "echo sylvan"}]}],
                 "PostToolUse": [],
+                "UserPromptSubmit": [{"matcher": "*", "hooks": [{"command": "echo hookEventName"}]}],
             },
         }
         (settings_dir / "settings.local.json").write_text(json.dumps(settings), encoding="utf-8")
@@ -118,6 +123,24 @@ class TestCheckSetupClaudeCode:
         action_types = {a.action for a in actions}
         assert "add_post_tool_hook" in action_types
         assert "add_subagent_hook" not in action_types
+        assert "add_time_hook" not in action_types
+
+    def test_missing_time_hook(self, tmp_path):
+        settings_dir = tmp_path / ".claude"
+        settings_dir.mkdir()
+        settings = {
+            "permissions": {"allow": ["mcp__sylvan__*"]},
+            "hooks": {
+                "SubagentStart": [{"matcher": "*", "hooks": [{"command": "echo sylvan"}]}],
+                "PostToolUse": [{"matcher": "Edit|Write", "hooks": [{"command": "echo sylvan"}]}],
+            },
+        }
+        (settings_dir / "settings.local.json").write_text(json.dumps(settings), encoding="utf-8")
+        actions = check_setup(EditorKind.CLAUDE_CODE, tmp_path)
+        action_types = {a.action for a in actions}
+        assert "add_time_hook" in action_types
+        assert "add_subagent_hook" not in action_types
+        assert "add_post_tool_hook" not in action_types
 
     def test_invalid_json(self, tmp_path):
         settings_dir = tmp_path / ".claude"
@@ -206,6 +229,7 @@ class TestApplySetupClaudeCode:
         assert "mcp__sylvan__*" in settings["permissions"]["allow"]
         assert "SubagentStart" in settings["hooks"]
         assert "PostToolUse" in settings["hooks"]
+        assert "UserPromptSubmit" in settings["hooks"]
 
     def test_merges_into_existing_without_destroying_content(self, tmp_path):
         settings_dir = tmp_path / ".claude"

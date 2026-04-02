@@ -42,9 +42,21 @@ def _scan_children_for_name(node: object, source_bytes: bytes) -> str | None:
     Returns:
         Identifier name string, or None if not found.
     """
+    name_types = (
+        "identifier",
+        "type_identifier",
+        "field_identifier",
+        "property_identifier",
+        "selectors",
+        "class_selector",
+        "id_selector",
+        "tag_name",
+        "keyframes_name",
+        "keyword_query",
+    )
     for child in node.children:
-        if child.type in ("identifier", "type_identifier", "field_identifier", "property_identifier"):
-            return source_bytes[child.start_byte : child.end_byte].decode("utf-8", errors="replace")
+        if child.type in name_types:
+            return source_bytes[child.start_byte : child.end_byte].decode("utf-8", errors="replace").strip()
         if child.type == "type_spec":
             inner_name = child.child_by_field_name("name")
             if inner_name:

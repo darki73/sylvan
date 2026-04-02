@@ -1,5 +1,87 @@
 # Changelog
 
+## 1.9.0
+
+### Tool framework rewrite
+
+Complete rewrite of the tool system. Every tool is now a `Tool` subclass with typed params, auto-registration, and framework-level response handling.
+
+- `Tool` base class with `handle()` for logic, `execute()` for framework wrapping
+- 25 param traits (`HasRepo`, `HasSymbol`, `HasPagination`, `HasDepth`, etc.) that enforce canonical field names, types, and descriptions across all tools
+- MCP `inputSchema` auto-generated from `Params` type hints, no more hand-written JSON schemas
+- Type coercion: MCP clients sending `"5"` instead of `5` or `"true"` instead of `True` are handled automatically
+- `require_any_of` and `mutually_exclusive` constraints on param groups
+- Auto-registration via `__init_subclass__`, no manual handler wiring or category mapping
+- `definitions/` directory removed, `_get_handlers()` and `_TOOL_CATEGORIES` replaced by tool registry
+- `ensure_orm()` removed from all tools (vestigial guard, dispatch already guarantees backend)
+
+### Typed metadata
+
+- New `ToolMeta` class with typed methods (`.repo()`, `.results_count()`, `.query()`, `.token_efficiency()`, etc.) replacing arbitrary `meta.set("string_key", value)` calls
+- Stored on contextvar so deeply nested code (services, analysis functions) can contribute to `_meta` without passing the builder through every call
+- `_dispatch()` creates `ToolMeta` per request, `execute()` merges it into the response
+
+### Hint builder
+
+- New `HintBuilder` that constructs `_hints` blocks with typed methods instead of raw dicts
+- `.read(file, start, end)` - maps to the agent's Read tool params
+- `.edit(file, first_line)` - maps to the agent's Edit tool params
+- `.reindex(repo, file)` - suggests index_file after edits
+- `.test_files(paths)` - suggests test files to run
+- `.next_blast_radius()`, `.next_importers()`, `.next_symbol()`, `.next_outline()`, `.next_search()` - follow-up tool suggestions
+- `.for_symbol()` - standard hint block for any tool returning a symbol
+- All list types (`read`, `edit`, `reindex`) accumulate, supporting multiple locations (e.g. blast radius with several confirmed files)
+- 19 tools now include contextual hints
+
+### Model presenters
+
+- `SymbolPresenter` with `.brief()`, `.standard()`, `.full()`, `.sibling()`, `.outline()` detail levels
+- `FilePresenter`, `ImportPresenter`, `SectionPresenter`, `ReferencePresenter`
+- Each detail level is a strict superset of the previous (enforced by tests)
+- Tools and services use presenters instead of hand-building dicts from ORM attributes
+
+### Hook builder
+
+- New `Hook` class with fluent `.context()` builder and cross-platform JSON serialization (ConvertTo-Json on Windows, echo on POSIX)
+- `TimeHook` that injects current timestamp using native shell commands (no Python dependency)
+- Editor-specific event names: `UserPromptSubmit` (Claude Code), `beforeSubmitPrompt` (Cursor), `pre_user_prompt` (Windsurf)
+- All four editors now get the time hook alongside SubagentStart and PostToolUse
+- Raw JSON string constants replaced with typed builders
+
+### Extension system
+
+- `@register_tool` decorator deprecated in favor of `Tool` subclasses
+- Extension files in `~/.sylvan/extensions/tools/` can define Tool subclasses that auto-register
+- Extensions get the same framework features as core tools: param traits, presenters, hints, typed meta
+
+### Token efficiency
+
+- `measure()` method on Tool base class for automatic token tracking in `_meta`
+- `MeasureMethod` constants (`BYTE_ESTIMATE`, `TIKTOKEN_CL100K`) replace bare strings
+
+### Stylesheet language support
+
+- CSS: selectors, `@media` queries, `@keyframes` animations
+- SCSS: `$variable` extraction, `@mixin`/`@function` with parameters, `%placeholder` extends, nested `&` selector expansion (`.parent { &__child {} }` -> `.parent__child`), `@use`/`@forward`/`@import` for import graph
+- SASS: indexed as SCSS
+- LESS: `@variable` extraction, mixin-as-rule-set detection (`.mixin(@param) {}`), `@import` with option syntax
+- Stylus: `name = value` variable extraction, `name(params)` function detection, `@import`/`@require` imports
+- Custom extractors supplement tree-sitter with regex-based variable detection and AST-walking for nested selector resolution
+
+### Field name alignment (breaking)
+
+- Symbol responses: `"line"` renamed to `"line_start"` where it represents a symbol's starting line (public API, dashboard, services)
+- Section responses: `"file"` renamed to `"doc_path"` where it represents a section's document path (services, tools, CLI, ORM model)
+- Dashboard Vue frontend updated to match
+- Reference call-site `"line"` and search match `"line"` unchanged (single location, not range)
+
+### Stats
+
+- 2006 tests (up from 1817)
+- All 56 tools migrated to Tool subclasses
+- 39 languages supported (up from 34)
+- ~80 files changed
+
 ## 1.8.0
 
 ### Call graph

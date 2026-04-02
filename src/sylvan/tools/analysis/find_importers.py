@@ -1,61 +1,72 @@
-"""MCP tool: find_importers -- find files that import a given file."""
+"""MCP tools: find_importers, batch_find_importers."""
 
-from sylvan.tools.support.response import clamp, ensure_orm, get_meta, inject_meta, log_tool_call, wrap_response
+from sylvan.tools.base import (
+    HasFilePath,
+    HasFilePaths,
+    HasRepo,
+    Tool,
+    ToolParams,
+    schema_field,
+)
 
 
-@log_tool_call
-async def find_importers(repo: str, file_path: str, max_results: int = 50) -> dict:
-    """Find all files that import a given file.
+class FindImporters(Tool):
+    name = "find_importers"
+    category = "analysis"
+    description = (
+        "Find all files that import a given file. Answers 'who depends on this "
+        "module?' -- a structural query that Grep cannot reliably answer. Each "
+        "importer includes has_importers: when false, the importer has no importers "
+        "itself -- meaning the import chain is transitively dead."
+    )
 
-    Args:
-        repo: Repository name.
-        file_path: The file to find importers of.
-        max_results: Maximum results to return.
+    class Params(HasRepo, HasFilePath, ToolParams):
+        max_results: int = schema_field(
+            default=50,
+            ge=1,
+            le=1000,
+            description="Maximum results to return",
+        )
 
-    Returns:
-        Tool response dict with ``importers`` list and ``_meta`` envelope.
-
-    Raises:
-        IndexFileNotFoundError: If the target file does not exist in the repo's index.
-    """
-    meta = get_meta()
-    max_results = clamp(max_results, 1, 1000)
-    ensure_orm()
-
-    from sylvan.error_codes import SylvanError
-
-    try:
+    async def handle(self, p: Params) -> dict:
         from sylvan.services.analysis import AnalysisService
+        from sylvan.tools.base.meta import get_meta
 
-        result = await AnalysisService().find_importers(repo, file_path, max_results=max_results)
-    except SylvanError as exc:
-        raise inject_meta(exc, meta) from exc
+        result = await AnalysisService().find_importers(p.repo, p.file_path, max_results=p.max_results)
+        get_meta().results_count(len(result["importers"]))
 
-    meta.set("count", len(result["importers"]))
-    return wrap_response(result, meta.build())
+        if result["importers"]:
+            first = result["importers"][0]
+            self.hints().next_outline(p.repo, first["path"]).apply(result)
+
+        return result
 
 
-@log_tool_call
-async def batch_find_importers(repo: str, file_paths: list[str], max_results: int = 20) -> dict:
-    """Find importers for multiple files in one call.
+class BatchFindImporters(Tool):
+    name = "batch_find_importers"
+    category = "analysis"
+    description = (
+        "Find importers for MULTIPLE files in ONE call. More efficient than "
+        "calling find_importers repeatedly. Use to check dependency status "
+        "of several modules at once."
+    )
 
-    Args:
-        repo: Repository name.
-        file_paths: List of file paths to find importers of.
-        max_results: Maximum importers per file.
+    class Params(HasRepo, HasFilePaths, ToolParams):
+        max_results: int = schema_field(
+            default=20,
+            ge=1,
+            le=100,
+            description="Max importers per file (default: 20)",
+        )
 
-    Returns:
-        Tool response dict with ``results`` list (one per file),
-        ``not_found`` list, and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    max_results = clamp(max_results, 1, 100)
-    ensure_orm()
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.analysis import AnalysisService
+        from sylvan.tools.base.meta import get_meta
 
-    from sylvan.services.analysis import AnalysisService
-
-    data = await AnalysisService().batch_find_importers(repo, file_paths, max_results=max_results)
-    meta.set("found", data["found"])
-    meta.set("not_found", len(data["not_found"]))
-    meta.set("total_importers", data["total_importers"])
-    return wrap_response({"results": data["results"], "not_found": data["not_found"]}, meta.build())
+        data = await AnalysisService().batch_find_importers(p.repo, p.file_paths, max_results=p.max_results)
+        result = {"results": data["results"], "not_found": data["not_found"]}
+        meta = get_meta()
+        meta.found(data["found"])
+        meta.not_found_count(len(data["not_found"]))
+        meta.extra("total_importers", data["total_importers"])
+        return result

@@ -155,7 +155,7 @@ class TestListLibraries:
         resp = await list_libraries()
         assert "_meta" in resp
         assert resp["libraries"] == []
-        assert resp["_meta"]["count"] == 0
+        assert resp["_meta"]["results_count"] == 0
 
     async def test_lists_indexed_libraries(self, lib_ctx):
         backend = lib_ctx
@@ -165,7 +165,7 @@ class TestListLibraries:
         from sylvan.tools.library.list import list_libraries
 
         resp = await list_libraries()
-        assert resp["_meta"]["count"] == 2
+        assert resp["_meta"]["results_count"] == 2
         names = [lib["name"] for lib in resp["libraries"]]
         assert "numpy@1.25.0" in names
         assert "pandas@2.0.0" in names

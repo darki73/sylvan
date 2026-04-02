@@ -76,27 +76,27 @@ class _FakeProvider:
 class TestSearchColumns:
     async def test_repo_not_found(self, indexed_repo):
         from sylvan.error_codes import RepoNotFoundError
-        from sylvan.tools.analysis.search_columns import search_columns
+        from sylvan.tools.analysis.search_columns import SearchColumns
 
         with pytest.raises(RepoNotFoundError):
-            await search_columns(repo="nonexistent", query="id")
+            await SearchColumns().execute({"repo": "nonexistent", "query": "id"})
 
     async def test_no_providers(self, indexed_repo):
-        from sylvan.tools.analysis.search_columns import search_columns
+        from sylvan.tools.analysis.search_columns import SearchColumns
 
         with patch("sylvan.providers.ecosystem_context.base.discover_providers", return_value=[]):
-            resp = await search_columns(repo="col-repo", query="id")
+            resp = await SearchColumns().execute({"repo": "col-repo", "query": "id"})
 
         assert "_meta" in resp
         assert resp["columns"] == []
         assert "No ecosystem context providers" in resp.get("message", "")
 
     async def test_finds_matching_columns(self, indexed_repo):
-        from sylvan.tools.analysis.search_columns import search_columns
+        from sylvan.tools.analysis.search_columns import SearchColumns
 
         fake = _FakeProvider()
         with patch("sylvan.providers.ecosystem_context.base.discover_providers", return_value=[fake]):
-            resp = await search_columns(repo="col-repo", query="customer_id")
+            resp = await SearchColumns().execute({"repo": "col-repo", "query": "customer_id"})
 
         assert "_meta" in resp
         assert len(resp["columns"]) >= 1
@@ -104,34 +104,34 @@ class TestSearchColumns:
         assert "customer_id" in col_names
 
     async def test_model_pattern_filter(self, indexed_repo):
-        from sylvan.tools.analysis.search_columns import search_columns
+        from sylvan.tools.analysis.search_columns import SearchColumns
 
         fake = _FakeProvider()
         with patch("sylvan.providers.ecosystem_context.base.discover_providers", return_value=[fake]):
-            resp = await search_columns(repo="col-repo", query="id", model_pattern="orders")
+            resp = await SearchColumns().execute({"repo": "col-repo", "query": "id", "model_pattern": "orders"})
 
         assert "_meta" in resp
         for col in resp["columns"]:
             assert col["model"] == "orders"
 
     async def test_max_results_respected(self, indexed_repo):
-        from sylvan.tools.analysis.search_columns import search_columns
+        from sylvan.tools.analysis.search_columns import SearchColumns
 
         fake = _FakeProvider()
         with patch("sylvan.providers.ecosystem_context.base.discover_providers", return_value=[fake]):
-            resp = await search_columns(repo="col-repo", query="id", max_results=1)
+            resp = await SearchColumns().execute({"repo": "col-repo", "query": "id", "max_results": 1})
 
         assert len(resp["columns"]) <= 1
 
     async def test_meta_includes_provider_info(self, indexed_repo):
-        from sylvan.tools.analysis.search_columns import search_columns
+        from sylvan.tools.analysis.search_columns import SearchColumns
 
         fake = _FakeProvider()
         with patch("sylvan.providers.ecosystem_context.base.discover_providers", return_value=[fake]):
-            resp = await search_columns(repo="col-repo", query="email")
+            resp = await SearchColumns().execute({"repo": "col-repo", "query": "email"})
 
         meta = resp["_meta"]
-        assert "count" in meta
+        assert "results_count" in meta
         assert "providers_found" in meta
         assert meta["providers_found"] == 1
         assert "fake" in meta["providers"]

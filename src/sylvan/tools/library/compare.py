@@ -1,45 +1,53 @@
-"""MCP tool: compare_library_versions - diff symbols between two library versions."""
+"""MCP tool: compare_library_versions -- diff symbols between two library versions."""
 
-from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
+from __future__ import annotations
+
+from typing import Any
+
+from sylvan.tools.base import Tool, ToolParams, schema_field
+from sylvan.tools.base.meta import get_meta
 
 
-@log_tool_call
-async def compare_library_versions(
-    package: str,
-    from_version: str,
-    to_version: str,
-) -> dict:
-    """Compare two indexed versions of the same library.
+class CompareLibraryVersions(Tool):
+    name = "compare_library_versions"
+    category = "meta"
+    description = (
+        "Compare two indexed versions of the same library to generate a migration "
+        "guide. Shows symbols added, removed, and with changed signatures between "
+        "versions. Use BEFORE upgrading a workspace's pinned library version to "
+        "assess breaking changes. Both versions must be indexed via add_library."
+    )
 
-    Generates a migration-relevant diff: symbols added, removed, and
-    changed (signature differences). The agent uses this to assess
-    breaking changes before upgrading a workspace's pinned version.
+    class Params(ToolParams):
+        package: str = schema_field(
+            description="Package name without manager prefix (e.g., 'numpy', 'react')",
+        )
+        from_version: str = schema_field(
+            description="The old version to compare from (e.g., '1.1.1')",
+        )
+        to_version: str = schema_field(
+            description="The new version to compare to (e.g., '2.2.2')",
+        )
 
-    Both versions must already be indexed via ``add_library``.
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.library import compare_versions as _svc
 
-    Args:
-        package: Package name without manager prefix (e.g. ``"numpy"``).
-        from_version: The old version string (e.g. ``"1.1.1"``).
-        to_version: The new version string (e.g. ``"2.2.2"``).
+        result = await _svc(p.package, p.from_version, p.to_version)
 
-    Returns:
-        Tool response dict with added, removed, and changed symbol lists.
-    """
-    meta = get_meta()
+        if "error" in result:
+            return result
 
-    from sylvan.services.library import compare_versions as _svc
+        summary = result.get("summary", {})
+        meta = get_meta()
+        meta.extra("from_version", p.from_version)
+        meta.extra("to_version", p.to_version)
+        meta.extra("added_count", summary.get("total_added", 0))
+        meta.extra("removed_count", summary.get("total_removed", 0))
+        meta.extra("changed_count", summary.get("total_changed", 0))
+        meta.extra("breaking_risk", summary.get("breaking_risk", "low"))
 
-    result = await _svc(package, from_version, to_version)
+        return result
 
-    if "error" in result:
-        return wrap_response(result, meta.build())
 
-    summary = result.get("summary", {})
-    meta.set("from_version", from_version)
-    meta.set("to_version", to_version)
-    meta.set("added_count", summary.get("total_added", 0))
-    meta.set("removed_count", summary.get("total_removed", 0))
-    meta.set("changed_count", summary.get("total_changed", 0))
-    meta.set("breaking_risk", summary.get("breaking_risk", "low"))
-
-    return wrap_response(result, meta.build())
+async def compare_library_versions(**kwargs: Any) -> dict:
+    return await CompareLibraryVersions().execute(kwargs)

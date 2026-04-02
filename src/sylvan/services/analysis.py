@@ -9,6 +9,7 @@ from sylvan.database.orm import FileRecord, Quality, Reference, Repo, Symbol
 from sylvan.database.orm.models.blob import Blob
 from sylvan.database.orm.models.file_import import FileImport
 from sylvan.error_codes import IndexFileNotFoundError, RepoNotFoundError, SymbolNotFoundError
+from sylvan.tools.base.presenters import FilePresenter
 
 _CAMEL_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
@@ -262,7 +263,7 @@ class AnalysisService:
                 .get()
             )
 
-            importers = [{"path": f.path, "language": f.language} for f in importing_files]
+            importers = [FilePresenter.brief(f) for f in importing_files]
             results.append(
                 {
                     "file": fp,

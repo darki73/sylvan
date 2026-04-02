@@ -1,44 +1,64 @@
-"""MCP tool: get_logs - retrieve sylvan server log entries."""
+"""MCP tool: get_logs -- retrieve sylvan server log entries."""
 
-from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
+from sylvan.tools.base import Tool, ToolParams, schema_field
 
 
-@log_tool_call
+class GetLogs(Tool):
+    name = "get_logs"
+    category = "meta"
+    description = (
+        "Retrieve sylvan server log entries for debugging. Returns the "
+        "most recent lines by default (tail). Use from_start=true for "
+        "head, offset to paginate. Use this to diagnose errors, check "
+        "tool call history, or debug issues without searching for log files."
+    )
+
+    class Params(ToolParams):
+        lines: int = schema_field(
+            default=50,
+            ge=1,
+            le=500,
+            description="Number of lines to return (1-500, default 50)",
+        )
+        from_start: bool = schema_field(
+            default=False,
+            description="Read from beginning instead of end",
+        )
+        offset: int = schema_field(
+            default=0,
+            description="Skip this many lines before reading",
+        )
+
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.meta import get_logs as _svc
+        from sylvan.tools.base.meta import get_meta
+
+        result = await _svc(lines=p.lines, from_start=p.from_start, offset=p.offset)
+
+        meta = get_meta()
+        meta.extra("total_lines", result.get("total_lines", 0))
+        meta.extra("returned_lines", result.get("returned_lines", 0))
+        meta.extra("offset", result.get("offset", p.offset))
+        meta.extra("from_start", result.get("from_start", p.from_start))
+        if "log_file" in result:
+            meta.extra("log_file", result.pop("log_file"))
+
+        for key in ("total_lines", "returned_lines", "offset", "from_start"):
+            result.pop(key, None)
+
+        return result
+
+
 async def get_logs(
     lines: int = 50,
     from_start: bool = False,
     offset: int = 0,
+    **_kwargs: object,
 ) -> dict:
-    """Retrieve log entries from the sylvan server log.
-
-    Reads from ``~/.sylvan/logs/sylvan.log``. By default returns the
-    last N lines (tail). Set ``from_start=True`` to read from the
-    beginning (head). Use ``offset`` to paginate through the log.
-
-    Args:
-        lines: Number of lines to return. Clamped to 1-500.
-        from_start: If True, read from the beginning instead of the end.
-        offset: Skip this many lines before reading. For tail mode,
-            offset counts backwards from the end.
-
-    Returns:
-        Tool response dict with ``entries`` list and ``_meta`` envelope.
-    """
-    meta = get_meta()
-
-    from sylvan.services.meta import get_logs as _svc
-
-    result = await _svc(lines=lines, from_start=from_start, offset=offset)
-
-    meta.set("total_lines", result.get("total_lines", 0))
-    meta.set("returned_lines", result.get("returned_lines", 0))
-    meta.set("offset", result.get("offset", offset))
-    meta.set("from_start", result.get("from_start", from_start))
-    if "log_file" in result:
-        meta.set("log_file", result.pop("log_file"))
-
-    # Remove meta-level keys from body
-    for key in ("total_lines", "returned_lines", "offset", "from_start"):
-        result.pop(key, None)
-
-    return wrap_response(result, meta.build())
+    return await GetLogs().execute(
+        {
+            "lines": lines,
+            "from_start": from_start,
+            "offset": offset,
+        }
+    )

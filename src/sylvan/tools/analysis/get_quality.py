@@ -1,47 +1,38 @@
-"""MCP tool: get_quality -- quality metrics for symbols."""
+"""MCP tool: get_quality."""
 
-from sylvan.tools.support.response import ensure_orm, get_meta, inject_meta, log_tool_call, wrap_response
+from sylvan.tools.base import HasRepo, Tool, ToolParams, schema_field
 
 
-@log_tool_call
-async def get_quality(
-    repo: str,
-    untested_only: bool = False,
-    undocumented_only: bool = False,
-    min_complexity: int = 0,
-    limit: int = 50,
-) -> dict:
-    """Get quality metrics for symbols. Find untested, undocumented, or complex code.
+class GetQuality(Tool):
+    name = "get_quality"
+    category = "analysis"
+    description = (
+        "Find untested, undocumented, or complex code. Returns quality metrics "
+        "per symbol: has_tests, has_docs, has_types, complexity score. "
+        "Use for code review targeting or identifying technical debt."
+    )
 
-    Lazily computes quality metrics on first access, then caches them.
+    class Params(HasRepo, ToolParams):
+        untested_only: bool = schema_field(default=False, description="Only show untested symbols")
+        undocumented_only: bool = schema_field(default=False, description="Only show undocumented symbols")
+        min_complexity: int = schema_field(default=0, ge=0, description="Minimum cyclomatic complexity threshold")
+        limit: int = schema_field(default=50, ge=1, le=1000, description="Maximum results to return")
 
-    Args:
-        repo: Repository name.
-        untested_only: Only show untested symbols.
-        undocumented_only: Only show undocumented symbols.
-        min_complexity: Minimum cyclomatic complexity threshold.
-        limit: Maximum results to return.
-
-    Returns:
-        Tool response dict with ``symbols`` quality list and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
-
-    from sylvan.error_codes import SylvanError
-
-    try:
+    async def handle(self, p: Params) -> dict:
         from sylvan.services.analysis import AnalysisService
+        from sylvan.tools.base.meta import get_meta
 
         result = await AnalysisService().quality(
-            repo,
-            untested_only=untested_only,
-            undocumented_only=undocumented_only,
-            min_complexity=min_complexity,
-            limit=limit,
+            p.repo,
+            untested_only=p.untested_only,
+            undocumented_only=p.undocumented_only,
+            min_complexity=p.min_complexity,
+            limit=p.limit,
         )
-    except SylvanError as exc:
-        raise inject_meta(exc, meta) from exc
+        get_meta().results_count(len(result["symbols"]))
 
-    meta.set("count", len(result["symbols"]))
-    return wrap_response(result, meta.build())
+        if result["symbols"]:
+            worst = result["symbols"][0]
+            self.hints().next_symbol(worst["symbol_id"]).apply(result)
+
+        return result

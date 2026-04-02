@@ -1,26 +1,32 @@
-"""MCP tool: get_class_hierarchy -- traverse inheritance chains."""
+"""MCP tool: get_class_hierarchy."""
 
-from sylvan.tools.support.response import ensure_orm, get_meta, log_tool_call, wrap_response
+from sylvan.tools.base import HasOptionalRepo, Tool, ToolParams, schema_field
 
 
-@log_tool_call
-async def get_class_hierarchy(class_name: str, repo: str | None = None) -> dict:
-    """Traverse class hierarchy: ancestors and descendants.
+class GetClassHierarchy(Tool):
+    name = "get_class_hierarchy"
+    category = "analysis"
+    description = (
+        "Traverse class inheritance chains -- ancestors and descendants. "
+        "Answers 'what does this class extend?' and 'what extends this class?' "
+        "without manual grep. Use before refactoring a base class."
+    )
 
-    Args:
-        class_name: Name of the class to analyse.
-        repo: Optional repository name filter.
+    class Params(HasOptionalRepo, ToolParams):
+        class_name: str = schema_field(description="Class name to analyze")
 
-    Returns:
-        Tool response dict with ``ancestors`` and ``descendants`` lists
-        plus ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.analysis import AnalysisService
+        from sylvan.tools.base.meta import get_meta
 
-    from sylvan.services.analysis import AnalysisService
+        result = await AnalysisService().class_hierarchy(p.class_name, repo=p.repo)
+        meta = get_meta()
+        meta.extra("ancestors", len(result.get("ancestors", [])))
+        meta.extra("descendants", len(result.get("descendants", [])))
 
-    result = await AnalysisService().class_hierarchy(class_name, repo=repo)
-    meta.set("ancestors", len(result.get("ancestors", [])))
-    meta.set("descendants", len(result.get("descendants", [])))
-    return wrap_response(result, meta.build())
+        target = result.get("target", {})
+        sid = target.get("symbol_id")
+        if sid:
+            self.hints().next_symbol(sid).apply(result)
+
+        return result

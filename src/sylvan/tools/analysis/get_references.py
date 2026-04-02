@@ -1,29 +1,42 @@
-"""MCP tool: get_references -- who calls this symbol / what does it call."""
+"""MCP tool: get_references."""
 
-from sylvan.tools.support.response import ensure_orm, get_meta, log_tool_call, wrap_response
+from sylvan.tools.base import HasSymbol, Tool, ToolParams, schema_field
 
 
-@log_tool_call
-async def get_references(symbol_id: str, direction: str = "to") -> dict:
-    """Get references to or from a symbol.
-
-    Args:
-        symbol_id: The symbol to query.
-        direction: ``"to"`` for callers (who references this symbol),
-            ``"from"`` for callees (what this symbol references).
-
-    Returns:
-        Tool response dict with ``references`` list and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
-
-    from sylvan.services.analysis import AnalysisService
-
-    result = await AnalysisService().references(symbol_id, direction=direction)
-    meta.set("count", len(result["references"]))
-    meta.set("direction", result["direction"])
-    return wrap_response(
-        {"references": result["references"], "symbol_id": result["symbol_id"]},
-        meta.build(),
+class GetReferences(Tool):
+    name = "get_references"
+    category = "analysis"
+    description = (
+        "PREFERRED over Grep for 'who calls this function?'. Returns symbol-level "
+        "references -- callers (direction=to) or callees (direction=from). "
+        "Structural query that Grep cannot answer accurately."
     )
+
+    class Params(HasSymbol, ToolParams):
+        direction: str = schema_field(
+            default="to",
+            description="to=callers, from=callees",
+            enum=["to", "from"],
+        )
+
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.analysis import AnalysisService
+        from sylvan.tools.base.meta import get_meta
+
+        result = await AnalysisService().references(p.symbol_id, direction=p.direction)
+        refs = result["references"]
+        meta = get_meta()
+        meta.results_count(len(refs))
+        meta.extra("direction", result["direction"])
+        response = {
+            "references": refs,
+            "symbol_id": result["symbol_id"],
+        }
+
+        if refs:
+            first = refs[0]
+            sid = first.get("source_symbol_id") or first.get("target_symbol_id")
+            if sid:
+                self.hints().next_symbol(sid).apply(response)
+
+        return response

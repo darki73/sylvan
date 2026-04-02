@@ -63,9 +63,9 @@ async def indexed_repo(tmp_path):
 
 class TestGetDependencyGraph:
     async def test_returns_nodes_and_edges(self, indexed_repo):
-        from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
+        from sylvan.tools.analysis.get_dependency_graph import GetDependencyGraph
 
-        resp = await get_dependency_graph(repo="graph-repo", file_path="dog.py")
+        resp = await GetDependencyGraph().execute({"repo": "graph-repo", "file_path": "dog.py"})
 
         assert "_meta" in resp
         assert "nodes" in resp
@@ -79,32 +79,36 @@ class TestGetDependencyGraph:
         assert "direction" in meta
 
     async def test_target_is_marked(self, indexed_repo):
-        from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
+        from sylvan.tools.analysis.get_dependency_graph import GetDependencyGraph
 
-        resp = await get_dependency_graph(repo="graph-repo", file_path="dog.py")
+        resp = await GetDependencyGraph().execute({"repo": "graph-repo", "file_path": "dog.py"})
 
         if "dog.py" in resp["nodes"]:
             assert resp["nodes"]["dog.py"]["is_target"] is True
 
     async def test_direction_imports(self, indexed_repo):
-        from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
+        from sylvan.tools.analysis.get_dependency_graph import GetDependencyGraph
 
-        resp = await get_dependency_graph(
-            repo="graph-repo",
-            file_path="dog.py",
-            direction="imports",
+        resp = await GetDependencyGraph().execute(
+            {
+                "repo": "graph-repo",
+                "file_path": "dog.py",
+                "direction": "imports",
+            }
         )
 
         assert "_meta" in resp
         assert resp["_meta"]["direction"] == "imports"
 
     async def test_direction_importers(self, indexed_repo):
-        from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
+        from sylvan.tools.analysis.get_dependency_graph import GetDependencyGraph
 
-        resp = await get_dependency_graph(
-            repo="graph-repo",
-            file_path="dog.py",
-            direction="importers",
+        resp = await GetDependencyGraph().execute(
+            {
+                "repo": "graph-repo",
+                "file_path": "dog.py",
+                "direction": "importers",
+            }
         )
 
         assert "_meta" in resp
@@ -112,25 +116,27 @@ class TestGetDependencyGraph:
 
     async def test_repo_not_found(self, indexed_repo):
         from sylvan.error_codes import RepoNotFoundError
-        from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
+        from sylvan.tools.analysis.get_dependency_graph import GetDependencyGraph
 
         with pytest.raises(RepoNotFoundError):
-            await get_dependency_graph(repo="nonexistent", file_path="dog.py")
+            await GetDependencyGraph().execute({"repo": "nonexistent", "file_path": "dog.py"})
 
     async def test_file_not_found(self, indexed_repo):
         from sylvan.error_codes import IndexFileNotFoundError
-        from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
+        from sylvan.tools.analysis.get_dependency_graph import GetDependencyGraph
 
         with pytest.raises(IndexFileNotFoundError):
-            await get_dependency_graph(repo="graph-repo", file_path="nonexistent.py")
+            await GetDependencyGraph().execute({"repo": "graph-repo", "file_path": "nonexistent.py"})
 
     async def test_depth_clamped(self, indexed_repo):
-        from sylvan.tools.analysis.get_dependency_graph import get_dependency_graph
+        from sylvan.tools.analysis.get_dependency_graph import GetDependencyGraph
 
-        resp = await get_dependency_graph(
-            repo="graph-repo",
-            file_path="dog.py",
-            depth=10,
+        resp = await GetDependencyGraph().execute(
+            {
+                "repo": "graph-repo",
+                "file_path": "dog.py",
+                "depth": 10,
+            }
         )
 
         assert resp["_meta"]["depth"] == 3

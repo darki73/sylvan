@@ -1,43 +1,33 @@
-"""MCP tool: get_quality_report -- comprehensive code quality analysis."""
+"""MCP tool: get_quality_report."""
 
-from sylvan.tools.support.response import ensure_orm, get_meta, inject_meta, log_tool_call, wrap_response
+from sylvan.tools.base import HasRepo, Tool, ToolParams
+from sylvan.tools.base.meta import get_meta
 
 
-@log_tool_call
-async def get_quality_report(repo: str) -> dict:
-    """Generate a comprehensive quality report for a repository.
+class GetQualityReport(Tool):
+    name = "get_quality_report"
+    category = "analysis"
+    description = (
+        "Run a comprehensive quality analysis on a repository -- the mini SonarQube. "
+        "Returns test coverage, documentation coverage, code smells, security "
+        "findings, code duplication, and quality gate pass/fail status. "
+        "All analysis is static (no test execution needed) and fast."
+    )
 
-    Runs all quality analyzers and returns a unified report including
-    test coverage, code smells, security findings, duplication, and
-    quality gate pass/fail status.
+    class Params(HasRepo, ToolParams):
+        pass
 
-    Args:
-        repo: Indexed repository name.
-
-    Returns:
-        Tool response dict with quality report and ``_meta`` envelope.
-
-    Raises:
-        RepoNotFoundError: If the repository is not indexed.
-    """
-    meta = get_meta()
-    ensure_orm()
-
-    from sylvan.error_codes import SylvanError
-
-    try:
+    async def handle(self, p: Params) -> dict:
         from sylvan.services.analysis import AnalysisService
 
-        report = await AnalysisService().quality_report(repo)
-    except SylvanError as exc:
-        raise inject_meta(exc, meta) from exc
+        report = await AnalysisService().quality_report(p.repo)
 
-    meta.set("gate_passed", report.pop("gate_passed"))
-    meta.set("test_coverage", report.pop("test_coverage"))
-    meta.set("doc_coverage", report.pop("doc_coverage"))
-    meta.set("smells_count", report.pop("smells_count"))
-    meta.set("security_count", report.pop("security_count"))
-    meta.set("duplicate_groups", report.pop("duplicate_groups"))
-    meta.set("dead_code_count", report.pop("dead_code_count"))
-
-    return wrap_response(report, meta.build())
+        meta = get_meta()
+        meta.extra("gate_passed", report.pop("gate_passed"))
+        meta.extra("test_coverage", report.pop("test_coverage"))
+        meta.extra("doc_coverage", report.pop("doc_coverage"))
+        meta.extra("smells_count", report.pop("smells_count"))
+        meta.extra("security_count", report.pop("security_count"))
+        meta.extra("duplicate_groups", report.pop("duplicate_groups"))
+        meta.extra("dead_code_count", report.pop("dead_code_count"))
+        return report

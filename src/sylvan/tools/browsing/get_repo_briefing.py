@@ -1,41 +1,38 @@
 """MCP tool: get_repo_briefing -- structured repo orientation."""
 
-from sylvan.error_codes import SylvanError
-from sylvan.services.briefing import BriefingService
-from sylvan.tools.support.response import (
-    check_staleness,
-    ensure_orm,
-    get_meta,
-    log_tool_call,
-    wrap_response,
+from __future__ import annotations
+
+from sylvan.tools.base import (
+    HasRepo,
+    Tool,
+    ToolParams,
 )
 
 
-@log_tool_call
-async def get_repo_briefing(repo: str) -> dict:
-    """Get a structured orientation briefing for a repository.
+class GetRepoBriefing(Tool):
+    name = "get_repo_briefing"
+    category = "retrieval"
+    description = (
+        "Structured orientation for a repository - stats (files, symbols, "
+        "sections), directory tree with per-directory file counts, language "
+        "breakdown, and raw manifest contents (pyproject.toml, package.json, "
+        "go.mod, etc). One call replaces the typical 5-10 orientation calls. "
+        "Use this FIRST on unfamiliar repos to understand scale, structure, "
+        "and stack before diving into search_symbols."
+    )
 
-    Returns stats, directory structure, language breakdown, and manifest
-    contents for quick codebase orientation.
+    class Params(HasRepo, ToolParams):
+        pass
 
-    Args:
-        repo: Repository name.
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.briefing import BriefingService
+        from sylvan.tools.base.meta import get_meta
+        from sylvan.tools.support.response import check_staleness
 
-    Returns:
-        Tool response dict with briefing data and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
+        result = await BriefingService().get(p.repo)
 
-    try:
-        result = await BriefingService().get(repo)
-    except SylvanError as exc:
-        exc._meta = meta.build()
-        raise
+        repo_id = result.pop("repo_id")
 
-    repo_id = result.pop("repo_id")
-
-    meta.set("repo", repo)
-    response = wrap_response(result, meta.build())
-    await check_staleness(repo_id, response)
-    return response
+        get_meta().repo(p.repo)
+        await check_staleness(repo_id, result)
+        return result

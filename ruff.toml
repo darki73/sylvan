@@ -40,6 +40,9 @@ ignore = [
     "S603",     # subprocess-without-shell-equals-true — our git subprocess calls are safe
     "S607",     # start-process-with-partial-path — git/tree-sitter binaries are expected in PATH
     "S608",     # possible-sql-injection — ORM builds SQL from trusted column names, not user input
+    "S610",     # django-extra — false positive, our ToolMeta.extra() is not Django
+    "S602",     # subprocess-shell-true — hook builder tests must test actual shell commands
+    "PLW1510",  # subprocess-run-without-check — hook tests check output, not return code
 ]
 
 [lint.per-file-ignores]

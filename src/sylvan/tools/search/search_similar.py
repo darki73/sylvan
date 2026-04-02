@@ -1,56 +1,82 @@
 """MCP tool: search_similar_symbols -- vector similarity search from a source symbol."""
 
-from sylvan.error_codes import SylvanError
-from sylvan.services.search import SearchService
-from sylvan.tools.support.response import ensure_orm, get_meta, log_tool_call, wrap_response
+from __future__ import annotations
+
+from typing import Any
+
+from sylvan.tools.base import (
+    HasOptionalRepo,
+    HasSymbol,
+    MeasureMethod,
+    Tool,
+    ToolParams,
+    schema_field,
+)
+from sylvan.tools.base.meta import get_meta
 
 
-@log_tool_call
-async def search_similar_symbols(
-    symbol_id: str,
-    repo: str | None = None,
-    max_results: int = 10,
-) -> dict:
-    """Find symbols semantically similar to a given source symbol.
-
-    Looks up the source symbol's signature and docstring, then runs a
-    vector similarity search to find related code across the index.
-
-    Args:
-        symbol_id: The stable identifier of the source symbol.
-        repo: Optional repository name to restrict results to.
-        max_results: Maximum number of similar symbols to return.
-
-    Returns:
-        Tool response dict with ``source`` summary, ``similar`` list,
-        and ``_meta`` envelope.
-
-    Raises:
-        SymbolNotFoundError: If the source symbol does not exist.
-        RepoNotFoundError: If the repo filter does not match any indexed repo.
-    """
-    meta = get_meta()
-    ensure_orm()
-
-    try:
-        data = await SearchService().similar(symbol_id, repo=repo, max_results=max_results)
-    except SylvanError as exc:
-        exc._meta = meta.build()
-        raise
-
-    meta.set("results_count", data["results_count"])
-    meta.set("source_symbol", data["source_symbol"])
-
-    returned_tokens = data["returned_tokens"]
-    equivalent_tokens = data["equivalent_tokens"]
-    if returned_tokens > 0 and equivalent_tokens > 0:
-        meta.record_token_efficiency(returned_tokens, equivalent_tokens, method="byte_estimate")
-
-    repo_id = data["repo_id"]
-    if repo_id:
-        meta.set("repo_id", repo_id)
-
-    return wrap_response(
-        {"source": data["source"], "similar": data["similar"]},
-        meta.build(),
+class SearchSimilarSymbols(Tool):
+    name = "search_similar_symbols"
+    category = "search"
+    description = (
+        "Find symbols semantically similar to a given source symbol using "
+        "vector similarity search. Useful for discovering related code, "
+        "alternative implementations, or patterns similar to a known symbol. "
+        "Requires the source symbol's ID (from search_symbols or get_symbol)."
     )
+
+    class Params(HasSymbol, HasOptionalRepo, ToolParams):
+        max_results: int = schema_field(
+            default=10,
+            ge=1,
+            le=1000,
+            description="Maximum similar symbols to return (default: 10)",
+        )
+
+    async def handle(self, p: Params) -> dict:
+        from sylvan.error_codes import SylvanError
+        from sylvan.services.search import SearchService
+
+        try:
+            data = await SearchService().similar(
+                p.symbol_id,
+                repo=p.repo,
+                max_results=p.max_results,
+            )
+        except SylvanError as exc:
+            exc._meta = {}
+            raise
+
+        self._data = data
+
+        result: dict[str, Any] = {
+            "source": data["source"],
+            "similar": data["similar"],
+        }
+
+        meta = get_meta()
+        meta.results_count(data["results_count"])
+        meta.extra("source_symbol", data["source_symbol"])
+
+        repo_id = data["repo_id"]
+        if repo_id:
+            meta.repo_id(repo_id)
+
+        if result["similar"]:
+            first = result["similar"][0]
+            self.hints().next_symbol(first["symbol_id"]).apply(result)
+
+        return result
+
+    def measure(self, result: dict) -> tuple[int, int]:
+        data = getattr(self, "_data", None)
+        if data is None:
+            return 0, 0
+        return data.get("returned_tokens", 0), data.get("equivalent_tokens", 0)
+
+    def measure_method(self) -> str:
+        return MeasureMethod.BYTE_ESTIMATE
+
+
+async def search_similar_symbols(**kwargs: Any) -> dict:
+    return await SearchSimilarSymbols().execute(kwargs)

@@ -1,40 +1,43 @@
 """MCP tool: index_file -- surgical single-file reindex."""
 
-from sylvan.tools.support.response import ensure_orm, get_meta, inject_meta, log_tool_call, wrap_response
+from __future__ import annotations
+
+from typing import Any
+
+from sylvan.tools.base import HasFilePath, HasRepo, Tool, ToolParams
+from sylvan.tools.base.meta import get_meta
 
 
-@log_tool_call
-async def index_file(
-    repo: str,
-    file_path: str,
-) -> dict:
-    """Reindex a single file without touching the rest of the repo.
+class IndexFile(Tool):
+    name = "index_file"
+    category = "indexing"
+    description = (
+        "Surgical single-file reindex -- much faster than index_folder when you've "
+        "only edited one file. Use after editing a file to keep the index current."
+    )
 
-    Much cheaper than index_folder when only one file has changed.
+    class Params(HasRepo, HasFilePath, ToolParams):
+        pass
 
-    Args:
-        repo: Repository name (as shown in list_repos).
-        file_path: Relative path within the repo (e.g., "src/main.py").
-
-    Returns:
-        Tool response dict with indexing stats and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
-
-    from sylvan.error_codes import SylvanError
-
-    try:
+    async def handle(self, p: Params) -> dict:
+        from sylvan.error_codes import SylvanError
         from sylvan.services.indexing import index_file as _svc
 
-        result = await _svc(repo, file_path)
-    except SylvanError as exc:
-        raise inject_meta(exc, meta) from exc
+        try:
+            result = await _svc(p.repo, p.file_path)
+        except SylvanError as exc:
+            exc._meta = {}
+            raise
 
-    if "error" in result:
-        return wrap_response(result, meta.build())
+        if "error" in result:
+            return result
 
-    meta.set("status", result.get("status", "updated"))
-    meta.set("symbols_extracted", result.get("symbols_extracted", 0))
+        meta = get_meta()
+        meta.extra("status", result.get("status", "updated"))
+        meta.symbols_extracted(result.get("symbols_extracted", 0))
 
-    return wrap_response(result, meta.build())
+        return result
+
+
+async def index_file(**kwargs: Any) -> dict:
+    return await IndexFile().execute(kwargs)

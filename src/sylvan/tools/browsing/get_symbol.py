@@ -1,125 +1,139 @@
-"""MCP tool: get_symbol -- retrieve full source of a symbol."""
+"""MCP tools: get_symbol, get_symbols -- retrieve symbol source code."""
 
-from sylvan.error_codes import SylvanError
-from sylvan.services.symbol import SymbolService
-from sylvan.tools.support.response import (
-    check_staleness,
-    ensure_orm,
-    get_meta,
-    log_tool_call,
-    wrap_response,
+from __future__ import annotations
+
+from sylvan.tools.base import (
+    HasContextLines,
+    HasOptionalRepo,
+    HasSymbol,
+    HasSymbolIds,
+    HasVerify,
+    MeasureMethod,
+    Tool,
+    ToolParams,
 )
+from sylvan.tools.base.meta import get_meta
 
 
-@log_tool_call
-async def get_symbol(
-    symbol_id: str,
-    repo: str | None = None,
-    verify: bool = False,
-    context_lines: int = 0,
-) -> dict:
-    """Retrieve the full source code of a symbol by its ID.
+class GetSymbol(Tool):
+    name = "get_symbol"
+    category = "retrieval"
+    description = (
+        "PREFERRED over Read for viewing code. Retrieves the exact source of a "
+        "function, class, or method by ID -- without reading the entire file. "
+        "Returns only the symbol's source lines instead of the full file. "
+        "Use symbol IDs from search_symbols results. ALWAYS use this instead of "
+        "Read when you know the symbol name or have its ID."
+    )
 
-    Args:
-        symbol_id: The stable symbol identifier (e.g., 'path::ClassName.method#method').
-        verify: Re-hash content and warn if it has drifted since indexing.
-        context_lines: Number of surrounding lines to include (0-50).
+    class Params(HasSymbol, HasOptionalRepo, HasVerify, HasContextLines, ToolParams):
+        pass
 
-    Returns:
-        Tool response dict with symbol source and ``_meta`` envelope.
-
-    Raises:
-        SymbolNotFoundError: If no symbol with the given ID exists.
-        SourceNotAvailableError: If the symbol exists but its source blob is missing.
-    """
-    meta = get_meta()
-    ensure_orm()
-
-    svc = SymbolService().with_source().with_file()
-    if verify:
-        svc = svc.verified()
-    if context_lines > 0:
-        svc = svc.with_context_lines(context_lines)
-
-    try:
-        sym = await svc.find(symbol_id, repo=repo)
-    except SylvanError as exc:
-        exc._meta = meta.build()
-        raise
-
-    result = await sym._model.to_detail_dict()
-    if sym.context_lines and sym.context_lines > 0:
-        result["source"] = sym.source
-        result["context_lines"] = sym.context_lines
-
-    if sym.hash_verified is not None:
-        result["hash_verified"] = sym.hash_verified
-        if sym.drift_warning:
-            result["drift_warning"] = sym.drift_warning
-
-    if sym.source and sym.file_record:
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.symbol import SymbolService
+        from sylvan.tools.support.response import check_staleness
         from sylvan.tools.support.token_counting import count_tokens
 
-        file_content = await sym.file_record.get_content()
-        returned = count_tokens(sym.source)
-        if returned is not None and file_content:
-            file_text = file_content.decode("utf-8", errors="replace")
-            equivalent = count_tokens(file_text)
-            if equivalent and returned > 0 and equivalent > 0:
-                meta.record_token_efficiency(returned, equivalent)
+        svc = SymbolService().with_source().with_file()
+        if p.verify:
+            svc = svc.verified()
+        if p.context_lines > 0:
+            svc = svc.with_context_lines(p.context_lines)
 
-    response = wrap_response(result, meta.build(), include_hints=True)
+        sym = await svc.find(p.symbol_id, repo=p.repo)
 
-    if sym.file_record:
-        await check_staleness(sym.file_record.repo_id, response)
+        result = await sym._model.to_detail_dict()
+        if sym.context_lines and sym.context_lines > 0:
+            result["source"] = sym.source
+            result["context_lines"] = sym.context_lines
 
-    return response
+        if sym.hash_verified is not None:
+            result["hash_verified"] = sym.hash_verified
+            if sym.drift_warning:
+                result["drift_warning"] = sym.drift_warning
+
+        self._returned_tokens = 0
+        self._equivalent_tokens = 0
+        if sym.source and sym.file_record:
+            file_content = await sym.file_record.get_content()
+            returned = count_tokens(sym.source)
+            if returned is not None and file_content:
+                file_text = file_content.decode("utf-8", errors="replace")
+                equivalent = count_tokens(file_text)
+                if equivalent and returned > 0 and equivalent > 0:
+                    self._returned_tokens = returned
+                    self._equivalent_tokens = equivalent
+
+        repo_name = await sym._model._resolve_repo_name()
+        self.hints().for_symbol(
+            symbol_id=result.get("symbol_id", ""),
+            file_path=result.get("file", ""),
+            line_start=result.get("line_start"),
+            line_end=result.get("line_end"),
+            repo=repo_name or None,
+        ).apply(result)
+
+        if sym.file_record:
+            await check_staleness(sym.file_record.repo_id, result)
+
+        return result
+
+    def measure(self, result: dict) -> tuple[int, int]:
+        return getattr(self, "_returned_tokens", 0), getattr(self, "_equivalent_tokens", 0)
+
+    def measure_method(self) -> str:
+        return MeasureMethod.TIKTOKEN_CL100K
 
 
-@log_tool_call
-async def get_symbols(symbol_ids: list[str]) -> dict:
-    """Batch retrieve multiple symbols by ID.
+class GetSymbols(Tool):
+    name = "get_symbols"
+    category = "retrieval"
+    description = (
+        "Batch retrieve multiple symbols at once. More efficient than multiple "
+        "get_symbol calls or reading multiple files with Read."
+    )
 
-    Args:
-        symbol_ids: List of symbol identifiers.
+    class Params(HasSymbolIds, ToolParams):
+        pass
 
-    Returns:
-        Tool response dict with ``symbols`` list, ``not_found`` list,
-        and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.symbol import SymbolService
+        from sylvan.tools.support.response import check_staleness
 
-    svc = SymbolService().with_source().with_file()
-    found_results = await svc.find_many(symbol_ids)
+        svc = SymbolService().with_source().with_file()
+        found_results = await svc.find_many(p.symbol_ids)
 
-    found_ids = {r.symbol_id for r in found_results}
-    not_found = [sid for sid in symbol_ids if sid not in found_ids]
-    repo_ids: set[int] = set()
+        found_ids = {r.symbol_id for r in found_results}
+        not_found = [sid for sid in p.symbol_ids if sid not in found_ids]
+        repo_ids: set[int] = set()
 
-    symbols = []
-    for r in found_results:
-        if r.file_record:
-            repo_ids.add(r.file_record.repo_id)
-        file_path = await r._model._resolve_file_path()
-        symbols.append(
-            {
-                "symbol_id": r.symbol_id,
-                "name": r.name,
-                "kind": r.kind,
-                "language": r.language,
-                "file": file_path,
-                "signature": r.signature or "",
-                "source": r.source or "",
-            }
-        )
+        symbols = []
+        for r in found_results:
+            if r.file_record:
+                repo_ids.add(r.file_record.repo_id)
+            file_path = await r._model._resolve_file_path()
+            symbols.append(
+                {
+                    "symbol_id": r.symbol_id,
+                    "name": r.name,
+                    "kind": r.kind,
+                    "language": r.language,
+                    "file": file_path,
+                    "signature": r.signature or "",
+                    "source": r.source or "",
+                }
+            )
 
-    data = {"symbols": symbols, "not_found": not_found}
+        meta = get_meta()
+        meta.found(len(symbols))
+        meta.not_found_count(len(not_found))
 
-    meta.set("found", len(symbols))
-    meta.set("not_found", len(not_found))
+        result = {
+            "symbols": symbols,
+            "not_found": not_found,
+        }
 
-    response = wrap_response(data, meta.build())
-    for rid in repo_ids:
-        await check_staleness(rid, response)
-    return response
+        for rid in repo_ids:
+            await check_staleness(rid, result)
+
+        return result

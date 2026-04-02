@@ -1,71 +1,85 @@
-"""MCP tool: get_toc -- table of contents for indexed documentation."""
+"""MCP tools: get_toc, get_toc_tree -- documentation table of contents."""
 
-from sylvan.database.orm import Repo
-from sylvan.services.section import SectionService
-from sylvan.tools.support.response import (
-    check_staleness,
-    ensure_orm,
-    get_meta,
-    log_tool_call,
-    wrap_response,
+from __future__ import annotations
+
+from sylvan.tools.base import (
+    HasDocPath,
+    HasMaxDepth,
+    HasRepo,
+    Tool,
+    ToolParams,
 )
 
 
-@log_tool_call
-async def get_toc(
-    repo: str,
-    doc_path: str | None = None,
-) -> dict:
-    """Get a flat table of contents for indexed documentation.
+class GetToc(Tool):
+    name = "get_toc"
+    category = "retrieval"
+    description = (
+        "PREFERRED over Read for browsing documentation. Returns a structured "
+        "table of contents for all indexed docs -- every heading, section, and "
+        "their hierarchy. Use this to navigate docs instead of reading files."
+    )
 
-    Args:
-        repo: Repository name.
-        doc_path: Optional filter to a specific document path.
+    class Params(HasRepo, HasDocPath, ToolParams):
+        pass
 
-    Returns:
-        Tool response dict with ``toc`` list and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
+    async def handle(self, p: Params) -> dict:
+        from sylvan.database.orm import Repo
+        from sylvan.services.section import SectionService
+        from sylvan.tools.base.meta import get_meta
+        from sylvan.tools.support.response import check_staleness
 
-    data = await SectionService().toc(repo, doc_path=doc_path)
-    data.pop("repo_name")
+        data = await SectionService().toc(p.repo, doc_path=p.doc_path)
+        data.pop("repo_name")
 
-    meta.set("section_count", data.pop("section_count"))
-    response = wrap_response(data, meta.build())
-    repo_obj = await Repo.where(name=repo).first()
-    if repo_obj:
-        await check_staleness(repo_obj.id, response)
-    return response
+        get_meta().extra("section_count", data.pop("section_count"))
+        result = {**data}
+
+        repo_obj = await Repo.where(name=p.repo).first()
+        if repo_obj:
+            await check_staleness(repo_obj.id, result)
+
+        toc = result.get("toc", [])
+        if toc:
+            first = toc[0]
+            self.hints().next_tool("get_section", f"get_section(section_id='{first['section_id']}')").apply(result)
+
+        return result
 
 
-@log_tool_call
-async def get_toc_tree(repo: str, max_depth: int = 3) -> dict:
-    """Get a nested tree table of contents, grouped by document.
+class GetTocTree(Tool):
+    name = "get_toc_tree"
+    category = "retrieval"
+    description = (
+        "Nested tree table of contents grouped by document. Richer than get_toc "
+        "for multi-doc repos. Use max_depth to limit heading levels and reduce output size."
+    )
 
-    Args:
-        repo: Repository name.
-        max_depth: Max heading depth to include (1--6, default 3).
+    class Params(HasRepo, HasMaxDepth, ToolParams):
+        pass
 
-    Returns:
-        Tool response dict with ``tree`` list and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
+    async def handle(self, p: Params) -> dict:
+        from sylvan.database.orm import Repo
+        from sylvan.services.section import SectionService
+        from sylvan.tools.base.meta import get_meta
+        from sylvan.tools.support.response import check_staleness
 
-    data = await SectionService().toc_tree(repo, max_depth=max_depth)
-    data.pop("repo_name")
+        data = await SectionService().toc_tree(p.repo, max_depth=p.max_depth)
+        data.pop("repo_name")
 
-    meta.set("document_count", data.pop("document_count"))
-    meta.set("section_count", data.pop("section_count"))
-    truncated = data.pop("truncated_sections", None)
-    depth = data.pop("max_depth", None)
-    if truncated:
-        meta.set("truncated_sections", truncated)
-        meta.set("max_depth", depth)
+        meta = get_meta()
+        meta.extra("document_count", data.pop("document_count"))
+        meta.extra("section_count", data.pop("section_count"))
+        truncated = data.pop("truncated_sections", None)
+        depth = data.pop("max_depth", None)
+        if truncated:
+            meta.extra("truncated_sections", truncated)
+            meta.extra("max_depth", depth)
 
-    response = wrap_response(data, meta.build())
-    repo_obj = await Repo.where(name=repo).first()
-    if repo_obj:
-        await check_staleness(repo_obj.id, response)
-    return response
+        result = {**data}
+
+        repo_obj = await Repo.where(name=p.repo).first()
+        if repo_obj:
+            await check_staleness(repo_obj.id, result)
+
+        return result

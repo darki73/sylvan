@@ -1,22 +1,30 @@
 """MCP tool: remove_library -- remove an indexed library."""
 
-from sylvan.tools.support.response import get_meta, log_tool_call, wrap_response
+from __future__ import annotations
+
+from typing import Any
+
+from sylvan.tools.base import Tool, ToolParams, schema_field
 
 
-@log_tool_call
-async def remove_library(name: str) -> dict:
-    """Remove an indexed library and its source files.
+class RemoveLibrary(Tool):
+    name = "remove_library"
+    category = "meta"
+    description = "Remove an indexed library and its source files from disk."
 
-    Args:
-        name: Library name like ``"django@4.2"`` or ``"pip/django@4.2"``.
+    class Params(ToolParams):
+        name: str = schema_field(
+            description="Library name (e.g., django@4.2)",
+        )
 
-    Returns:
-        Tool response dict with removal status and ``_meta`` envelope.
-    """
-    meta = get_meta()
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.library import remove_library as _svc
+        from sylvan.tools.base.meta import get_meta
 
-    from sylvan.services.library import remove_library as _svc
+        result = await _svc(p.name)
+        get_meta().extra("status", result.get("status", ""))
+        return result
 
-    result = await _svc(name)
-    meta.set("status", result.get("status", ""))
-    return wrap_response(result, meta.build())
+
+async def remove_library(**kwargs: Any) -> dict:
+    return await RemoveLibrary().execute(kwargs)

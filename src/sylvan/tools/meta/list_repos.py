@@ -1,24 +1,27 @@
 """MCP tool: list_repos -- list all indexed repositories."""
 
-from sylvan.tools.support.response import ensure_orm, get_meta, log_tool_call, wrap_response
+from sylvan.tools.base import Tool, ToolParams
+from sylvan.tools.base.meta import get_meta
 
 
-@log_tool_call
-async def list_repos() -> dict:
-    """List all indexed repositories with summary statistics.
+class ListRepos(Tool):
+    name = "list_repos"
+    category = "meta"
+    description = (
+        "List all indexed repositories. Check this FIRST to see if a repo is "
+        "already indexed before using index_folder. Shows file count, symbol "
+        "count, and indexing timestamp."
+    )
 
-    Returns:
-        Tool response dict with ``repos`` list and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
+    class Params(ToolParams):
+        pass
 
-    from sylvan.services.repository import RepositoryService
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.repository import RepositoryService
 
-    repos = await RepositoryService().with_stats().get()
-    meta.set("count", len(repos))
-    return wrap_response(
-        {
+        repos = await RepositoryService().with_stats().get()
+        get_meta().results_count(len(repos))
+        return {
             "repos": [
                 {
                     "id": r.id,
@@ -31,7 +34,9 @@ async def list_repos() -> dict:
                     "symbol_count": r.stats["symbols"],
                 }
                 for r in repos
-            ]
-        },
-        meta.build(),
-    )
+            ],
+        }
+
+
+async def list_repos(**_kwargs: object) -> dict:
+    return await ListRepos().execute({})

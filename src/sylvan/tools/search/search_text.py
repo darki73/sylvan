@@ -1,52 +1,72 @@
 """MCP tool: search_text -- full-text search across file content."""
 
-from sylvan.services.search import SearchService
-from sylvan.tools.support.response import ensure_orm, get_meta, log_tool_call, wrap_response
+from __future__ import annotations
+
+from typing import Any
+
+from sylvan.tools.base import (
+    HasContextLines,
+    HasFileFilter,
+    HasOptionalRepo,
+    HasPagination,
+    HasQuery,
+    MeasureMethod,
+    Tool,
+    ToolParams,
+)
+from sylvan.tools.base.meta import get_meta
 
 
-@log_tool_call
-async def search_text(
-    query: str,
-    repo: str | None = None,
-    file_pattern: str | None = None,
-    max_results: int = 20,
-    context_lines: int = 2,
-) -> dict:
-    """Search across file content for text matches (like grep).
-
-    Searches cached blob content without hitting the filesystem.
-
-    Args:
-        query: Text to search for (case-insensitive).
-        repo: Repository name filter.
-        file_pattern: Glob pattern to filter by file path.
-        max_results: Maximum matches to return.
-        context_lines: Number of surrounding lines per match.
-
-    Returns:
-        Tool response dict with ``matches`` list and ``_meta`` envelope.
-    """
-    meta = get_meta()
-    ensure_orm()
-
-    data = await SearchService().text(
-        query,
-        repo=repo,
-        file_pattern=file_pattern,
-        max_results=max_results,
-        context_lines=context_lines,
+class SearchText(Tool):
+    name = "search_text"
+    category = "search"
+    description = (
+        "Full-text search across all indexed file content -- like Grep but searches "
+        "cached content without hitting the filesystem. Use for comments, strings, "
+        "TODOs, or literal text that search_symbols wouldn't find."
     )
 
-    meta.set("results_count", data["results_count"])
-    meta.set("query", data["query"])
+    class Params(HasQuery, HasOptionalRepo, HasFileFilter, HasPagination, HasContextLines, ToolParams):
+        pass
 
-    returned_tokens = data["returned_tokens"]
-    equivalent_tokens = data["equivalent_tokens"]
-    if returned_tokens > 0 and equivalent_tokens > 0:
-        meta.record_token_efficiency(returned_tokens, equivalent_tokens, method="byte_estimate")
+    async def handle(self, p: Params) -> dict:
+        from sylvan.services.search import SearchService
 
-    repo_id = data["repo_id"]
-    if repo_id:
-        meta.set("repo_id", repo_id)
+        data = await SearchService().text(
+            p.query,
+            repo=p.repo,
+            file_pattern=p.file_pattern,
+            max_results=p.max_results,
+            context_lines=p.context_lines,
+        )
 
-    return wrap_response({"matches": data["matches"]}, meta.build())
+        self._data = data
+
+        result: dict[str, Any] = {"matches": data["matches"]}
+
+        meta = get_meta()
+        meta.results_count(data["results_count"])
+        meta.query(data["query"])
+
+        repo_id = data["repo_id"]
+        if repo_id:
+            meta.repo_id(repo_id)
+
+        if result["matches"]:
+            first = result["matches"][0]
+            self.hints().read(first["file_path"], first["line"], first["line"]).apply(result)
+
+        return result
+
+    def measure(self, result: dict) -> tuple[int, int]:
+        data = getattr(self, "_data", None)
+        if data is None:
+            return 0, 0
+        return data.get("returned_tokens", 0), data.get("equivalent_tokens", 0)
+
+    def measure_method(self) -> str:
+        return MeasureMethod.BYTE_ESTIMATE
+
+
+async def search_text(**kwargs: Any) -> dict:
+    return await SearchText().execute(kwargs)

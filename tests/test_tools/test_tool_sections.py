@@ -66,9 +66,9 @@ async def indexed_repo(tmp_path):
 
 async def _get_section_ids():
     """Helper: get available section IDs via get_toc."""
-    from sylvan.tools.browsing.get_toc import get_toc
+    from sylvan.tools.browsing.get_toc import GetToc
 
-    resp = await get_toc(repo="test-repo")
+    resp = await GetToc().execute({"repo": "test-repo"})
     return [entry["section_id"] for entry in resp["toc"]]
 
 
@@ -86,7 +86,7 @@ class TestSearchSections:
         assert "section_id" in sec
         assert "title" in sec
         assert "level" in sec
-        assert "file" in sec
+        assert "doc_path" in sec
         assert "repo" in sec
 
     async def test_empty_query_returns_error(self, indexed_repo):
@@ -113,14 +113,14 @@ class TestGetSection:
         section_ids = await _get_section_ids()
         assert len(section_ids) >= 1
 
-        from sylvan.tools.browsing.get_section import get_section
+        from sylvan.tools.browsing.get_section import GetSection
 
-        resp = await get_section(section_ids[0])
+        resp = await GetSection().execute({"section_id": section_ids[0]})
 
         assert "content" in resp
         assert "title" in resp
         assert "level" in resp
-        assert "file" in resp
+        assert "doc_path" in resp
         assert "repo" in resp
         assert "section_id" in resp
         assert "_meta" in resp
@@ -133,14 +133,13 @@ class TestGetSection:
 
     async def test_section_not_found(self, indexed_repo):
         from sylvan.error_codes import SectionNotFoundError
-        from sylvan.tools.browsing.get_section import get_section
+        from sylvan.tools.browsing.get_section import GetSection
 
         with pytest.raises(SectionNotFoundError) as exc_info:
-            await get_section("nonexistent-section-id")
+            await GetSection().execute({"section_id": "nonexistent-section-id"})
 
         resp = exc_info.value.to_dict()
         assert resp["error"] == "section_not_found"
-        assert "_meta" in resp
 
 
 class TestGetSectionsBatch:
@@ -148,9 +147,9 @@ class TestGetSectionsBatch:
         section_ids = await _get_section_ids()
         assert len(section_ids) >= 2
 
-        from sylvan.tools.browsing.get_section import get_sections
+        from sylvan.tools.browsing.get_section import GetSections
 
-        resp = await get_sections(section_ids[:2])
+        resp = await GetSections().execute({"section_ids": section_ids[:2]})
 
         assert "sections" in resp
         assert "not_found" in resp
@@ -167,20 +166,20 @@ class TestGetSectionsBatch:
         section_ids = await _get_section_ids()
         fake_id = "fake-section-abc"
 
-        from sylvan.tools.browsing.get_section import get_sections
+        from sylvan.tools.browsing.get_section import GetSections
 
-        resp = await get_sections([section_ids[0], fake_id])
+        resp = await GetSections().execute({"section_ids": [section_ids[0], fake_id]})
 
         assert resp["_meta"]["found"] == 1
-        assert resp["_meta"]["not_found"] == 1
+        assert resp["_meta"]["not_found_count"] == 1
         assert fake_id in resp["not_found"]
 
 
 class TestGetToc:
     async def test_returns_hierarchy(self, indexed_repo):
-        from sylvan.tools.browsing.get_toc import get_toc
+        from sylvan.tools.browsing.get_toc import GetToc
 
-        resp = await get_toc(repo="test-repo")
+        resp = await GetToc().execute({"repo": "test-repo"})
 
         assert "toc" in resp
         assert "_meta" in resp
@@ -190,7 +189,7 @@ class TestGetToc:
         assert "section_id" in entry
         assert "title" in entry
         assert "level" in entry
-        assert "file" in entry
+        assert "doc_path" in entry
         assert "summary" in entry
 
         meta = resp["_meta"]
@@ -198,20 +197,20 @@ class TestGetToc:
         assert meta["section_count"] >= 3
 
     async def test_toc_with_doc_path_filter(self, indexed_repo):
-        from sylvan.tools.browsing.get_toc import get_toc
+        from sylvan.tools.browsing.get_toc import GetToc
 
-        resp = await get_toc(repo="test-repo", doc_path="README.md")
+        resp = await GetToc().execute({"repo": "test-repo", "doc_path": "README.md"})
 
         assert "toc" in resp
         for entry in resp["toc"]:
-            assert entry["file"] == "README.md"
+            assert entry["doc_path"] == "README.md"
 
 
 class TestGetTocTree:
     async def test_returns_nested_structure(self, indexed_repo):
-        from sylvan.tools.browsing.get_toc import get_toc_tree
+        from sylvan.tools.browsing.get_toc import GetTocTree
 
-        resp = await get_toc_tree(repo="test-repo")
+        resp = await GetTocTree().execute({"repo": "test-repo"})
 
         assert "tree" in resp
         assert "_meta" in resp
@@ -222,7 +221,7 @@ class TestGetTocTree:
         assert "section_count" in meta
 
         doc = resp["tree"][0]
-        assert "file" in doc
+        assert "doc_path" in doc
         assert "sections" in doc
         assert isinstance(doc["sections"], list)
         assert len(doc["sections"]) >= 1

@@ -1,37 +1,33 @@
 """MCP tool: remove_repo -- delete an indexed repository and all its data."""
 
-from sylvan.tools.support.response import ensure_orm, get_meta, inject_meta, log_tool_call, wrap_response
+from sylvan.tools.base import HasRepo, Tool, ToolParams
 
 
-@log_tool_call
-async def remove_repo(repo: str) -> dict:
-    """Delete an indexed repository and all associated data.
+class RemoveRepo(Tool):
+    name = "remove_repo"
+    category = "meta"
+    description = (
+        "Delete an indexed repository and ALL its data (files, symbols, "
+        "sections, imports, quality records, references). This is permanent "
+        "and cannot be undone. Use list_repos first to verify the repo name."
+    )
 
-    Removes usage_stats, workspace_repos, references, quality, imports,
-    sections, symbols, files, and the repo record in FK-safe order
-    using ORM subquery chains inside a transaction.
+    class Params(HasRepo, ToolParams):
+        pass
 
-    Args:
-        repo: The repository name to remove.
-
-    Returns:
-        Tool response dict with per-table deletion counts and ``_meta`` envelope.
-
-    Raises:
-        RepoNotFoundError: If no repository with the given name exists.
-    """
-    meta = get_meta()
-    ensure_orm()
-
-    from sylvan.error_codes import SylvanError
-
-    try:
+    async def handle(self, p: Params) -> dict:
         from sylvan.services.repository import RepositoryService
+        from sylvan.tools.base.meta import get_meta
 
-        result = await RepositoryService().remove(repo)
-    except SylvanError as exc:
-        raise inject_meta(exc, meta) from exc
+        result = await RepositoryService().remove(p.repo)
+        meta = get_meta()
+        meta.repo(result["repo"])
+        meta.repo_id(result["repo_id"])
+        return {
+            "status": "removed",
+            "repo": result["repo"],
+        }
 
-    meta.set("repo", result["repo"])
-    meta.set("repo_id", result["repo_id"])
-    return wrap_response({"status": "removed", "repo": result["repo"]}, meta.build())
+
+async def remove_repo(repo: str, **_kwargs: object) -> dict:
+    return await RemoveRepo().execute({"repo": repo})
