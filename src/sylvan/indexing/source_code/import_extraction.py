@@ -34,6 +34,14 @@ def extract_imports(content: str, file_path: str, language: str) -> list[dict]:
         "stylus": _extract_stylus_imports,
     }
 
+    if language == "json":
+        try:
+            from sylvan.indexing.source_code.json_extractor import extract_json_imports
+
+            return extract_json_imports(content, file_path)
+        except Exception:
+            return []
+
     extractor = extractors.get(language)
     if extractor is None:
         return []

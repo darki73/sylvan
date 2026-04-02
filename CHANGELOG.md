@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.9.1
+
+### Complexity metrics at index time
+
+Per-symbol cyclomatic complexity, max nesting depth, and parameter count computed during indexing. Stored directly on the symbols table via new columns (migration 005).
+
+- Language-aware decision point patterns for Python, JS/TS, Go, Rust, Java, C#, Ruby, PHP, Swift, Dart
+- Comment and string stripping before counting (keywords in comments don't inflate scores)
+- Correct McCabe methodology (else is not a decision point, ternary `?` counted for JS/TS/Java)
+- Nesting depth via auto-detected indentation (Python) or string-aware brace counting (C-family)
+- Parameter counting with self/cls exclusion (Python) and &self/&mut self exclusion (Rust)
+- Quality system reads stored complexity instead of recomputing from blobs
+
+### Git churn and hotspot detection
+
+New `get_hotspots` tool combines cyclomatic complexity with git churn rate to find risky code using Adam Tornhill's methodology (hotspot_score = cyclomatic x log(1 + commits)).
+
+- `get_file_churn()` returns commit count, unique authors, churn_per_week, assessment
+- `first_seen` uses `git log --diff-filter=A` to find actual file creation date (not just oldest in window)
+- Tool params: days (1-365), top_n (1-100), min_complexity (default 2)
+- Results sorted by hotspot score with low/medium/high assessment
+
+### JSON deep extraction
+
+Schema-aware symbol extraction from JSON files.
+
+- **package.json**: name/version/description/main/module/types as constants, scripts as functions, dependencies/devDependencies/peerDependencies/optionalDependencies as versioned constants, engines as types, exports map
+- **tsconfig.json / jsconfig.json**: compilerOptions as constants, paths as import edges, extends as import reference, include/exclude/files
+- **Generic JSON**: top-level keys as constants, depth-1 nested keys with parent prefix
+- Line numbers resolved per key from source content
+- Nested key scoping prevents incorrect line matches across sections
+- Import extraction for package dependencies, tsconfig paths, and tsconfig extends (feeds dependency graph)
+
 ## 1.9.0
 
 ### Tool framework rewrite

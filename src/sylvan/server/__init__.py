@@ -663,6 +663,7 @@ def _import_all_tool_modules() -> None:
     import sylvan.tools.analysis.get_class_hierarchy
     import sylvan.tools.analysis.get_dependency_graph
     import sylvan.tools.analysis.get_git_context
+    import sylvan.tools.analysis.get_hotspots
     import sylvan.tools.analysis.get_quality
     import sylvan.tools.analysis.get_quality_report
     import sylvan.tools.analysis.get_recent_changes

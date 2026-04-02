@@ -37,6 +37,7 @@ async def compute_quality_metrics(
             "symbols.docstring",
             "symbols.byte_offset",
             "symbols.byte_length",
+            "symbols.cyclomatic",
             "f.content_hash",
             "f.path",
         )
@@ -70,14 +71,18 @@ async def compute_quality_metrics(
         has_docs = len(docstring.strip()) > 10
         has_types = _has_type_annotations(sig)
 
-        complexity = 0
-        content_hash = getattr(sym, "content_hash", None)
-        if content_hash:
-            content = await Blob.get(content_hash)
-            if content:
-                source = content[sym.byte_offset : sym.byte_offset + sym.byte_length]
-                source_text = source.decode("utf-8", errors="replace")
-                complexity = _estimate_complexity(source_text)
+        stored_cyclomatic = getattr(sym, "cyclomatic", 0) or 0
+        if stored_cyclomatic > 0:
+            complexity = stored_cyclomatic
+        else:
+            complexity = 0
+            content_hash = getattr(sym, "content_hash", None)
+            if content_hash:
+                content = await Blob.get(content_hash)
+                if content:
+                    source = content[sym.byte_offset : sym.byte_offset + sym.byte_length]
+                    source_text = source.decode("utf-8", errors="replace")
+                    complexity = _estimate_complexity(source_text)
 
         await Quality.insert_or_replace(
             symbol_id=sym.symbol_id,
@@ -136,7 +141,18 @@ async def get_low_quality_symbols(
     """
     query = (
         Quality.query()
-        .select("quality.*", "s.name", "s.qualified_name", "s.kind", "s.language", "s.signature", "f.path as file_path")
+        .select(
+            "quality.*",
+            "s.name",
+            "s.qualified_name",
+            "s.kind",
+            "s.language",
+            "s.signature",
+            "s.cyclomatic as sym_cyclomatic",
+            "s.max_nesting",
+            "s.param_count",
+            "f.path as file_path",
+        )
         .join("symbols s", "s.symbol_id = quality.symbol_id")
         .join("files f", "f.id = s.file_id")
         .join("repos r", "r.id = f.repo_id")
@@ -163,6 +179,9 @@ async def get_low_quality_symbols(
             "has_docs": r.has_docs,
             "has_types": r.has_types,
             "complexity": r.complexity,
+            "cyclomatic": getattr(r, "sym_cyclomatic", None) or r.complexity,
+            "max_nesting": getattr(r, "max_nesting", 0) or 0,
+            "param_count": getattr(r, "param_count", 0) or 0,
             "change_frequency": r.change_frequency,
             "last_changed": r.last_changed,
             "name": getattr(r, "name", None),

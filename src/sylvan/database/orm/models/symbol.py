@@ -84,6 +84,15 @@ class Symbol(Model):
     content_hash = Column(str, nullable=True)
     """Hash of the symbol's source content for change detection."""
 
+    cyclomatic = Column(int, default=0)
+    """Cyclomatic complexity score."""
+
+    max_nesting = Column(int, default=0)
+    """Maximum nesting depth."""
+
+    param_count = Column(int, default=0)
+    """Number of parameters in the signature."""
+
     file = BelongsTo("FileRecord", foreign_key="file_id")
     """Parent file record."""
 

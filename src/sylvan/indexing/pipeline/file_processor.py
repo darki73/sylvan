@@ -261,6 +261,9 @@ async def _persist_result(
                         "byte_offset": sym.byte_offset,
                         "byte_length": sym.byte_length,
                         "content_hash": sym.content_hash,
+                        "cyclomatic": getattr(sym, "cyclomatic", 0) or 0,
+                        "max_nesting": getattr(sym, "max_nesting", 0) or 0,
+                        "param_count": getattr(sym, "param_count", 0) or 0,
                     }
                 )
             await Symbol.bulk_upsert(
@@ -282,6 +285,9 @@ async def _persist_result(
                     "byte_offset",
                     "byte_length",
                     "content_hash",
+                    "cyclomatic",
+                    "max_nesting",
+                    "param_count",
                 ],
             )
             symbols_count = len(sym_records)
@@ -469,6 +475,9 @@ async def _upsert_symbol_without_parent(sym: object, file_id: int) -> None:
             "byte_offset",
             "byte_length",
             "content_hash",
+            "cyclomatic",
+            "max_nesting",
+            "param_count",
         ],
         file_id=file_id,
         symbol_id=sym.symbol_id,
@@ -486,6 +495,9 @@ async def _upsert_symbol_without_parent(sym: object, file_id: int) -> None:
         byte_offset=sym.byte_offset,
         byte_length=sym.byte_length,
         content_hash=sym.content_hash,
+        cyclomatic=getattr(sym, "cyclomatic", 0) or 0,
+        max_nesting=getattr(sym, "max_nesting", 0) or 0,
+        param_count=getattr(sym, "param_count", 0) or 0,
     )
 
 
