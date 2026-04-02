@@ -154,6 +154,8 @@ LANGUAGE_EXTENSIONS: dict[str, str] = {
     # XML
     ".xml": "xml",
     ".xul": "xml",
+    # JSON
+    ".json": "json",
 }
 """Mapping of file extensions to language identifiers."""
 
@@ -810,6 +812,7 @@ LANGUAGE_REGISTRY: dict[str, LanguageSpec] = {
 CUSTOM_EXTRACTION_LANGUAGES: frozenset[str] = frozenset(
     {
         "asm",
+        "json",
         "less",
         "scss",
         "stylus",

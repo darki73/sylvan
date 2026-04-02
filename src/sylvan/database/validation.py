@@ -91,6 +91,9 @@ class Symbol:
     byte_offset: int = 0
     byte_length: int = 0
     content_hash: str | None = None
+    cyclomatic: int = 0
+    max_nesting: int = 0
+    param_count: int = 0
 
 
 class SymbolKind(StrEnum):

@@ -13,6 +13,7 @@ import hashlib
 from tree_sitter_language_pack import get_parser
 
 from sylvan.database.validation import Symbol, make_symbol_id
+from sylvan.indexing.source_code.complexity import compute_complexity
 from sylvan.indexing.source_code.language_specs import LanguageSpec, get_spec
 from sylvan.indexing.source_code.stylesheet_extractor import (
     extract_less_extras,
@@ -90,6 +91,11 @@ def parse_file(content: str, filename: str, language: str) -> list[Symbol]:
     Returns:
         List of Symbol objects extracted from the file.
     """
+    if language == "json":
+        from sylvan.indexing.source_code.json_extractor import extract_json_symbols
+
+        return extract_json_symbols(content, filename)
+
     vue_byte_offset = 0
     if language == "vue":
         script_content, language, vue_byte_offset = _extract_vue_script(content)
@@ -469,6 +475,9 @@ def _extract_symbol(
 
     summary = heuristic_summary(docstring, signature, name)
 
+    source_text = symbol_bytes.decode("utf-8", errors="replace")
+    metrics = compute_complexity(source_text, language)
+
     sym = Symbol(
         symbol_id=make_symbol_id(filename, qualified_name, kind),
         name=name,
@@ -486,5 +495,8 @@ def _extract_symbol(
         byte_offset=start,
         byte_length=end - start,
         content_hash=content_hash,
+        cyclomatic=metrics["cyclomatic"],
+        max_nesting=metrics["max_nesting"],
+        param_count=metrics["param_count"],
     )
     return sym
