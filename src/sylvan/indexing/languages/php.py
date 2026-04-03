@@ -52,9 +52,9 @@ _PHP_DECISION = re.compile(r"\b(if|for|while|case|catch)\b|&&|\|\||\?(?=[^:])")
         docstring_strategy="preceding_comment",
         decorator_node_type=None,
         container_node_types=[
-            "class_body",
-            "declaration_list",
-            "enum_declaration_list",
+            "class_declaration",
+            "interface_declaration",
+            "trait_declaration",
         ],
         constant_patterns=["const_declaration", "property_declaration"],
     ),
