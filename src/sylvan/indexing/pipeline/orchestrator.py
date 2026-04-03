@@ -214,8 +214,15 @@ async def index_folder(
     async with backend.transaction():
         await _purge_deleted_files(repo_id, discovered_paths)
 
-    from sylvan.indexing.pipeline.import_resolver import resolve_imports
+    from sylvan.git.dependency_files import parse_composer_autoload, parse_tsconfig_aliases
+    from sylvan.indexing.pipeline.import_resolver import (
+        resolve_imports,
+        set_psr4_mappings,
+        set_tsconfig_aliases,
+    )
 
+    set_psr4_mappings(repo_id, parse_composer_autoload(root))
+    set_tsconfig_aliases(repo_id, parse_tsconfig_aliases(root))
     result.imports_resolved = await resolve_imports(repo_id)
 
     await _enrich_ecosystem_context(root, repo_id)

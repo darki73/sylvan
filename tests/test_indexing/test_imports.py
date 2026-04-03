@@ -171,6 +171,52 @@ class TestJavaScriptDynamicImports:
         assert "./dynamic.js" in specifiers
 
 
+class TestPhpImports:
+    def test_simple_use(self):
+        code = "<?php\nuse App\\Models\\User;\n"
+        result = extract_imports(code, "index.php", "php")
+        assert len(result) == 1
+        assert result[0]["specifier"] == "App\\Models\\User"
+
+    def test_use_with_alias(self):
+        code = "<?php\nuse App\\Models\\User as AppUser;\n"
+        result = extract_imports(code, "index.php", "php")
+        assert len(result) == 1
+        assert result[0]["specifier"] == "App\\Models\\User"
+
+    def test_use_function(self):
+        code = "<?php\nuse function App\\Helpers\\format_date;\n"
+        result = extract_imports(code, "index.php", "php")
+        assert len(result) == 1
+        assert result[0]["specifier"] == "App\\Helpers\\format_date"
+
+    def test_use_const(self):
+        code = "<?php\nuse const App\\Config\\VERSION;\n"
+        result = extract_imports(code, "index.php", "php")
+        assert len(result) == 1
+        assert result[0]["specifier"] == "App\\Config\\VERSION"
+
+    def test_group_use(self):
+        code = "<?php\nuse App\\Models\\{User, Team, Role};\n"
+        result = extract_imports(code, "index.php", "php")
+        specifiers = [r["specifier"] for r in result]
+        assert "App\\Models\\User" in specifiers
+        assert "App\\Models\\Team" in specifiers
+        assert "App\\Models\\Role" in specifiers
+
+    def test_group_use_with_alias(self):
+        code = "<?php\nuse App\\Models\\{User as AppUser, Team};\n"
+        result = extract_imports(code, "index.php", "php")
+        specifiers = [r["specifier"] for r in result]
+        assert "App\\Models\\User" in specifiers
+        assert "App\\Models\\Team" in specifiers
+
+    def test_multiple_use_statements(self):
+        code = "<?php\nuse App\\Models\\User;\nuse App\\Services\\AuthService;\n"
+        result = extract_imports(code, "index.php", "php")
+        assert len(result) == 2
+
+
 class TestUnknownLanguage:
     def test_returns_empty_for_unknown(self):
         result = extract_imports("some code", "file.xyz", "unknown_lang")

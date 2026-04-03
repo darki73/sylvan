@@ -8,65 +8,18 @@ from __future__ import annotations
 
 import re
 
-# McCabe decision points per language (else is NOT a decision point).
-# Each keyword represents a path fork.
-_PYTHON_DECISION = re.compile(
-    r"\b(if|elif|for|while|except|and|or|assert)\b"
-    r"|\bif\s+.*\s+else\s+"  # inline ternary
+_GENERIC_DECISION = re.compile(
+    r"\b(if|elif|for|while|case|catch|except)\b"
+    r"|&&|\|\||(?<!\w)and\b|(?<!\w)or\b"
 )
-_JS_DECISION = re.compile(
-    r"\b(if|for|while|case|catch)\b"
-    r"|&&|\|\||\?\?|\?(?=[^:])"  # logical ops + ternary
-)
-_GO_DECISION = re.compile(r"\b(if|for|case|select)\b|&&|\|\|")
-_RUST_DECISION = re.compile(r"\b(if|for|while|loop|match)\b|=>")
-_JAVA_DECISION = re.compile(r"\b(if|for|while|case|catch)\b|&&|\|\||\?(?=[^:])")
-_GENERIC_DECISION = re.compile(r"\b(if|elif|for|while|case|catch|except)\b|&&|\|\||(?<!\w)and\b|(?<!\w)or\b")
 
-_DECISION_PATTERNS: dict[str, re.Pattern[str]] = {
-    "python": _PYTHON_DECISION,
-    "javascript": _JS_DECISION,
-    "typescript": _JS_DECISION,
-    "tsx": _JS_DECISION,
-    "go": _GO_DECISION,
-    "rust": _RUST_DECISION,
-    "java": _JAVA_DECISION,
-    "kotlin": _JAVA_DECISION,
-    "c_sharp": _JAVA_DECISION,
-    "c": _GENERIC_DECISION,
-    "cpp": _GENERIC_DECISION,
-    "php": _JAVA_DECISION,
-    "swift": _JAVA_DECISION,
-    "ruby": _PYTHON_DECISION,
-    "dart": _JAVA_DECISION,
-}
-
-# Comment/string stripping per language family
+# Comment/string stripping patterns.
 _LINE_COMMENT = re.compile(r"//.*$|#.*$", re.MULTILINE)
 _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 _TRIPLE_STRING = re.compile(r'""".*?"""|\'\'\'.*?\'\'\'', re.DOTALL)
 _DOUBLE_STRING = re.compile(r'"(?:[^"\\]|\\.)*"')
 _SINGLE_STRING = re.compile(r"'(?:[^'\\]|\\.)*'")
 _TEMPLATE_STRING = re.compile(r"`(?:[^`\\]|\\.)*`")
-
-_BRACE_LANGUAGES = frozenset(
-    {
-        "javascript",
-        "typescript",
-        "tsx",
-        "go",
-        "rust",
-        "java",
-        "kotlin",
-        "c_sharp",
-        "c",
-        "cpp",
-        "php",
-        "swift",
-        "dart",
-        "scala",
-    }
-)
 
 _PARAM_SPLIT = re.compile(r",(?![^<\[({]*[>\])}])")
 
@@ -89,7 +42,15 @@ def compute_complexity(source: str, language: str) -> dict[str, int]:
 
 
 def _strip_noise(source: str, language: str) -> str:
-    """Remove comments and string literals so they don't inflate counts."""
+    """Remove comments and string literals so they don't inflate counts.
+
+    Args:
+        source: Raw source text.
+        language: Language identifier.
+
+    Returns:
+        Cleaned source with comments and strings removed.
+    """
     if language == "python":
         text = _TRIPLE_STRING.sub("", source)
         text = re.sub(r"#.*$", "", text, flags=re.MULTILINE)
@@ -106,17 +67,35 @@ def _strip_noise(source: str, language: str) -> str:
 def _cyclomatic(source: str, language: str) -> int:
     """Cyclomatic complexity: 1 + decision point count.
 
-    Comments and strings are stripped first so keywords inside
-    them don't inflate the score.
+    Args:
+        source: Raw source text.
+        language: Language identifier.
+
+    Returns:
+        Cyclomatic complexity score.
     """
+    from sylvan.indexing.languages import get_complexity_provider
+
     clean = _strip_noise(source, language)
-    pattern = _DECISION_PATTERNS.get(language, _GENERIC_DECISION)
+    provider = get_complexity_provider(language)
+    pattern = provider.decision_pattern if provider else _GENERIC_DECISION
     return 1 + len(pattern.findall(clean))
 
 
 def _max_nesting(source: str, language: str) -> int:
-    """Max nesting depth from indentation or brace counting."""
-    if language in _BRACE_LANGUAGES:
+    """Max nesting depth from indentation or brace counting.
+
+    Args:
+        source: Raw source text.
+        language: Language identifier.
+
+    Returns:
+        Maximum nesting depth.
+    """
+    from sylvan.indexing.languages import get_complexity_provider
+
+    provider = get_complexity_provider(language)
+    if provider and provider.uses_braces:
         return _brace_nesting(source)
     return _indent_nesting(source)
 
@@ -126,6 +105,12 @@ def _indent_nesting(source: str) -> int:
 
     Auto-detects indent width from the first indented line
     instead of assuming 4 spaces.
+
+    Args:
+        source: Raw source text.
+
+    Returns:
+        Maximum nesting depth.
     """
     lines = source.split("\n")
     if not lines:
@@ -164,7 +149,14 @@ def _indent_nesting(source: str) -> int:
 
 
 def _brace_nesting(source: str) -> int:
-    """Max nesting from brace depth, skipping strings."""
+    """Max nesting from brace depth, skipping strings.
+
+    Args:
+        source: Raw source text.
+
+    Returns:
+        Maximum brace nesting depth.
+    """
     depth = 0
     max_depth = 0
     in_string = None
@@ -187,7 +179,15 @@ def _brace_nesting(source: str) -> int:
 
 
 def _param_count(source: str, language: str) -> int:
-    """Count parameters from the first parenthesised group."""
+    """Count parameters from the first parenthesised group.
+
+    Args:
+        source: Raw source text.
+        language: Language identifier.
+
+    Returns:
+        Number of parameters.
+    """
     first_paren = source.find("(")
     if first_paren == -1:
         return 0
@@ -210,22 +210,12 @@ def _param_count(source: str, language: str) -> int:
     if not params_str:
         return 0
 
-    # Strip Python self/cls receiver
-    if language == "python":
-        if params_str in ("self", "cls"):
-            return 0
-        for prefix in ("self,", "cls,"):
-            if params_str.startswith(prefix):
-                params_str = params_str[len(prefix) :].strip()
-                break
+    from sylvan.indexing.languages import get_complexity_provider
 
-    # Strip Rust &self/&mut self receiver
-    if language == "rust":
-        for prefix in ("&mut self,", "&self,", "mut self,", "self,"):
-            if params_str.startswith(prefix):
-                params_str = params_str[len(prefix) :].strip()
-                break
-        if params_str in ("&self", "&mut self", "self", "mut self"):
+    provider = get_complexity_provider(language)
+    if provider:
+        params_str = provider.strip_receiver(params_str)
+        if not params_str:
             return 0
 
     parts = _PARAM_SPLIT.split(params_str)

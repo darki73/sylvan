@@ -1,11 +1,15 @@
 # Adding Languages
 
-Language support is driven by `LanguageSpec` -- a frozen dataclass that tells
-the tree-sitter extractor which AST node types map to symbols, where to find
-names and parameters, and how to extract docstrings. All specs live in a single
-registry dict.
+Language support is plugin-based. Each language is a Python module that
+registers a tree-sitter spec and optionally provides import extraction,
+import resolution, and complexity analysis.
 
-**Quick start:** To add a language without modifying sylvan's source, create a Python file in `~/.sylvan/extensions/languages/` that uses `@register_language`. See the extension example below, then restart the server.
+**Without modifying source:** Drop a `.py` file in `~/.sylvan/extensions/languages/`
+that uses the `@register` decorator. Restart the server. See the user extension
+example below.
+
+**Built-in languages:** Create a module in `src/sylvan/indexing/languages/` and
+add it to `_load_builtin_languages` in `__init__.py`.
 
 ## The LanguageSpec dataclass
 
@@ -41,6 +45,20 @@ class LanguageSpec:
 | `constant_patterns` | AST patterns for detecting top-level constants |
 | `type_patterns` | AST patterns for detecting type definitions |
 
+## Capability protocols
+
+Languages can optionally implement these protocols to provide richer
+functionality beyond tree-sitter symbol extraction:
+
+| Protocol | Purpose | Method |
+|---|---|---|
+| `ImportExtractor` | Extract import statements from source | `extract_imports(content) -> list[dict]` |
+| `ImportResolver` | Resolve import specifiers to file paths | `generate_candidates(specifier, source_path, context) -> list[str]` |
+| `ComplexityProvider` | Cyclomatic complexity patterns | `decision_pattern`, `uses_braces`, `strip_receiver(params_str)` |
+
+A language only needs to implement the protocols it supports. A tree-sitter-only
+language (like Lua or Haskell) needs none of them.
+
 ## Adding a language: step by step
 
 ### 1. Verify tree-sitter support
@@ -69,49 +87,120 @@ print(tree.root_node.sexp())
 ```
 
 Look for node types like `function_definition`, `class_definition`,
-`method_declaration`, etc. Note the child field names -- these go into
+`method_declaration`, etc. Note the child field names - these go into
 `name_fields` and `param_fields`.
 
-### 3. Add the spec to LANGUAGE_REGISTRY
+### 3. Create the language module
+
+For a tree-sitter-only language, add it to `_tree_sitter_only.py`:
 
 ```python
-# src/sylvan/indexing/source_code/language_specs.py
+# src/sylvan/indexing/languages/_tree_sitter_only.py
 
-LANGUAGE_REGISTRY: dict[str, LanguageSpec] = {
+_SPECS = {
     # ... existing languages ...
-
-    "your_language": LanguageSpec(
-        ts_language="your_language",
-        symbol_node_types={
-            "function_definition": "function",
-            "class_definition": "class",
-        },
-        name_fields={
-            "function_definition": "name",
-            "class_definition": "name",
-        },
-        param_fields={
-            "function_definition": "parameters",
-        },
-        docstring_strategy="preceding_comment",
-        container_node_types=["class_definition"],
+    "your_language": (
+        [".yl", ".ylx"],
+        LanguageSpec(
+            ts_language="your_language",
+            symbol_node_types={
+                "function_definition": "function",
+                "class_definition": "class",
+            },
+            name_fields={
+                "function_definition": "name",
+                "class_definition": "name",
+            },
+            docstring_strategy="preceding_comment",
+            container_node_types=["class_definition"],
+        ),
     ),
 }
 ```
 
-### 4. Add file extensions to LANGUAGE_EXTENSIONS
+For a language with import extraction and resolution, create a dedicated module:
 
 ```python
-# Same file, near the top
+# src/sylvan/indexing/languages/your_language.py
 
-LANGUAGE_EXTENSIONS: dict[str, str] = {
-    # ... existing mappings ...
-    ".yl": "your_language",
-    ".ylx": "your_language",
-}
+import re
+from typing import TYPE_CHECKING
+
+from sylvan.indexing.languages import register
+from sylvan.indexing.source_code.language_specs import LanguageSpec
+
+if TYPE_CHECKING:
+    from sylvan.indexing.languages.protocols import ResolverContext
+
+_IMPORT_RE = re.compile(r"^\s*import\s+(\w+)", re.MULTILINE)
+_DECISION = re.compile(r"\b(if|for|while|case)\b")
+
+
+@register(
+    name="your_language",
+    extensions=[".yl", ".ylx"],
+    spec=LanguageSpec(
+        ts_language="your_language",
+        symbol_node_types={"function_definition": "function"},
+        name_fields={"function_definition": "name"},
+        docstring_strategy="preceding_comment",
+    ),
+)
+class YourLanguage:
+    def extract_imports(self, content: str) -> list[dict]:
+        return [
+            {"specifier": m.group(1), "names": []}
+            for m in _IMPORT_RE.finditer(content)
+        ]
+
+    def generate_candidates(
+        self, specifier: str, source_path: str, context: ResolverContext,
+    ) -> list[str]:
+        return [f"{specifier}.yl", f"src/{specifier}.yl"]
+
+    decision_pattern = _DECISION
+    uses_braces = True
+
+    def strip_receiver(self, params_str: str) -> str:
+        return params_str
 ```
 
-### 5. Verify
+### 4. Register the module
+
+Add the import to `_load_builtin_languages` in `src/sylvan/indexing/languages/__init__.py`:
+
+```python
+def _load_builtin_languages() -> None:
+    from sylvan.indexing.languages import (
+        # ... existing imports ...
+        your_language,
+    )
+```
+
+### 5. Language aliases
+
+If multiple language names share the same plugin (like TypeScript and JavaScript
+sharing import extraction), use `register_alias`:
+
+```python
+from sylvan.indexing.languages import register_alias
+
+register_alias(
+    name="your_dialect",
+    extensions=[".yld"],
+    spec=LanguageSpec(
+        ts_language="your_dialect",
+        symbol_node_types={...},
+        name_fields={...},
+    ),
+    plugin_cls=YourLanguage,
+)
+```
+
+The alias gets its own tree-sitter spec but shares the plugin instance's
+extraction, resolution, and complexity capabilities.
+
+### 6. Verify
 
 ```bash
 uv run python -c "
@@ -124,77 +213,116 @@ print('OK')
 "
 ```
 
-## Example: a simple language (Lua)
+## Example: tree-sitter only (Lua)
+
+Lua only has function declarations - no classes, no types. It goes in
+`_tree_sitter_only.py` since it doesn't need import extraction or resolution.
 
 ```python
-"lua": LanguageSpec(
-    ts_language="lua",
-    symbol_node_types={
-        "function_declaration": "function",
-    },
-    name_fields={
-        "function_declaration": "name",
-    },
-    docstring_strategy="preceding_comment",
+"lua": (
+    [".lua"],
+    LanguageSpec(
+        ts_language="lua",
+        symbol_node_types={"function_declaration": "function"},
+        name_fields={"function_declaration": "name"},
+        docstring_strategy="preceding_comment",
+    ),
 ),
 ```
 
-Lua only has function declarations at the top level -- no classes, no types. The
-spec is minimal.
+## Example: full plugin (PHP)
 
-## Example: a complex language (TypeScript)
-
-```python
-"typescript": LanguageSpec(
-    ts_language="typescript",
-    symbol_node_types={
-        "function_declaration": "function",
-        "class_declaration": "class",
-        "method_definition": "method",
-        "interface_declaration": "type",
-        "type_alias_declaration": "type",
-        "enum_declaration": "type",
-    },
-    name_fields={
-        "function_declaration": "name",
-        "class_declaration": "name",
-        "method_definition": "name",
-        "interface_declaration": "name",
-        "type_alias_declaration": "name",
-        "enum_declaration": "name",
-    },
-    param_fields={
-        "function_declaration": "parameters",
-        "method_definition": "parameters",
-    },
-    return_type_fields={
-        "function_declaration": "return_type",
-        "method_definition": "return_type",
-    },
-    docstring_strategy="preceding_comment",
-    decorator_node_type="decorator",
-    container_node_types=["class_declaration", "class"],
-),
-```
-
-TypeScript has functions, classes, methods, interfaces, type aliases, and enums.
-Methods live inside class containers, so `container_node_types` includes
-`"class_declaration"`.
-
-## Custom extraction languages
-
-Some languages (ASM, Vue, CSS, TOML, YAML) use custom extraction logic instead
-of the standard tree-sitter walker. These are listed in
-`CUSTOM_EXTRACTION_LANGUAGES`:
+PHP has import extraction (use statements with group syntax), import resolution
+(PSR-4 via composer.json), and complexity analysis.
 
 ```python
-CUSTOM_EXTRACTION_LANGUAGES: frozenset[str] = frozenset({
-    "asm", "vue", "css", "toml", "yaml",
-})
+# src/sylvan/indexing/languages/php.py
+
+@register(
+    name="php",
+    extensions=[".php"],
+    spec=LanguageSpec(
+        ts_language="php",
+        symbol_node_types={
+            "function_definition": "function",
+            "class_declaration": "class",
+            "method_declaration": "method",
+            "interface_declaration": "type",
+            "trait_declaration": "type",
+            "enum_declaration": "type",
+        },
+        name_fields={...},
+        param_fields={...},
+        container_node_types=["class_declaration", "interface_declaration", "trait_declaration"],
+    ),
+)
+class PhpLanguage:
+    def extract_imports(self, content): ...    # use statements + group use
+    def generate_candidates(self, ...): ...    # PSR-4 resolution from composer.json
+    decision_pattern = _PHP_DECISION
+    uses_braces = True
+    def strip_receiver(self, params_str): ...
 ```
 
-If your language needs special handling beyond what `LanguageSpec` provides, add
-it to this set and implement a custom extractor.
+The resolver reads PSR-4 mappings from the `ResolverContext` which the orchestrator
+populates from `composer.json` before resolution runs.
+
+## User extensions (no source modification)
+
+Drop a `.py` file in `~/.sylvan/extensions/languages/` and restart the server.
+The extension loader imports it automatically, firing any `@register` decorators.
+
+```python
+# ~/.sylvan/extensions/languages/zig.py
+
+from sylvan.indexing.languages import register
+from sylvan.indexing.source_code.language_specs import LanguageSpec
+
+
+@register(
+    name="zig",
+    extensions=[".zig"],
+    spec=LanguageSpec(
+        ts_language="zig",
+        symbol_node_types={
+            "FnDecl": "function",
+            "TestDecl": "function",
+        },
+        name_fields={
+            "FnDecl": "name",
+            "TestDecl": "name",
+        },
+        docstring_strategy="preceding_comment",
+    ),
+)
+class ZigLanguage:
+    pass
+```
+
+This registers Zig for tree-sitter extraction. Add `extract_imports` or
+`generate_candidates` methods to the class to enable import extraction
+and resolution.
+
+## Architecture
+
+```
+src/sylvan/indexing/languages/
+    __init__.py          # register(), register_alias(), capability lookups
+    protocols.py         # ImportExtractor, ImportResolver, ComplexityProvider
+    python.py            # Python plugin (full capabilities)
+    javascript.py        # JS/TS/TSX/JSX (with tsconfig alias resolution)
+    php.py               # PHP (with PSR-4 resolution)
+    go.py, rust.py, ...  # Other full plugins
+    stylesheets.py       # SCSS/LESS/Stylus (import extraction only)
+    swift.py             # Swift (import extraction only)
+    _tree_sitter_only.py # 20+ languages with tree-sitter specs only
+```
+
+The `@register` decorator stores the spec in the base registry and inspects the
+class for protocol conformance. Dispatchers in `import_extraction.py`,
+`import_resolver.py`, and `complexity.py` look up the appropriate plugin via
+`get_import_extractor()`, `get_import_resolver()`, and
+`get_complexity_provider()`.
 
 ## Testing
 

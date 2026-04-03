@@ -1,6 +1,6 @@
 [project]
 name = "sylvan"
-version = "1.9.1"
+version = "1.9.2"
 description = "Code intelligence MCP server for token-efficient code retrieval, analysis, and refactoring"
 readme = "README.md"
 authors = [
