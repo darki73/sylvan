@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.9.2
+
+### PHP import resolution
+
+PHP `use` statements now resolve to actual file paths via composer.json PSR-4/PSR-0 autoload mappings. Group use syntax (`use Foo\{Bar, Baz}`) supported. Works with any PHP project that has a composer.json - no framework detection needed.
+
+### TypeScript/JavaScript path alias resolution
+
+tsconfig.json `compilerOptions.paths` aliases (`@/*`, `$lib/*`, `~/`, etc.) now resolve during import resolution. Handles `extends` chains, `baseUrl`, multiple tsconfig files in subdirectories, and JS-style comments in tsconfig.
+
+### Language plugin architecture
+
+Language-specific logic (import extraction, import resolution, complexity patterns) moved from scattered dispatchers into per-language plugin modules under `src/sylvan/indexing/languages/`. Each language is a single file declaring a tree-sitter spec and optionally implementing extraction, resolution, and complexity protocols. Adding a language now means creating one file instead of editing four.
+
+User extensions in `~/.sylvan/extensions/languages/` use the same `@register` decorator.
+
+### Storage layer separation
+
+File processor's 197-line `_persist_result` split into focused modules: `file_store`, `symbol_store`, `import_store`, `section_store`.
+
 ## 1.9.1
 
 ### Complexity metrics at index time
