@@ -162,6 +162,163 @@ class TestPhpCandidates:
         candidates = _generate_candidates("App\\Models\\User", "php", "index.php")
         assert "App/Models/User.php" in candidates
 
+    def test_psr4_resolves_correctly(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_psr4
+        try:
+            mod._current_psr4 = {"App\\": ["app/"]}
+            candidates = _generate_candidates("App\\Models\\User", "php", "index.php")
+            assert candidates[0] == "app/Models/User.php"
+        finally:
+            mod._current_psr4 = old
+
+    def test_psr4_longest_prefix_wins(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_psr4
+        try:
+            mod._current_psr4 = {
+                "App\\": ["app/"],
+                "App\\Models\\": ["custom/models/"],
+            }
+            candidates = _generate_candidates("App\\Models\\User", "php", "index.php")
+            assert candidates[0] == "custom/models/User.php"
+        finally:
+            mod._current_psr4 = old
+
+    def test_psr4_multiple_directories(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_psr4
+        try:
+            mod._current_psr4 = {"App\\": ["app/", "src/App/"]}
+            candidates = _generate_candidates("App\\Models\\User", "php", "index.php")
+            assert "app/Models/User.php" in candidates
+            assert "src/App/Models/User.php" in candidates
+        finally:
+            mod._current_psr4 = old
+
+    def test_psr4_no_match_falls_back(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_psr4
+        try:
+            mod._current_psr4 = {"Vendor\\": ["vendor/src/"]}
+            candidates = _generate_candidates("App\\Models\\User", "php", "index.php")
+            assert "App/Models/User.php" in candidates
+        finally:
+            mod._current_psr4 = old
+
+    def test_psr4_dev_autoload(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_psr4
+        try:
+            mod._current_psr4 = {"Tests\\": ["tests/"]}
+            candidates = _generate_candidates("Tests\\Feature\\ExampleTest", "php", "index.php")
+            assert candidates[0] == "tests/Feature/ExampleTest.php"
+        finally:
+            mod._current_psr4 = old
+
+    def test_psr4_deep_namespace(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_psr4
+        try:
+            mod._current_psr4 = {
+                "App\\": ["app/"],
+                "Database\\Factories\\": ["database/factories/"],
+                "Database\\Seeders\\": ["database/seeders/"],
+            }
+            candidates = _generate_candidates("Database\\Factories\\UserFactory", "php", "index.php")
+            assert candidates[0] == "database/factories/UserFactory.php"
+        finally:
+            mod._current_psr4 = old
+
+
+class TestJsTsconfigAliases:
+    def test_at_alias_resolves(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_ts_aliases
+        try:
+            mod._current_ts_aliases = {"@": ["resources/js"]}
+            candidates = _generate_candidates("@/components/ui/button", "typescript", "src/app.tsx")
+            assert "resources/js/components/ui/button.tsx" in candidates
+        finally:
+            mod._current_ts_aliases = old
+
+    def test_tilde_alias_resolves(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_ts_aliases
+        try:
+            mod._current_ts_aliases = {"~": ["src"]}
+            candidates = _generate_candidates("~/utils/helpers", "tsx", "pages/index.tsx")
+            assert "src/utils/helpers.ts" in candidates
+        finally:
+            mod._current_ts_aliases = old
+
+    def test_sveltekit_lib_alias(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_ts_aliases
+        try:
+            mod._current_ts_aliases = {"$lib": ["src/lib"]}
+            candidates = _generate_candidates("$lib/server/db", "typescript", "src/routes/+page.ts")
+            assert "src/lib/server/db.ts" in candidates
+        finally:
+            mod._current_ts_aliases = old
+
+    def test_no_alias_match_falls_through(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_ts_aliases
+        try:
+            mod._current_ts_aliases = {"@": ["resources/js"]}
+            candidates = _generate_candidates("react", "typescript", "src/app.tsx")
+            assert candidates == []
+        finally:
+            mod._current_ts_aliases = old
+
+    def test_relative_import_unaffected(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_ts_aliases
+        try:
+            mod._current_ts_aliases = {"@": ["resources/js"]}
+            candidates = _generate_candidates("./utils", "typescript", "src/app.ts")
+            assert "src/utils" in candidates
+            assert "src/utils.ts" in candidates
+        finally:
+            mod._current_ts_aliases = old
+
+    def test_longest_alias_wins(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_ts_aliases
+        try:
+            mod._current_ts_aliases = {
+                "@": ["resources/js"],
+                "@/components": ["resources/js/components/custom"],
+            }
+            candidates = _generate_candidates("@/components/button", "tsx", "src/app.tsx")
+            assert candidates[0] == "resources/js/components/custom/button"
+        finally:
+            mod._current_ts_aliases = old
+
+    def test_vue_extension_generated(self):
+        import sylvan.indexing.pipeline.import_resolver as mod
+
+        old = mod._current_ts_aliases
+        try:
+            mod._current_ts_aliases = {"@": ["src"]}
+            candidates = _generate_candidates("@/components/Header", "typescript", "src/app.ts")
+            assert "src/components/Header.vue" in candidates
+        finally:
+            mod._current_ts_aliases = old
+
 
 class TestCSharpCandidates:
     def test_namespace_import(self):

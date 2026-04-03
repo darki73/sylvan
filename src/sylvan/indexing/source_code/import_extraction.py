@@ -278,12 +278,19 @@ def _extract_ruby_imports(content: str) -> list[dict]:
     return [{"specifier": m.group(1), "names": []} for m in _RUBY_REQUIRE_RE.finditer(content)]
 
 
-_PHP_USE_RE = re.compile(r"^\s*use\s+([\w\\]+)(?:\s+as\s+\w+)?\s*;", re.MULTILINE)
-"""Matches PHP use statements."""
+_PHP_USE_RE = re.compile(r"^\s*use\s+(?:function\s+|const\s+)?([\w\\]+)(?:\s+as\s+\w+)?\s*;", re.MULTILINE)
+
+_PHP_GROUP_USE_RE = re.compile(
+    r"^\s*use\s+(?:function\s+|const\s+)?([\w\\]+)\\{([^}]+)}\s*;",
+    re.MULTILINE,
+)
 
 
 def _extract_php_imports(content: str) -> list[dict]:
-    """Extract PHP use statements.
+    """Extract PHP use statements including group imports.
+
+    Handles ``use Foo\\Bar;``, ``use function Foo\\bar;``,
+    ``use const Foo\\BAR;``, and ``use Foo\\{Bar, Baz};``.
 
     Args:
         content: PHP source code.
@@ -291,7 +298,16 @@ def _extract_php_imports(content: str) -> list[dict]:
     Returns:
         List of import dicts with specifier and names.
     """
-    return [{"specifier": m.group(1), "names": []} for m in _PHP_USE_RE.finditer(content)]
+    results = [{"specifier": m.group(1), "names": []} for m in _PHP_USE_RE.finditer(content)]
+
+    for m in _PHP_GROUP_USE_RE.finditer(content):
+        prefix = m.group(1)
+        for name in m.group(2).split(","):
+            name = name.strip().split(" as ")[0].strip()
+            if name:
+                results.append({"specifier": f"{prefix}\\{name}", "names": []})
+
+    return results
 
 
 _SWIFT_IMPORT_RE = re.compile(r"^\s*import\s+(\w+)", re.MULTILINE)

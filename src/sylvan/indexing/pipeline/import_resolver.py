@@ -13,6 +13,41 @@ from sylvan.logging import get_logger
 
 logger = get_logger(__name__)
 
+_psr4_mappings: dict[int, dict[str, list[str]]] = {}
+_current_psr4: dict[str, list[str]] = {}
+
+_tsconfig_aliases: dict[int, dict[str, list[str]]] = {}
+_current_ts_aliases: dict[str, list[str]] = {}
+
+
+def set_psr4_mappings(repo_id: int, mappings: dict[str, list[str]]) -> None:
+    """Register PSR-4 autoload mappings for a repo.
+
+    Args:
+        repo_id: Repository database ID.
+        mappings: Namespace prefix to directory list mapping from composer.json.
+    """
+    if mappings:
+        _psr4_mappings[repo_id] = mappings
+    else:
+        _psr4_mappings.pop(repo_id, None)
+
+
+def set_tsconfig_aliases(repo_id: int, aliases: dict[str, list[str]]) -> None:
+    """Register tsconfig path aliases for a repo.
+
+    Args:
+        repo_id: Repository database ID.
+        aliases: Alias pattern to resolved path list mapping from tsconfig.json.
+            Patterns have their trailing ``/*`` stripped - e.g. ``@`` maps to
+            ``["resources/js"]``.
+    """
+    if aliases:
+        _tsconfig_aliases[repo_id] = aliases
+    else:
+        _tsconfig_aliases.pop(repo_id, None)
+
+
 # Go standard library packages (single-segment, no dots).
 _GO_STDLIB = frozenset(
     {
@@ -163,6 +198,10 @@ async def resolve_imports(repo_id: int) -> int:
     resolved_count = 0
     updates: list[tuple[int, int]] = []  # (resolved_file_id, import_id)
 
+    global _current_psr4, _current_ts_aliases
+    _current_psr4 = _psr4_mappings.get(repo_id, {})
+    _current_ts_aliases = _tsconfig_aliases.get(repo_id, {})
+
     for row in rows:
         specifier = row["specifier"]
         language = row["language"]
@@ -176,6 +215,9 @@ async def resolve_imports(repo_id: int) -> int:
                 updates.append((file_id, row["id"]))
                 resolved_count += 1
                 break
+
+    _current_psr4 = {}
+    _current_ts_aliases = {}
 
     if updates:
         from sylvan.database.orm import FileImport
@@ -305,13 +347,22 @@ def _python_relative_candidates(specifier: str, source_path: str) -> list[str]:
 def _js_candidates(specifier: str, source_path: str) -> list[str]:
     """Generate candidate paths for a JS/TS import specifier.
 
+    Handles relative imports, tsconfig path aliases (e.g. ``@/lib/utils``),
+    and rejects bare npm package specifiers.
+
     Args:
-        specifier: Import specifier (e.g. ``./utils``, ``react``).
+        specifier: Import specifier (e.g. ``./utils``, ``@/lib/utils``, ``react``).
         source_path: Relative path of the importing file.
 
     Returns:
         Candidate file paths.
     """
+    # Try tsconfig path alias expansion first.
+    if _current_ts_aliases and not specifier.startswith("."):
+        expanded = _expand_ts_alias(specifier)
+        if expanded is not None:
+            return _js_extension_candidates(expanded)
+
     # Skip bare specifiers (npm packages).
     if not specifier.startswith(".") and not specifier.startswith("/"):
         return []
@@ -319,10 +370,43 @@ def _js_candidates(specifier: str, source_path: str) -> list[str]:
     source_dir = posixpath.dirname(source_path)
     resolved = posixpath.normpath(posixpath.join(source_dir, specifier))
 
+    return _js_extension_candidates(resolved)
+
+
+def _expand_ts_alias(specifier: str) -> str | None:
+    """Expand a tsconfig path alias to a repo-relative path.
+
+    Tries each alias prefix (longest first) against the specifier.
+    Returns the first match or None.
+
+    Args:
+        specifier: Import specifier (e.g. ``@/lib/utils``).
+
+    Returns:
+        Expanded repo-relative path without extension, or None.
+    """
+    for alias in sorted(_current_ts_aliases, key=len, reverse=True):
+        if specifier == alias or specifier.startswith(alias + "/"):
+            remainder = specifier[len(alias) :].lstrip("/")
+            for target_dir in _current_ts_aliases[alias]:
+                if remainder:
+                    return f"{target_dir}/{remainder}"
+                return target_dir
+    return None
+
+
+def _js_extension_candidates(resolved: str) -> list[str]:
+    """Generate extension variants for a resolved JS/TS path.
+
+    Args:
+        resolved: Repo-relative path without extension.
+
+    Returns:
+        Candidate file paths with various extensions.
+    """
     candidates = [resolved]
 
-    # If the specifier already has a file extension, just use as-is.
-    if _has_js_extension(specifier):
+    if _has_js_extension(resolved):
         return candidates
 
     for ext in (".js", ".ts", ".tsx", ".jsx", ".mjs", ".vue"):
@@ -508,6 +592,9 @@ def _ruby_candidates(specifier: str, source_path: str) -> list[str]:
 def _php_candidates(specifier: str, source_path: str) -> list[str]:
     """Generate candidate paths for a PHP use/require specifier.
 
+    Uses PSR-4/PSR-0 autoload mappings from composer.json when available,
+    falling back to naive backslash-to-slash conversion with common prefixes.
+
     Args:
         specifier: PHP namespace path (e.g. ``App\\Models\\User``).
         source_path: Relative path of the importing file.
@@ -515,14 +602,30 @@ def _php_candidates(specifier: str, source_path: str) -> list[str]:
     Returns:
         Candidate file paths.
     """
-    # Convert backslashes to forward slashes.
-    path_base = specifier.replace("\\", "/")
+    candidates: list[str] = []
 
-    candidates = [
-        f"{path_base}.php",
-        f"src/{path_base}.php",
-        f"app/{path_base}.php",
-    ]
+    # Try PSR-4 mappings first (longest/most-specific prefix wins).
+    if _current_psr4:
+        for prefix in sorted(_current_psr4, key=len, reverse=True):
+            ns_prefix = prefix.rstrip("\\")
+            if specifier == ns_prefix or specifier.startswith(ns_prefix + "\\"):
+                relative = specifier[len(ns_prefix) :].lstrip("\\")
+                relative_path = relative.replace("\\", "/")
+                for base_dir in _current_psr4[prefix]:
+                    if relative_path:
+                        candidates.append(f"{base_dir}{relative_path}.php")
+                    else:
+                        # Exact prefix match with no relative part.
+                        candidates.append(f"{base_dir}.php")
+                if candidates:
+                    break
+
+    # Fallback: naive conversion (for repos without composer.json).
+    path_base = specifier.replace("\\", "/")
+    candidates.append(f"{path_base}.php")
+    candidates.append(f"src/{path_base}.php")
+    candidates.append(f"app/{path_base}.php")
+
     return candidates
 
 

@@ -9,7 +9,9 @@ from sylvan.git.dependency_files import (
     _parse_go_mod,
     _parse_package_json,
     _parse_requirements_txt,
+    parse_composer_autoload,
     parse_dependencies,
+    parse_tsconfig_aliases,
 )
 
 
@@ -254,3 +256,277 @@ class TestParseDependencies:
         managers = {d["manager"] for d in deps}
         assert "pip" in managers
         assert "npm" in managers
+
+
+class TestParseComposerAutoload:
+    def test_psr4_mappings(self, tmp_path):
+        (tmp_path / "composer.json").write_text(
+            json.dumps(
+                {
+                    "autoload": {"psr-4": {"App\\": "app/"}},
+                    "autoload-dev": {"psr-4": {"Tests\\": "tests/"}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = parse_composer_autoload(tmp_path)
+        assert result == {"App\\": ["app/"], "Tests\\": ["tests/"]}
+
+    def test_multiple_prefixes(self, tmp_path):
+        (tmp_path / "composer.json").write_text(
+            json.dumps(
+                {
+                    "autoload": {
+                        "psr-4": {
+                            "App\\": "app/",
+                            "Database\\Factories\\": "database/factories/",
+                            "Database\\Seeders\\": "database/seeders/",
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = parse_composer_autoload(tmp_path)
+        assert "App\\" in result
+        assert "Database\\Factories\\" in result
+        assert "Database\\Seeders\\" in result
+
+    def test_array_directories(self, tmp_path):
+        (tmp_path / "composer.json").write_text(
+            json.dumps(
+                {
+                    "autoload": {"psr-4": {"App\\": ["app/", "src/"]}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = parse_composer_autoload(tmp_path)
+        assert result == {"App\\": ["app/", "src/"]}
+
+    def test_missing_composer_json(self, tmp_path):
+        assert parse_composer_autoload(tmp_path) == {}
+
+    def test_no_autoload_section(self, tmp_path):
+        (tmp_path / "composer.json").write_text(
+            json.dumps({"name": "test/pkg", "require": {"php": ">=8.1"}}),
+            encoding="utf-8",
+        )
+        assert parse_composer_autoload(tmp_path) == {}
+
+    def test_invalid_json(self, tmp_path):
+        (tmp_path / "composer.json").write_text("not json {{{", encoding="utf-8")
+        assert parse_composer_autoload(tmp_path) == {}
+
+    def test_normalizes_trailing_slash(self, tmp_path):
+        (tmp_path / "composer.json").write_text(
+            json.dumps({"autoload": {"psr-4": {"App\\": "app"}}}),
+            encoding="utf-8",
+        )
+        result = parse_composer_autoload(tmp_path)
+        assert result["App\\"] == ["app/"]
+
+    def test_normalizes_trailing_backslash(self, tmp_path):
+        (tmp_path / "composer.json").write_text(
+            json.dumps({"autoload": {"psr-4": {"App": "app/"}}}),
+            encoding="utf-8",
+        )
+        result = parse_composer_autoload(tmp_path)
+        assert "App\\" in result
+
+    def test_merges_autoload_and_dev(self, tmp_path):
+        (tmp_path / "composer.json").write_text(
+            json.dumps(
+                {
+                    "autoload": {"psr-4": {"App\\": "app/"}},
+                    "autoload-dev": {"psr-4": {"App\\": "tests/app/"}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = parse_composer_autoload(tmp_path)
+        assert "app/" in result["App\\"]
+        assert "tests/app/" in result["App\\"]
+
+    def test_psr0_mappings(self, tmp_path):
+        (tmp_path / "composer.json").write_text(
+            json.dumps({"autoload": {"psr-0": {"Legacy\\": "lib/"}}}),
+            encoding="utf-8",
+        )
+        result = parse_composer_autoload(tmp_path)
+        assert result == {"Legacy\\": ["lib/"]}
+
+
+class TestParseTsconfigAliases:
+    def test_simple_at_alias(self, tmp_path):
+        (tmp_path / "tsconfig.json").write_text(
+            json.dumps(
+                {
+                    "compilerOptions": {
+                        "paths": {"@/*": ["./src/*"]},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = parse_tsconfig_aliases(tmp_path)
+        assert result == {"@": ["src"]}
+
+    def test_multiple_aliases(self, tmp_path):
+        (tmp_path / "tsconfig.json").write_text(
+            json.dumps(
+                {
+                    "compilerOptions": {
+                        "paths": {
+                            "@/*": ["./resources/js/*"],
+                            "ziggy-js": ["./vendor/tightenco/ziggy"],
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = parse_tsconfig_aliases(tmp_path)
+        assert result["@"] == ["resources/js"]
+        assert result["ziggy-js"] == ["vendor/tightenco/ziggy"]
+
+    def test_baseurl_respected(self, tmp_path):
+        (tmp_path / "tsconfig.json").write_text(
+            json.dumps(
+                {
+                    "compilerOptions": {
+                        "baseUrl": "./src",
+                        "paths": {"@/*": ["./*"]},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = parse_tsconfig_aliases(tmp_path)
+        assert result == {"@": ["src"]}
+
+    def test_extends_chain(self, tmp_path):
+        (tmp_path / "tsconfig.base.json").write_text(
+            json.dumps(
+                {
+                    "compilerOptions": {
+                        "paths": {"@/*": ["./src/*"]},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "tsconfig.json").write_text(
+            json.dumps({"extends": "./tsconfig.base.json"}),
+            encoding="utf-8",
+        )
+        result = parse_tsconfig_aliases(tmp_path)
+        assert result == {"@": ["src"]}
+
+    def test_child_overrides_parent_paths(self, tmp_path):
+        (tmp_path / "tsconfig.base.json").write_text(
+            json.dumps(
+                {
+                    "compilerOptions": {
+                        "paths": {"@/*": ["./old/*"]},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "tsconfig.json").write_text(
+            json.dumps(
+                {
+                    "extends": "./tsconfig.base.json",
+                    "compilerOptions": {
+                        "paths": {"@/*": ["./new/*"]},
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = parse_tsconfig_aliases(tmp_path)
+        assert result == {"@": ["new"]}
+
+    def test_nested_tsconfig_with_baseurl(self, tmp_path):
+        """Simulates a packages/ subdir tsconfig like the gaes project."""
+        (tmp_path / "tsconfig.json").write_text(
+            json.dumps(
+                {
+                    "compilerOptions": {
+                        "paths": {"@/*": ["./resources/js/*"]},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        pkg_dir = tmp_path / "app" / "Packages"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "tsconfig.json").write_text(
+            json.dumps(
+                {
+                    "extends": "../../tsconfig.json",
+                    "compilerOptions": {
+                        "baseUrl": "../../",
+                        "paths": {"@/*": ["./resources/js/*"]},
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = parse_tsconfig_aliases(tmp_path)
+        # Both tsconfigs resolve @ to the same path.
+        assert result == {"@": ["resources/js"]}
+
+    def test_missing_tsconfig(self, tmp_path):
+        assert parse_tsconfig_aliases(tmp_path) == {}
+
+    def test_no_paths_section(self, tmp_path):
+        (tmp_path / "tsconfig.json").write_text(
+            json.dumps({"compilerOptions": {"strict": True}}),
+            encoding="utf-8",
+        )
+        assert parse_tsconfig_aliases(tmp_path) == {}
+
+    def test_sveltekit_lib_alias(self, tmp_path):
+        (tmp_path / "tsconfig.json").write_text(
+            json.dumps(
+                {
+                    "compilerOptions": {
+                        "paths": {"$lib/*": ["./src/lib/*"]},
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = parse_tsconfig_aliases(tmp_path)
+        assert result == {"$lib": ["src/lib"]}
+
+    def test_skips_node_modules(self, tmp_path):
+        nm = tmp_path / "node_modules" / "some-pkg"
+        nm.mkdir(parents=True)
+        (nm / "tsconfig.json").write_text(
+            json.dumps(
+                {
+                    "compilerOptions": {"paths": {"bad/*": ["./bad/*"]}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        assert parse_tsconfig_aliases(tmp_path) == {}
+
+    def test_comments_in_tsconfig(self, tmp_path):
+        """tsconfig allows JS-style comments and trailing commas."""
+        (tmp_path / "tsconfig.json").write_text(
+            "{\n"
+            "  // This is a comment\n"
+            '  "compilerOptions": {\n'
+            '    "paths": {\n'
+            '      "@/*": ["./src/*"],  // inline comment\n'
+            "    },\n"
+            "  }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        result = parse_tsconfig_aliases(tmp_path)
+        assert result == {"@": ["src"]}
