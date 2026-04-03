@@ -9,6 +9,10 @@ from sylvan.indexing.discovery.file_discovery import hash_content
 from sylvan.indexing.source_code.import_extraction import extract_imports
 from sylvan.indexing.source_code.language_specs import detect_language
 from sylvan.indexing.source_code.parse_orchestration import parse_source_file
+from sylvan.indexing.storage.file_store import clear_stale_data, upsert_file
+from sylvan.indexing.storage.import_store import store_imports
+from sylvan.indexing.storage.section_store import store_sections
+from sylvan.indexing.storage.symbol_store import store_call_sites, store_symbols
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -185,36 +189,25 @@ async def _persist_result(
     existing_file_id: int | None,
     index_result: IndexResult,
 ) -> tuple[int, int, int]:
-    """Write extraction results to DB using bulk operations.
+    """Write extraction results to DB via storage modules.
 
-    Returns (symbols_count, imports_count, sections_count).
+    Args:
+        result: File processing result.
+        repo_id: Repository database ID.
+        repo_name: Repository display name.
+        existing_file_id: Existing file ID if re-indexing, None if new.
+        index_result: Accumulator for indexing statistics.
+
+    Returns:
+        Tuple of (symbols_count, imports_count, sections_count).
     """
-    from sylvan.database.orm import FileImport, FileRecord, Section, Symbol
-    from sylvan.database.orm.models.blob import Blob
-
-    await Blob.store(result.content_hash, result.content_bytes)
-
-    file_obj = await FileRecord.upsert(
-        conflict_columns=["repo_id", "path"],
-        update_columns=["language", "content_hash", "byte_size", "mtime"],
-        repo_id=repo_id,
-        path=result.relative_path,
-        language=result.language,
-        content_hash=result.content_hash,
-        byte_size=result.byte_size,
-        mtime=result.mtime,
-    )
-    file_id = file_obj.id
+    file_id = await upsert_file(result, repo_id)
 
     if existing_file_id is not None:
-        await _clear_stale_data(file_id)
+        await clear_stale_data(file_id)
 
     if not result.content_str:
         return 0, 0, 0
-
-    symbols_count = 0
-    imports_count = 0
-    sections_count = 0
 
     if result.has_content_handler:
         from sylvan.extensions import get_content_handler
@@ -224,7 +217,7 @@ async def _persist_result(
             await handler(file_id, result.relative_path, result.content_str, index_result, repo_name)
 
         if result.language:
-            await _store_code_symbols(
+            await _store_code_symbols_legacy(
                 file_id,
                 result.relative_path,
                 result.content_str,
@@ -240,130 +233,16 @@ async def _persist_result(
                 index_result,
             )
     else:
-        if result.symbols:
-            sym_records = []
-            for sym in result.symbols:
-                sym_records.append(
-                    {
-                        "file_id": file_id,
-                        "symbol_id": sym.symbol_id,
-                        "name": sym.name,
-                        "qualified_name": sym.qualified_name,
-                        "kind": sym.kind,
-                        "language": sym.language,
-                        "signature": sym.signature,
-                        "docstring": sym.docstring,
-                        "summary": sym.summary,
-                        "decorators": sym.decorators or [],
-                        "keywords": sym.keywords or [],
-                        "line_start": sym.line_start,
-                        "line_end": sym.line_end,
-                        "byte_offset": sym.byte_offset,
-                        "byte_length": sym.byte_length,
-                        "content_hash": sym.content_hash,
-                        "cyclomatic": getattr(sym, "cyclomatic", 0) or 0,
-                        "max_nesting": getattr(sym, "max_nesting", 0) or 0,
-                        "param_count": getattr(sym, "param_count", 0) or 0,
-                    }
-                )
-            await Symbol.bulk_upsert(
-                sym_records,
-                conflict_columns=["symbol_id"],
-                update_columns=[
-                    "file_id",
-                    "name",
-                    "qualified_name",
-                    "kind",
-                    "language",
-                    "signature",
-                    "docstring",
-                    "summary",
-                    "decorators",
-                    "keywords",
-                    "line_start",
-                    "line_end",
-                    "byte_offset",
-                    "byte_length",
-                    "content_hash",
-                    "cyclomatic",
-                    "max_nesting",
-                    "param_count",
-                ],
+        symbols_count = await store_symbols(file_id, result, index_result)
+        imports_count = await store_imports(file_id, result, index_result)
+        await store_call_sites(result)
+
+        if result.parse_error and "doc_parse" not in (result.parse_error or ""):
+            index_result.errors.append(
+                {"error": "parse_error", "path": result.relative_path, "detail": result.parse_error}
             )
-            symbols_count = len(sym_records)
-            index_result.symbols_extracted += symbols_count
 
-            if result.deferred_parents:
-                from sylvan.database.orm.runtime.connection_manager import get_backend
-
-                backend = get_backend()
-                for child_id, parent_id in result.deferred_parents:
-                    await backend.execute(
-                        "UPDATE symbols SET parent_symbol_id = ? WHERE symbol_id = ?",
-                        [parent_id, child_id],
-                    )
-
-        if result.imports:
-            imp_records = [
-                {
-                    "file_id": file_id,
-                    "specifier": imp["specifier"],
-                    "names": imp.get("names", []),
-                }
-                for imp in result.imports
-            ]
-            await FileImport.bulk_create(imp_records)
-            imports_count = len(imp_records)
-            index_result.imports_extracted += imports_count
-
-        if result.call_sites:
-            from sylvan.database.orm import Reference
-
-            ref_records = [
-                {
-                    "source_symbol_id": cs.caller_symbol_id,
-                    "target_symbol_id": None,
-                    "target_specifier": cs.callee_name,
-                    "target_names": [],
-                    "line": cs.line,
-                }
-                for cs in result.call_sites
-            ]
-            await Reference.bulk_create(ref_records)
-
-    if result.parse_error and "doc_parse" not in (result.parse_error or ""):
-        index_result.errors.append(
-            {
-                "error": "parse_error",
-                "path": result.relative_path,
-                "detail": result.parse_error,
-            }
-        )
-
-    if result.sections:
-        sec_records = []
-        content_str = result.content_str
-        for sec in result.sections:
-            body_text = content_str[sec.byte_start : sec.byte_end][:500] if sec.byte_start is not None else ""
-            sec_records.append(
-                {
-                    "file_id": file_id,
-                    "section_id": sec.section_id,
-                    "title": sec.title,
-                    "level": sec.level,
-                    "parent_section_id": sec.parent_section_id,
-                    "byte_start": sec.byte_start,
-                    "byte_end": sec.byte_end,
-                    "summary": sec.summary,
-                    "tags": sec.tags or [],
-                    "references": sec.references or [],
-                    "content_hash": sec.content_hash,
-                    "body_text": body_text,
-                }
-            )
-        await Section.bulk_create(sec_records)
-        sections_count = len(sec_records)
-        index_result.sections_extracted += sections_count
+    sections_count = await store_sections(file_id, result, index_result)
 
     if result.parse_error and result.parse_error.startswith("doc_parse:"):
         index_result.errors.append(
@@ -374,134 +253,14 @@ async def _persist_result(
             }
         )
 
-    return symbols_count, imports_count, sections_count
-
-
-async def _clear_stale_data(file_id: int) -> None:
-    """Remove stale vec/quality rows and old symbols/imports/sections for a re-indexed file."""
-    import contextlib
-
-    from sylvan.database.orm import FileImport, Section, Symbol
-    from sylvan.database.orm.runtime.connection_manager import get_backend as _get_backend
-
-    symbol_ids = await Symbol.where(file_id=file_id).pluck("symbol_id")
-    section_ids = await Section.where(file_id=file_id).pluck("section_id")
-
-    _backend = _get_backend()
-    with contextlib.suppress(Exception):
-        for sid in symbol_ids:
-            await _backend.execute("DELETE FROM symbols_vec WHERE symbol_id = ?", [sid])
-    with contextlib.suppress(Exception):
-        for sid in section_ids:
-            await _backend.execute("DELETE FROM sections_vec WHERE section_id = ?", [sid])
-    with contextlib.suppress(Exception):
-        for sid in symbol_ids:
-            await _backend.execute("DELETE FROM quality WHERE symbol_id = ?", [sid])
-
-    for sid in symbol_ids:
-        await _backend.execute('DELETE FROM "references" WHERE source_symbol_id = ?', [sid])
-
-    await Symbol.where(file_id=file_id).delete()
-    await FileImport.where(file_id=file_id).delete()
-    await Section.where(file_id=file_id).delete()
-
-
-async def process_file(
-    df: object,
-    repo_id: int,
-    repo_name: str,
-    max_file_size: int,
-    result: IndexResult,
-    *,
-    force: bool = False,
-) -> None:
-    """Read, hash-check, parse, and store a single discovered file.
-
-    Backward-compatible wrapper that calls _extract_file then _persist_result.
-    """
-    from sylvan.database.orm import FileRecord
-
-    existing = await FileRecord.where(repo_id=repo_id, path=df.relative_path).first()
-    existing_hash = existing.content_hash if existing else None
-    existing_file_id = existing.id if existing else None
-
-    extraction = _extract_file(
-        df.path,
-        df.relative_path,
-        df.size,
-        df.mtime,
-        max_file_size,
-        repo_name,
-        existing_hash,
-        force=force,
-    )
-
-    if extraction.error:
-        result.errors.append(
-            {
-                "error": "read_error",
-                "path": extraction.relative_path,
-                "detail": extraction.error,
-            }
-        )
-        return
-
-    if extraction.skipped:
-        return
-
-    await _persist_result(extraction, repo_id, repo_name, existing_file_id, result)
-    result.files_indexed += 1
-
-
-async def _upsert_symbol_without_parent(sym: object, file_id: int) -> None:
-    """Insert a symbol without parent_symbol_id to avoid FK failures on unordered batches."""
-    from sylvan.database.orm import Symbol
-
-    await Symbol.upsert(
-        conflict_columns=["symbol_id"],
-        update_columns=[
-            "file_id",
-            "name",
-            "qualified_name",
-            "kind",
-            "language",
-            "signature",
-            "docstring",
-            "summary",
-            "decorators",
-            "keywords",
-            "line_start",
-            "line_end",
-            "byte_offset",
-            "byte_length",
-            "content_hash",
-            "cyclomatic",
-            "max_nesting",
-            "param_count",
-        ],
-        file_id=file_id,
-        symbol_id=sym.symbol_id,
-        name=sym.name,
-        qualified_name=sym.qualified_name,
-        kind=sym.kind,
-        language=sym.language,
-        signature=sym.signature,
-        docstring=sym.docstring,
-        summary=sym.summary,
-        decorators=sym.decorators or [],
-        keywords=sym.keywords or [],
-        line_start=sym.line_start,
-        line_end=sym.line_end,
-        byte_offset=sym.byte_offset,
-        byte_length=sym.byte_length,
-        content_hash=sym.content_hash,
-        cyclomatic=getattr(sym, "cyclomatic", 0) or 0,
-        max_nesting=getattr(sym, "max_nesting", 0) or 0,
-        param_count=getattr(sym, "param_count", 0) or 0,
+    return (
+        symbols_count if not result.has_content_handler else 0,
+        imports_count if not result.has_content_handler else 0,
+        sections_count,
     )
 
 
-async def _store_code_symbols(
+async def _store_code_symbols_legacy(
     file_id: int,
     file_path: str,
     content: str,
@@ -509,8 +268,19 @@ async def _store_code_symbols(
     repo_name: str,
     result: IndexResult,
 ) -> None:
-    """Parse source code and upsert extracted symbols. Used by content handler path."""
-    from sylvan.database.orm.runtime.connection_manager import get_backend
+    """Parse source code and upsert extracted symbols.
+
+    Used by the content handler path where extraction happens at persist time.
+
+    Args:
+        file_id: File record ID.
+        file_path: Relative file path.
+        content: File content string.
+        language: Language identifier.
+        repo_name: Repository display name.
+        result: Accumulator for indexing statistics.
+    """
+    from sylvan.database.orm import Symbol
 
     parse_result = parse_source_file(file_path, content, language)
     deferred_parents: list[tuple[str, str]] = []
@@ -521,27 +291,58 @@ async def _store_code_symbols(
         if sym.parent_symbol_id:
             sym.parent_symbol_id = prefix + sym.parent_symbol_id
         sym.file_id = file_id
-        await _upsert_symbol_without_parent(sym, file_id)
+        await Symbol.upsert(
+            conflict_columns=["symbol_id"],
+            update_columns=[
+                "file_id",
+                "name",
+                "qualified_name",
+                "kind",
+                "language",
+                "signature",
+                "docstring",
+                "summary",
+                "decorators",
+                "keywords",
+                "line_start",
+                "line_end",
+                "byte_offset",
+                "byte_length",
+                "content_hash",
+                "cyclomatic",
+                "max_nesting",
+                "param_count",
+            ],
+            file_id=file_id,
+            symbol_id=sym.symbol_id,
+            name=sym.name,
+            qualified_name=sym.qualified_name,
+            kind=sym.kind,
+            language=sym.language,
+            signature=sym.signature,
+            docstring=sym.docstring,
+            summary=sym.summary,
+            decorators=sym.decorators or [],
+            keywords=sym.keywords or [],
+            line_start=sym.line_start,
+            line_end=sym.line_end,
+            byte_offset=sym.byte_offset,
+            byte_length=sym.byte_length,
+            content_hash=sym.content_hash,
+            cyclomatic=getattr(sym, "cyclomatic", 0) or 0,
+            max_nesting=getattr(sym, "max_nesting", 0) or 0,
+            param_count=getattr(sym, "param_count", 0) or 0,
+        )
         if sym.parent_symbol_id:
             deferred_parents.append((sym.symbol_id, sym.parent_symbol_id))
         result.symbols_extracted += 1
 
     if deferred_parents:
-        backend = get_backend()
         for child_id, parent_id in deferred_parents:
-            await backend.execute(
-                "UPDATE symbols SET parent_symbol_id = ? WHERE symbol_id = ?",
-                [parent_id, child_id],
-            )
+            await Symbol.where(symbol_id=child_id).update(parent_symbol_id=parent_id)
 
     if parse_result.error:
-        result.errors.append(
-            {
-                "error": "parse_error",
-                "path": file_path,
-                "detail": parse_result.error,
-            }
-        )
+        result.errors.append({"error": "parse_error", "path": file_path, "detail": parse_result.error})
 
 
 async def _store_imports_legacy(
@@ -551,7 +352,17 @@ async def _store_imports_legacy(
     language: str,
     result: IndexResult,
 ) -> None:
-    """Extract and store file-level imports. Used by content handler path."""
+    """Extract and store file-level imports.
+
+    Used by the content handler path where extraction happens at persist time.
+
+    Args:
+        file_id: File record ID.
+        content: File content string.
+        file_path: Relative file path.
+        language: Language identifier.
+        result: Accumulator for indexing statistics.
+    """
     from sylvan.database.orm import FileImport
 
     for imp_dict in extract_imports(content, file_path, language):
@@ -561,44 +372,3 @@ async def _store_imports_legacy(
             names=imp_dict.get("names", []),
         )
         result.imports_extracted += 1
-
-
-async def store_doc_sections(
-    file_id: int,
-    file_path: str,
-    content: str,
-    repo_name: str,
-    result: IndexResult,
-) -> None:
-    """Parse documentation sections from a file and store them."""
-    from sylvan.database.orm import Section
-
-    ext = "." + file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""
-    if ext not in _DOC_EXTENSIONS:
-        return
-
-    try:
-        from sylvan.indexing.documents.parser import parse_document
-
-        for sec in parse_document(content, file_path, repo_name):
-            sec.file_id = file_id
-            body_text = content[sec.byte_start : sec.byte_end][:500] if sec.byte_start is not None else ""
-            await Section.create(
-                file_id=sec.file_id,
-                section_id=sec.section_id,
-                title=sec.title,
-                level=sec.level,
-                parent_section_id=sec.parent_section_id,
-                byte_start=sec.byte_start,
-                byte_end=sec.byte_end,
-                summary=sec.summary,
-                tags=sec.tags or [],
-                references=sec.references or [],
-                content_hash=sec.content_hash,
-                body_text=body_text,
-            )
-            result.sections_extracted += 1
-    except ImportError:
-        pass
-    except Exception as e:
-        result.errors.append({"error": "doc_parse_error", "path": file_path, "detail": str(e)})
