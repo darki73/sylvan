@@ -1,32 +1,14 @@
-"""Language spec registry -- auto-discovery via @register_language decorator."""
+"""Language spec registry -- low-level storage for language specs and extension mappings.
 
-from collections.abc import Callable
+The ``languages`` package populates these dicts via its ``@register`` decorator.
+Consumers should use ``language_specs.detect_language`` and ``language_specs.get_spec``
+rather than accessing these dicts directly.
+"""
+
+from __future__ import annotations
 
 _LANGUAGES: dict[str, object] = {}
 _EXTENSION_MAP: dict[str, str] = {}
-
-
-def register_language(name: str, extensions: list[str]) -> Callable:
-    """Register a language spec for given file extensions.
-
-    Use as a decorator on LanguageSpec instances or as a function call.
-
-    Args:
-        name: Language name (e.g., 'python', 'typescript').
-        extensions: File extensions this language handles (e.g., ['.py', '.pyi']).
-
-    Returns:
-        Decorator that registers the language spec.
-    """
-
-    def decorator(spec: object) -> object:
-        """Store the spec in the registry and map extensions to this language."""
-        _LANGUAGES[name] = spec
-        for ext in extensions:
-            _EXTENSION_MAP[ext.lower()] = name
-        return spec
-
-    return decorator
 
 
 def get_language_for_extension(ext: str) -> str | None:
@@ -51,15 +33,3 @@ def get_language_spec(name: str) -> object | None:
         The LanguageSpec instance, or None.
     """
     return _LANGUAGES.get(name)
-
-
-def list_supported_languages() -> dict[str, list[str]]:
-    """List all registered languages and their extensions.
-
-    Returns:
-        Dict mapping language names to their supported extensions.
-    """
-    result: dict[str, list[str]] = {}
-    for ext, name in sorted(_EXTENSION_MAP.items()):
-        result.setdefault(name, []).append(ext)
-    return result
