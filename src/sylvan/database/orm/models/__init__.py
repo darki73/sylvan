@@ -12,6 +12,8 @@ from sylvan.database.orm.models.coding_session import CodingSession
 from sylvan.database.orm.models.file_import import FileImport
 from sylvan.database.orm.models.file_record import FileRecord
 from sylvan.database.orm.models.instance import Instance
+from sylvan.database.orm.models.memory import Memory
+from sylvan.database.orm.models.preference import Preference
 from sylvan.database.orm.models.quality import Quality
 from sylvan.database.orm.models.reference import Reference
 from sylvan.database.orm.models.repo import Repo
@@ -28,6 +30,8 @@ __all__ = [
     "FileImport",
     "FileRecord",
     "Instance",
+    "Memory",
+    "Preference",
     "Quality",
     "Reference",
     "Repo",

@@ -346,6 +346,7 @@ class Schema:
         id_column: str,
         id_type: str = "TEXT",
         dimensions: int | None = None,
+        distance_metric: str | None = None,
     ) -> None:
         """Create a sqlite-vec virtual table.
 
@@ -356,6 +357,8 @@ class Schema:
             id_column: Primary key column name.
             id_type: SQL type for the primary key column.
             dimensions: Embedding dimensions (reads from config if None).
+            distance_metric: Distance metric (``cosine``, ``L2``, ``L1``).
+                Defaults to sqlite-vec's built-in default (L2) when None.
 
         Example::
 
@@ -369,11 +372,15 @@ class Schema:
             except Exception:
                 dimensions = 384
 
+        metric_clause = ""
+        if distance_metric:
+            metric_clause = f" distance_metric={distance_metric}"
+
         with contextlib.suppress(Exception):
             await self._backend.execute(  # sylvan-sql-safe
                 f"CREATE VIRTUAL TABLE IF NOT EXISTS {name} "
                 f"USING vec0({id_column} {id_type} PRIMARY KEY, "
-                f"embedding FLOAT[{dimensions}])"
+                f"embedding FLOAT[{dimensions}]{metric_clause})"
             )
 
     async def drop_vec(self, name: str) -> None:

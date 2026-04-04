@@ -43,7 +43,7 @@ Sylvan indexes your codebase into a structured database of symbols, sections, an
 
 ## Features
 
-- 58 MCP tools for search, browsing, analysis, and refactoring
+- 65 MCP tools for search, browsing, analysis, memory, and refactoring
 - 40 programming languages via tree-sitter
 - Hybrid search - full-text (FTS5) + vector similarity with ranked fusion
 - Blast radius analysis before any refactor
@@ -76,6 +76,10 @@ Add to your MCP client config:
 Your agent handles the rest - index a project, search for code, navigate with precision.
 
 > **Upgrading to 1.8.0?** Run a full re-index from the dashboard to build the call graph and repo briefing for existing repos.
+
+## Token cost
+
+Sylvan loads ~9,200 tokens of tool descriptions into your agent's context at session start. See [TRANSPARENCY.md](TRANSPARENCY.md) for full breakdown, real-world numbers, and what we do not do.
 
 ## Documentation
 

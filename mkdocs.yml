@@ -44,6 +44,7 @@ nav:
     - Working With Libraries: working-with-sylvan/working-with-libraries.md
     - Multi-Repo Projects: working-with-sylvan/multi-repo-projects.md
     - Quality and Security: working-with-sylvan/quality-and-security.md
+    - Memory and Preferences: working-with-sylvan/memory-and-preferences.md
     - The Dashboard: working-with-sylvan/the-dashboard.md
     - Token Efficiency: working-with-sylvan/token-efficiency.md
     - CLI Reference: working-with-sylvan/cli.md

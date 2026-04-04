@@ -188,21 +188,40 @@ This is the visual version of the `get_blast_radius` MCP tool. It is useful when
 you want to see the dependency structure rather than read it as JSON.
 
 
+## Memory page
+
+The memory page provides management for agent memories and preferences:
+
+- **Memories tab**: all stored memories listed newest first, with repo badges,
+  tags, and content previews. Click a memory card to open a detail dialog showing
+  the full content, timestamps, and a delete button. A text filter narrows the
+  list by content, repo name, or tag.
+- **Preferences tab**: all behavioral preferences in a table with key,
+  instruction, scope badge (color-coded: green for global, blue for workspace,
+  orange for repo), and scope target name. Click a row to see the full
+  instruction in a detail dialog. An inline form lets you add new preferences
+  with key, instruction, scope, and target selection.
+
+Changes made through MCP tools (e.g., an agent calling `save_memory` or
+`save_preference`) appear on this page in real time via WebSocket push events.
+
+
 ## Auto-updating
 
-All dashboard pages update automatically via HTMX polling. The mechanism works as
+All dashboard pages update automatically via WebSocket. The mechanism works as
 follows:
 
-- Each page section that contains dynamic data has an `hx-get` attribute pointing
-  to a partial endpoint (e.g., `/partials/overview`, `/partials/session`).
-- The `hx-trigger` is set to `every 5s` (or similar intervals depending on the
-  section), causing the browser to poll the server at regular intervals.
-- The server renders only the changed HTML fragment and returns it. HTMX swaps
-  the fragment into the page without a full reload.
-- The uptime counter uses a shorter polling interval (every second) so it
-  appears to tick in real time.
+- The browser opens a single WebSocket connection to `/ws/dashboard` when the
+  page loads.
+- Request/response communication uses JSON messages with correlation IDs. Each
+  page composable sends a request (e.g., `get_overview`, `get_memories`) and
+  receives the response asynchronously.
+- Server-side events are pushed to all connected clients through the sylvan event
+  bus. When a memory is saved, a repo is indexed, or a queue job completes, the
+  server emits an event that the browser receives and uses to refetch data.
+- Pages that need periodic updates (like session uptime) use composable-level
+  timers alongside the push events.
 
-When you index a new repo, add a library, or make tool calls, the dashboard
-reflects the changes within a few seconds without needing a manual browser
-refresh. Session statistics, efficiency numbers, and instance status all update
-continuously.
+When you index a new repo, add a library, save a memory, or make tool calls, the
+dashboard reflects the changes immediately without needing a manual browser
+refresh.

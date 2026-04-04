@@ -170,6 +170,51 @@ async def embed_and_store_sections(
     return stored
 
 
+async def embed_and_store_memories(
+    provider: EmbeddingProvider,
+    memory_ids: list[int],
+    texts: list[str],
+    batch_size: int = 64,
+) -> int:
+    """Generate embeddings for memories and store in sqlite-vec.
+
+    Kept as raw SQL because vec tables are not regular tables.
+
+    Args:
+        provider: Embedding provider to use.
+        memory_ids: List of memory primary key integers.
+        texts: List of text strings to embed (parallel to *memory_ids*).
+        batch_size: Number of texts per embedding batch.
+
+    Returns:
+        Number of embeddings successfully stored.
+    """
+    backend = get_backend()
+    stored = 0
+
+    for i in range(0, len(texts), batch_size):
+        batch_ids = memory_ids[i : i + batch_size]
+        batch_texts = texts[i : i + batch_size]
+
+        try:
+            vectors = provider.embed(batch_texts)
+        except Exception as e:
+            logger.warning("memory_embedding_batch_failed", offset=i, error=str(e))
+            continue
+
+        for mid, vec in zip(batch_ids, vectors):
+            try:
+                await backend.execute(
+                    "INSERT OR REPLACE INTO memories_vec (memory_id, embedding) VALUES (?, ?)",
+                    [mid, _vec_to_blob(vec)],
+                )
+                stored += 1
+            except Exception as e:
+                logger.debug("memory_embedding_store_failed", memory_id=mid, error=str(e))
+
+    return stored
+
+
 def prepare_symbol_text(symbol: dict) -> str:
     """Prepare a text representation of a symbol for embedding.
 
