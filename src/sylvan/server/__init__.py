@@ -688,6 +688,13 @@ def _import_all_tool_modules() -> None:
     import sylvan.tools.library.compare
     import sylvan.tools.library.list
     import sylvan.tools.library.remove
+    import sylvan.tools.memory.delete_memory
+    import sylvan.tools.memory.delete_preference
+    import sylvan.tools.memory.get_preferences
+    import sylvan.tools.memory.retrieve_memory
+    import sylvan.tools.memory.save_memory
+    import sylvan.tools.memory.save_preference
+    import sylvan.tools.memory.search_memory
     import sylvan.tools.meta.configure_editor
     import sylvan.tools.meta.get_logs
     import sylvan.tools.meta.get_server_config

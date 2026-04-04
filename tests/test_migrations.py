@@ -20,7 +20,7 @@ class TestGetCurrentVersion:
             None.
         """
         version = await get_current_version(ctx.backend)
-        assert version == 5
+        assert version == 6
 
     async def test_returns_max_applied_version(self, ctx):
         """Returns the highest version from the _migrations table.
@@ -30,10 +30,10 @@ class TestGetCurrentVersion:
         """
         await ctx.backend.execute(
             "INSERT INTO _migrations (version, name, applied_at) VALUES (?, ?, ?)",
-            [6, "006_add_col", "2024-01-02"],
+            [7, "007_add_col", "2024-01-02"],
         )
         await ctx.backend.commit()
-        assert await get_current_version(ctx.backend) == 6
+        assert await get_current_version(ctx.backend) == 7
 
 
 class TestRunMigrations:
@@ -46,8 +46,8 @@ class TestRunMigrations:
         mig_dir = tmp_path / "migrations"
         mig_dir.mkdir()
 
-        # Use version numbers above 005 (already applied by backend fixture)
-        (mig_dir / "006_create_widgets.py").write_text(
+        # Use version numbers above 006 (already applied by backend fixture)
+        (mig_dir / "007_create_widgets.py").write_text(
             textwrap.dedent("""\
             async def up(backend, dialect):
                 await backend.execute("CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT)")
@@ -57,7 +57,7 @@ class TestRunMigrations:
             encoding="utf-8",
         )
 
-        (mig_dir / "007_add_color.py").write_text(
+        (mig_dir / "008_add_color.py").write_text(
             textwrap.dedent("""\
             async def up(backend, dialect):
                 await backend.execute("ALTER TABLE widgets ADD COLUMN color TEXT")
@@ -82,8 +82,8 @@ class TestRunMigrations:
             applied = await run_migrations(ctx.backend)
 
         assert len(applied) == 2
-        assert "006_create_widgets" in applied[0]
-        assert await get_current_version(ctx.backend) == 7
+        assert "007_create_widgets" in applied[0]
+        assert await get_current_version(ctx.backend) == 8
 
         row = await ctx.backend.fetch_one("SELECT name FROM sqlite_master WHERE type='table' AND name='widgets'")
         assert row is not None
@@ -110,13 +110,13 @@ class TestRollbackMigration:
         await ctx.backend.execute("CREATE TABLE gadgets (id INTEGER PRIMARY KEY)")
         await ctx.backend.execute(
             "INSERT INTO _migrations (version, name, applied_at) VALUES (?, ?, ?)",
-            [6, "006_create_gadgets", "2024-01-01"],
+            [7, "007_create_gadgets", "2024-01-01"],
         )
         await ctx.backend.commit()
 
         mig_dir = tmp_path / "migrations"
         mig_dir.mkdir()
-        (mig_dir / "006_create_gadgets.py").write_text(
+        (mig_dir / "007_create_gadgets.py").write_text(
             textwrap.dedent("""\
             async def up(backend, dialect):
                 await backend.execute("CREATE TABLE gadgets (id INTEGER PRIMARY KEY)")
@@ -141,8 +141,8 @@ class TestRollbackMigration:
             rolled_back = await rollback_migration(ctx.backend)
 
         assert rolled_back is not None
-        assert "006_create_gadgets" in rolled_back
-        assert await get_current_version(ctx.backend) == 5
+        assert "007_create_gadgets" in rolled_back
+        assert await get_current_version(ctx.backend) == 6
 
         row = await ctx.backend.fetch_one("SELECT name FROM sqlite_master WHERE type='table' AND name='gadgets'")
         assert row is None

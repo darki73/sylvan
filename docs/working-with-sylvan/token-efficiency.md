@@ -151,6 +151,18 @@ touched that repository. Useful for comparing how different projects benefit
 from indexing.
 
 
+## The input cost
+
+Sylvan registers 65 tools with descriptions and parameter schemas. This adds
+approximately 9,200 tokens to your agent's context at session start. On a 200K
+context model that is 4.6%, on a 1M model under 1%. The cost is fixed and does
+not grow during the conversation.
+
+See [TRANSPARENCY.md](https://github.com/darki73/sylvan/blob/main/TRANSPARENCY.md)
+in the repository root for the full breakdown, including what data sylvan does
+and does not access.
+
+
 ## What the numbers mean in practice
 
 - **90%+ reduction** is typical for `get_symbol` calls, where a single function

@@ -1,6 +1,34 @@
 # Changelog
 
-## 1.9.2
+## 1.10.0 (2026-04-04)
+
+### Agent memory and preferences
+
+7 new MCP tools for persistent project knowledge and behavioral rules.
+
+**Memory** (4 tools): `save_memory`, `search_memory`, `retrieve_memory`, `delete_memory`. Agents save insights, decisions, and context tied to a repository. Stored with vector embeddings (cosine similarity via sqlite-vec) for semantic search. Automatic deduplication: content above 92% similarity updates the existing memory instead of creating a duplicate.
+
+**Preferences** (3 tools): `save_preference`, `get_preferences`, `delete_preference`. Key-value behavioral instructions with three scope levels: global, workspace, and repo. Repo overrides workspace overrides global for the same key. Semantically similar instructions across scopes are deduplicated on read, keeping the narrower scope.
+
+Tool descriptions designed to trigger proactive use: `get_preferences` instructs the agent to call it at session start, `save_memory` lists specific trigger moments (user explains "why", debugging reveals root cause, architecture decision with reasoning), `save_preference` triggers on behavioral corrections.
+
+### Dashboard memory page
+
+New Memory page in the web dashboard with two tabs. Memories tab shows cards with repo badges, tags, and content previews sorted newest first. Preferences tab shows a table with scope badges (color-coded by level) and an inline form for adding new ones. Click any entry to open a detail dialog with full content. All changes from MCP tools push to the dashboard in real time via WebSocket events.
+
+### Dashboard version indicator
+
+Navbar now shows the current sylvan version. When a newer version is available on PyPI, the version turns orange with a pulsing indicator. Hover to see the latest version and the correct upgrade command for your install method (pip, uv, uv tool, editable).
+
+### Schema builder: cosine distance support
+
+`Schema.vec()` now accepts a `distance_metric` parameter (`cosine`, `L2`, `L1`). The memories_vec table uses cosine distance, which is the correct metric for normalized text embeddings from sentence-transformers.
+
+### Dashboard auto-update docs fix
+
+Fixed the dashboard documentation to describe the actual WebSocket architecture instead of the outdated HTMX polling description.
+
+## 1.9.2 (2026-04-04)
 
 ### PHP import resolution
 
@@ -20,7 +48,7 @@ User extensions in `~/.sylvan/extensions/languages/` use the same `@register` de
 
 File processor's 197-line `_persist_result` split into focused modules: `file_store`, `symbol_store`, `import_store`, `section_store`.
 
-## 1.9.1
+## 1.9.1 (2026-04-02)
 
 ### Complexity metrics at index time
 
@@ -53,7 +81,7 @@ Schema-aware symbol extraction from JSON files.
 - Nested key scoping prevents incorrect line matches across sections
 - Import extraction for package dependencies, tsconfig paths, and tsconfig extends (feeds dependency graph)
 
-## 1.9.0
+## 1.9.0 (2026-04-02)
 
 ### Tool framework rewrite
 
@@ -135,7 +163,7 @@ Complete rewrite of the tool system. Every tool is now a `Tool` subclass with ty
 - 39 languages supported (up from 34)
 - ~80 files changed
 
-## 1.8.0
+## 1.8.0 (2026-03-31)
 
 ### Call graph
 
@@ -173,7 +201,7 @@ Complete rewrite of the tool system. Every tool is now a `Tool` subclass with ty
 
 Run a **full re-index** from the dashboard after upgrading. The call graph and briefing are built during indexing - existing repos need a re-index to populate these.
 
-## 1.7.0
+## 1.7.0 (2026-03-30)
 
 ### Workflow gate redesign
 
@@ -228,12 +256,12 @@ Run a **full re-index** from the dashboard after upgrading. The call graph and b
 - Orphaned vec entry cleanup during embedding generation
 - Fixed dependabot auto-approve workflow using PAT for PR approval
 
-## 1.6.2
+## 1.6.2 (2026-03-30)
 
 - Fixed `add_library` blocking the event loop during package resolution and source fetching
 - `resolve()` and `fetch_source()` now run in thread pool via `asyncio.to_thread()`
 
-## 1.6.1
+## 1.6.1 (2026-03-30)
 
 ### Workflow gate redesign
 
@@ -251,7 +279,7 @@ Run a **full re-index** from the dashboard after upgrading. The call graph and b
 
 - Fixed auto-approve workflow using PAT for PR approval (GITHUB_TOKEN cannot approve)
 
-## 1.6.0
+## 1.6.0 (2026-03-29)
 
 ### Services layer
 
@@ -304,7 +332,7 @@ Run a **full re-index** from the dashboard after upgrading. The call graph and b
 - `.gitignore`: node_modules excluded, static/dist included for built SPA
 - 1731 tests (up from 1614), 75% coverage
 
-## 1.5.0
+## 1.5.0 (2026-03-28)
 
 ### Cluster redesign
 
@@ -356,18 +384,18 @@ Run a **full re-index** from the dashboard after upgrading. The call graph and b
 - Split into app state (module singleton) + request state (contextvar identity map)
 - init_app_state() called once at startup, works across all async tasks
 
-## 1.4.2
+## 1.4.2 (2026-03-27)
 
 - Deep keyword extraction for k8s resources (all nested keys and values searchable)
 - Searching for "nvidia", "gpumem", "secretKeyRef", or any nested field now finds the right resource
 
-## 1.4.1
+## 1.4.1 (2026-03-27)
 
 - Fixed k8s YAML files not being indexed (content handler now runs before language detection)
 - Fixed FileImport crash on k8s cross-references (upsert replaced with create)
 - Added public Python API: `from sylvan import Sylvan` for programmatic use without MCP
 
-## 1.4.0
+## 1.4.0 (2026-03-27)
 
 ### Kubernetes support
 
@@ -390,7 +418,7 @@ Run a **full re-index** from the dashboard after upgrading. The call graph and b
 - Native extensions shipped with sylvan, loaded at startup
 - Pluggable architecture: future content types (Terraform, Docker Compose, etc.) just register a sniffer + handler
 
-## 1.3.5
+## 1.3.5 (2026-03-25)
 
 - Bumped claude-agent-sdk to 0.1.50
 - Widened constraints: starlette <2.0.0, pathspec <2.0.0, tree-sitter-language-pack <2.0.0, uv-build <0.12.0
@@ -400,7 +428,7 @@ Run a **full re-index** from the dashboard after upgrading. The call graph and b
 - Switched CI to PR-only triggers (no redundant runs on merge)
 - Removed release drafter (manual releases for now)
 
-## 1.3.4
+## 1.3.4 (2026-03-25)
 
 - Added CI lint for tests/ directory
 - Added issue templates (YAML form-based with dropdowns)
@@ -413,13 +441,13 @@ Run a **full re-index** from the dashboard after upgrading. The call graph and b
 - Ruff formatted all test files
 - Version check now only triggers when PyPI has a newer version
 
-## 1.3.3
+## 1.3.3 (2026-03-25)
 
 - Version check on startup, notifies agent when a newer version is available
 - Detects install method (pip, uv pip, uv tool, editable) for correct upgrade command
 - Update info surfaced in gate response, configure tools, and get_workflow_guide
 
-## 1.3.2
+## 1.3.2 (2026-03-25)
 
 - Added CI workflow (lint + tests on Ubuntu and Windows, Python 3.12/3.13/3.14)
 - Applied ruff format across entire codebase
@@ -427,12 +455,12 @@ Run a **full re-index** from the dashboard after upgrading. The call graph and b
 - Updated .gitignore for IDE and AI assistant config directories
 - Handle missing `enable_load_extension` on restricted Python builds
 
-## 1.3.1
+## 1.3.1 (2026-03-24)
 
 - Configure tools now return instructions by default instead of writing files directly
 - Added `server.auto_configure` option (default false) to opt into direct file writes
 
-## 1.3.0
+## 1.3.0 (2026-03-24)
 
 Database foundation, integrity fixes, and audit-driven improvements.
 
@@ -496,12 +524,12 @@ Database foundation, integrity fixes, and audit-driven improvements.
 
 Migrated from internal development tracked at gitlab (da1bcbd).
 
-## 1.2.1
+## 1.2.1 (2026-03-23)
 
 - `get_symbol` now accepts optional `repo` param for disambiguation in multi-repo workspaces
 - Cache key includes repo for correct per-repo caching
 
-## 1.2.0
+## 1.2.0 (2026-03-23)
 
 Major extraction improvements for Vue/Nuxt and TypeScript projects:
 
@@ -513,40 +541,40 @@ Major extraction improvements for Vue/Nuxt and TypeScript projects:
 
 On a real Nuxt 4 project: 364 → 2,891 symbols (~8x improvement).
 
-## 1.1.6
+## 1.1.6 (2026-03-23)
 
 - Vue SFC support: extracts symbols from `<script setup lang="ts">` blocks as TypeScript
 - Byte offsets adjusted to point into the original `.vue` file
 
-## 1.1.5
+## 1.1.5 (2026-03-23)
 
 - Fixed: workflow gate now runs before write proxy — followers enforce `get_workflow_guide` before any tool call
 - Agents can no longer bypass the guide by calling write tools directly on followers
 
-## 1.1.4
+## 1.1.4 (2026-03-23)
 
 - Fixed: leader auto-unlocks session for proxied tool calls from followers (workflow gate blocked write tools in cluster mode)
 
-## 1.1.3
+## 1.1.3 (2026-03-23)
 
 - Fixed: follower now promotes to leader when leader process dies (checked every heartbeat)
 - Fixed: query cache entries expire after 30s to prevent stale reads after CLI reindex
 - Promotion starts the dashboard and claims the leader file automatically
 
-## 1.1.2
+## 1.1.2 (2026-03-23)
 
 - Fixed: `sylvan remove` now commits deletes (data wasn't persisting across runs)
 - Fixed: `sylvan remove` on nonexistent repo shows clean message instead of traceback + hang
 - Fixed: `remove` command in CLI docs
 
-## 1.1.1
+## 1.1.1 (2026-03-23)
 
 - Fixed: CLI indexing now waits for background tasks (embeddings, summaries) before exiting — no more lost embeddings
 - Fixed: `sylvan library add` same issue
 - Added: `sylvan remove <name>` command to delete an indexed repo and all its data
 - Added: `drain_pending_tasks()` helper in context module
 
-## 1.1.0
+## 1.1.0 (2026-03-23)
 
 - Workspace CLI commands: `workspace create`, `workspace list`, `workspace add`, `workspace show`, `workspace remove`
 - CLI reference page in docs
@@ -554,7 +582,7 @@ On a real Nuxt 4 project: 364 → 2,891 symbols (~8x improvement).
 - Dashboard blast radius page: search autocomplete fixed, single-input flow
 - Enriched docs for dashboard, agent integration, and subagent access
 
-## 1.0.0
+## 1.0.0 (2026-03-23)
 
 Initial release.
 

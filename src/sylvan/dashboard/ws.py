@@ -853,3 +853,180 @@ async def _handle_delete_workspace(name: str = "") -> dict:
     if not await WorkspaceService().delete(name):
         return {"error": "workspace_not_found", "name": name}
     return {"ok": True}
+
+
+@_register("get_version_info")
+async def _handle_get_version_info() -> dict:
+    """Return current version and update availability.
+
+    Returns:
+        Dict with version, latest, and upgrade command if available.
+    """
+    from sylvan import __version__
+    from sylvan.server.startup import get_update_info
+
+    info = get_update_info()
+    return {
+        "version": __version__,
+        "latest": info.get("latest"),
+        "upgrade": info.get("upgrade"),
+        "update_available": bool(info),
+    }
+
+
+@_register("get_memories")
+async def _handle_get_memories(repo: str = "") -> dict:
+    """Return all memories for a repo, or all repos if empty.
+
+    Args:
+        repo: Optional repo name filter.
+
+    Returns:
+        Dict with memories list.
+    """
+    from sylvan.database.orm.models import Memory, Repo
+
+    if repo:
+        repo_obj = await Repo.where(name=repo).first()
+        if repo_obj is None:
+            return {"memories": [], "error": f"repo '{repo}' not found"}
+        memories = await Memory.where(repo_id=repo_obj.id).order_by("created_at", "DESC").get()
+    else:
+        memories = await Memory.all().order_by("created_at", "DESC").get()
+
+    result = []
+    for m in memories:
+        await m.load("repo")
+        result.append(
+            {
+                "id": m.id,
+                "repo": m.repo.name if m.repo else "",
+                "repo_id": m.repo_id,
+                "content": m.content,
+                "tags": m.tags or [],
+                "created_at": m.created_at or "",
+                "updated_at": m.updated_at or "",
+            }
+        )
+
+    return {"memories": result}
+
+
+@_register("delete_memory_entry")
+async def _handle_delete_memory_entry(repo: str = "", memory_id: int = 0) -> dict:
+    """Delete a single memory entry.
+
+    Args:
+        repo: Repo name the memory belongs to.
+        memory_id: Memory ID to delete.
+
+    Returns:
+        Dict with ok status.
+    """
+    from sylvan.services.memory import MemoryService
+
+    result = await MemoryService().delete(repo, memory_id)
+    return {"ok": True, **result}
+
+
+@_register("get_all_preferences")
+async def _handle_get_all_preferences(repo: str = "") -> dict:
+    """Return preferences. If repo given, returns merged view. Otherwise raw list.
+
+    Args:
+        repo: Optional repo name for merged scope resolution.
+
+    Returns:
+        Dict with preferences list.
+    """
+    from sylvan.database.orm.models import Preference, Repo, Workspace
+
+    if repo:
+        from sylvan.services.preference import PreferenceService
+
+        return await PreferenceService().get_all(repo)
+
+    prefs = await Preference.all().order_by("created_at", "DESC").get()
+    result = []
+    for p in prefs:
+        scope_name = ""
+        if p.scope == "repo" and p.scope_id:
+            r = await Repo.find(p.scope_id)
+            scope_name = r.name if r else f"repo#{p.scope_id}"
+        elif p.scope == "workspace" and p.scope_id:
+            w = await Workspace.find(p.scope_id)
+            scope_name = w.name if w else f"workspace#{p.scope_id}"
+
+        result.append(
+            {
+                "id": p.id,
+                "scope": p.scope,
+                "scope_id": p.scope_id,
+                "scope_name": scope_name,
+                "key": p.key,
+                "instruction": p.instruction,
+                "created_at": p.created_at or "",
+                "updated_at": p.updated_at or "",
+            }
+        )
+
+    return {"preferences": result, "count": len(result)}
+
+
+@_register("save_preference_entry")
+async def _handle_save_preference_entry(
+    key: str = "",
+    instruction: str = "",
+    scope: str = "global",
+    scope_id: int | None = None,
+) -> dict:
+    """Save or update a preference.
+
+    Args:
+        key: Preference key.
+        instruction: Preference instruction.
+        scope: Scope level.
+        scope_id: Scope target ID.
+
+    Returns:
+        Dict with save result.
+    """
+    from sylvan.services.preference import PreferenceService
+
+    return await PreferenceService().save(key, instruction, scope, scope_id)
+
+
+@_register("delete_preference_entry")
+async def _handle_delete_preference_entry(
+    key: str = "",
+    scope: str = "global",
+    scope_id: int | None = None,
+) -> dict:
+    """Delete a preference.
+
+    Args:
+        key: Preference key.
+        scope: Scope level.
+        scope_id: Scope target ID.
+
+    Returns:
+        Dict with delete result.
+    """
+    from sylvan.services.preference import PreferenceService
+
+    return await PreferenceService().delete(key, scope, scope_id)
+
+
+@_register("get_repos_for_select")
+async def _handle_get_repos_for_select() -> dict:
+    """Return lightweight repo list for dropdown selects.
+
+    Returns:
+        Dict with repos list (id + name only).
+    """
+    from sylvan.database.orm.models import Repo
+
+    repos = await Repo.all().get()
+    return {
+        "repos": [{"id": r.id, "name": r.name} for r in repos],
+    }

@@ -220,6 +220,26 @@ class ClusterNotReadyError(SylvanError):
     code = "cluster_not_ready"
 
 
+class MemoryNotFoundError(SylvanError):
+    """Raised when a memory ID does not exist.
+
+    Attributes:
+        code: ``"memory_not_found"``.
+    """
+
+    code = "memory_not_found"
+
+
+class InvalidScopeError(SylvanError):
+    """Raised when a preference scope is not valid.
+
+    Attributes:
+        code: ``"invalid_scope"``.
+    """
+
+    code = "invalid_scope"
+
+
 class _LegacyError:
     """Thin shim that reproduces the old (non-Exception) SylvanError shape.
 

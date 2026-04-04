@@ -55,6 +55,13 @@ declare module 'vue-router/auto-routes' {
       { name: ParamValue<false> },
       | never
     >,
+    '/memory/': RouteRecordInfo<
+      '/memory/',
+      '/memory',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/quality/': RouteRecordInfo<
       '/quality/',
       '/quality',
@@ -145,6 +152,12 @@ declare module 'vue-router/auto-routes' {
     'src/pages/libraries/[name].vue': {
       routes:
         | '/libraries/[name]'
+      views:
+        | never
+    }
+    'src/pages/memory/index.vue': {
+      routes:
+        | '/memory/'
       views:
         | never
     }
