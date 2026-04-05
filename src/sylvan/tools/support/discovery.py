@@ -19,155 +19,84 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 
-# ---------------------------------------------------------------------------
-# One-liner catalog: tool_name -> short description
-# ---------------------------------------------------------------------------
-
 _ONE_LINERS: dict[str, str] = {
-    # Search
     "find_code": (
         "find_code: find functions, classes, methods by name or keyword. ~50 tokens per result vs ~2000 for grep"
     ),
-    "find_code_batch": ("find_code_batch: multiple symbol searches in one call"),
-    "find_text": ("find_text: full-text search for comments, strings, TODOs that symbol search misses"),
-    "find_docs": ("find_docs: search documentation by title or content, returns section IDs without loading files"),
-    "find_similar_code": ("find_similar_code: vector search for code patterns similar to a known symbol"),
-    # Reading code
-    "read_symbol": ("read_symbol: exact source of one function or class. ~50-200 tokens vs ~2000 for the full file"),
+    "find_code_batch": "find_code_batch: multiple symbol searches in one call",
+    "find_text": "find_text: full-text search for comments, strings, TODOs that symbol search misses",
+    "find_docs": "find_docs: search documentation by title or content, returns section IDs without loading files",
+    "find_similar_code": "find_similar_code: vector search for code patterns similar to a known symbol",
+    "read_symbol": "read_symbol: exact source of one function or class. ~50-200 tokens vs ~2000 for the full file",
     "read_symbols": "read_symbols: batch source retrieval for multiple symbols",
     "understand_symbol": (
         "understand_symbol: source + imports + callers + siblings in one call (replaces 3-5 separate lookups)"
     ),
-    "whats_in_file": ("whats_in_file: all symbols in a file with signatures and line numbers, no content loaded"),
-    "whats_in_files": ("whats_in_files: batch outlines for multiple files"),
-    "project_structure": ("project_structure: directory tree with language and symbol counts per directory"),
-    # Reading docs
-    "read_doc_section": ("read_doc_section: one doc heading's content by ID. ~100 tokens vs ~2000 for the full file"),
+    "whats_in_file": "whats_in_file: all symbols in a file with signatures and line numbers, no content loaded",
+    "whats_in_files": "whats_in_files: batch outlines for multiple files",
+    "project_structure": "project_structure: directory tree with language and symbol counts per directory",
+    "read_doc_section": "read_doc_section: one doc heading's content by ID. ~100 tokens vs ~2000 for the full file",
     "read_doc_sections": "read_doc_sections: batch retrieval for multiple doc sections",
-    "doc_table_of_contents": ("doc_table_of_contents: structured table of contents for all indexed docs"),
-    "doc_tree": ("doc_tree: nested doc tree grouped by document with depth control"),
-    # Impact analysis
-    "what_breaks_if_i_change": ("what_breaks_if_i_change: confirmed vs potential impact before changing a symbol"),
-    "what_breaks_if_i_change_these": ("what_breaks_if_i_change_these: impact analysis for multiple symbols at once"),
-    "who_depends_on_this": ("who_depends_on_this: all files that import a module, with dead-end detection"),
-    "who_depends_on_these": ("who_depends_on_these: importers for multiple files in one call"),
-    "who_calls_this": ("who_calls_this: symbol-level callers or callees, not file-level grep"),
-    "what_does_this_call": ("what_does_this_call: every function this symbol depends on, with signatures"),
-    "what_calls_this": ("what_calls_this: every function that calls this symbol"),
-    "inheritance_chain": ("inheritance_chain: ancestors and descendants of a class"),
-    "import_graph": ("import_graph: file-level import graph with symbol counts per node"),
-    "rename_everywhere": ("rename_everywhere: exact edit locations for renaming, ready to apply"),
-    # Quality
-    "risky_to_change": ("risky_to_change: symbols ranked by complexity x git churn"),
-    "find_tech_debt": ("find_tech_debt: per-symbol metrics: has_tests, has_docs, complexity score"),
-    "code_health_report": ("code_health_report: full static analysis with quality gate"),
-    # Git
-    "who_touched_this": ("who_touched_this: blame, change frequency, recent commits for a file or symbol"),
+    "doc_table_of_contents": "doc_table_of_contents: structured table of contents for all indexed docs",
+    "doc_tree": "doc_tree: nested doc tree grouped by document with depth control",
+    "what_breaks_if_i_change": "what_breaks_if_i_change: confirmed vs potential impact before changing a symbol",
+    "what_breaks_if_i_change_these": "what_breaks_if_i_change_these: impact analysis for multiple symbols at once",
+    "who_depends_on_this": "who_depends_on_this: all files that import a module, with dead-end detection",
+    "who_depends_on_these": "who_depends_on_these: importers for multiple files in one call",
+    "who_calls_this": "who_calls_this: symbol-level callers or callees, not file-level grep",
+    "what_does_this_call": "what_does_this_call: every function this symbol depends on, with signatures",
+    "what_calls_this": "what_calls_this: every function that calls this symbol",
+    "inheritance_chain": "inheritance_chain: ancestors and descendants of a class",
+    "import_graph": "import_graph: file-level import graph with symbol counts per node",
+    "rename_everywhere": "rename_everywhere: exact edit locations for renaming, ready to apply",
+    "risky_to_change": "risky_to_change: symbols ranked by complexity x git churn",
+    "find_tech_debt": "find_tech_debt: per-symbol metrics: has_tests, has_docs, complexity score",
+    "code_health_report": "code_health_report: full static analysis with quality gate",
+    "who_touched_this": "who_touched_this: blame, change frequency, recent commits for a file or symbol",
     "whats_changed_recently": (
         "whats_changed_recently: files changed in last N commits with language and symbol counts"
     ),
-    "what_changed_in_symbols": ("what_changed_in_symbols: symbols added, removed, or changed between commits"),
-    # Orientation
-    "repo_overview": ("repo_overview: file count, languages, symbol breakdown"),
-    "repo_deep_dive": ("repo_deep_dive: full orientation with stats, tree, languages, and manifest contents"),
-    "where_to_start": ("where_to_start: entry points and unexplored areas adapted to your session"),
-    # Memory
+    "what_changed_in_symbols": "what_changed_in_symbols: symbols added, removed, or changed between commits",
+    "repo_overview": "repo_overview: file count, languages, symbol breakdown",
+    "repo_deep_dive": "repo_deep_dive: full orientation with stats, tree, languages, and manifest contents",
+    "where_to_start": "where_to_start: entry points and unexplored areas adapted to your session",
     "load_user_rules": (
         "load_user_rules: user's behavioral rules for this repo (code style, test patterns, commit format)"
     ),
-    "save_user_rule": ("save_user_rule: persist a behavioral rule for future agents"),
-    "remember_this": ("remember_this: persist decisions and context, vector-searchable across agents and machines"),
-    "recall_previous_sessions": ("recall_previous_sessions: find past decisions by meaning, not keywords"),
-    # Libraries
-    "index_library_source": ("index_library_source: index a third-party library's source for API lookup"),
-    "migration_guide": ("migration_guide: symbols added, removed, changed between two versions"),
-    "check_version_drift": ("check_version_drift: installed deps vs indexed versions"),
-    # Discovery
-    "related_code": ("related_code: symbols related by co-location, shared imports, or name similarity"),
-    "find_columns": ("find_columns: column metadata from dbt and other ecosystem providers"),
-    # Workspace
-    "search_all_repos": ("search_all_repos: search symbols across all repos in a workspace"),
-    "cross_repo_impact": ("cross_repo_impact: cross-repo impact analysis"),
-    # Indexing
-    "reindex_file": ("reindex_file: single-file reindex after an edit"),
-    "index_project": ("index_project: index a local folder for search (incremental on re-runs)"),
-    "index_multi_repo": ("index_multi_repo: index multiple folders as a workspace with cross-repo imports"),
-    # Meta
-    "connection_config": ("connection_config: MCP connection config for subagents"),
+    "save_user_rule": "save_user_rule: persist a behavioral rule for future agents",
+    "remember_this": "remember_this: persist decisions and context, vector-searchable across agents and machines",
+    "recall_previous_sessions": "recall_previous_sessions: find past decisions by meaning, not keywords",
+    "index_library_source": "index_library_source: index a third-party library's source for API lookup",
+    "migration_guide": "migration_guide: symbols added, removed, changed between two versions",
+    "check_version_drift": "check_version_drift: installed deps vs indexed versions",
+    "related_code": "related_code: symbols related by co-location, shared imports, or name similarity",
+    "find_columns": "find_columns: column metadata from dbt and other ecosystem providers",
+    "search_all_repos": "search_all_repos: search symbols across all repos in a workspace",
+    "cross_repo_impact": "cross_repo_impact: cross-repo impact analysis",
+    "reindex_file": "reindex_file: single-file reindex after an edit",
+    "index_project": "index_project: index a local folder for search (incremental on re-runs)",
+    "index_multi_repo": "index_multi_repo: index multiple folders as a workspace with cross-repo imports",
+    "connection_config": "connection_config: MCP connection config for subagents",
 }
 
-
-# ---------------------------------------------------------------------------
-# Contextual maps
-# ---------------------------------------------------------------------------
-
-# Tool -> related tools to suggest after it runs
 _CONTEXTUAL_MAP: dict[str, list[str]] = {
-    "find_code": [
-        "read_symbol",
-        "understand_symbol",
-        "what_breaks_if_i_change",
-    ],
-    "find_text": [
-        "find_code",
-        "find_docs",
-    ],
-    "read_symbol": [
-        "what_breaks_if_i_change",
-        "what_calls_this",
-        "what_does_this_call",
-    ],
-    "understand_symbol": [
-        "what_breaks_if_i_change",
-        "who_depends_on_this",
-    ],
-    "whats_in_file": [
-        "read_symbol",
-        "who_depends_on_this",
-    ],
-    "who_depends_on_this": [
-        "what_breaks_if_i_change",
-        "import_graph",
-    ],
-    "who_calls_this": [
-        "what_breaks_if_i_change",
-        "understand_symbol",
-    ],
-    "what_calls_this": [
-        "what_does_this_call",
-        "what_breaks_if_i_change",
-    ],
-    "what_does_this_call": [
-        "what_calls_this",
-        "understand_symbol",
-    ],
-    "inheritance_chain": [
-        "what_breaks_if_i_change",
-        "find_similar_code",
-    ],
-    "find_docs": [
-        "read_doc_section",
-        "doc_table_of_contents",
-    ],
-    "read_doc_section": [
-        "find_docs",
-        "doc_tree",
-    ],
-    "risky_to_change": [
-        "what_breaks_if_i_change",
-        "find_tech_debt",
-    ],
-    "find_tech_debt": [
-        "risky_to_change",
-        "code_health_report",
-    ],
-    "index_library_source": [
-        "migration_guide",
-        "find_code",
-    ],
+    "find_code": ["read_symbol", "understand_symbol", "what_breaks_if_i_change"],
+    "find_text": ["find_code", "find_docs"],
+    "read_symbol": ["what_breaks_if_i_change", "what_calls_this", "what_does_this_call"],
+    "understand_symbol": ["what_breaks_if_i_change", "who_depends_on_this"],
+    "whats_in_file": ["read_symbol", "who_depends_on_this"],
+    "who_depends_on_this": ["what_breaks_if_i_change", "import_graph"],
+    "who_calls_this": ["what_breaks_if_i_change", "understand_symbol"],
+    "what_calls_this": ["what_does_this_call", "what_breaks_if_i_change"],
+    "what_does_this_call": ["what_calls_this", "understand_symbol"],
+    "inheritance_chain": ["what_breaks_if_i_change", "find_similar_code"],
+    "find_docs": ["read_doc_section", "doc_table_of_contents"],
+    "read_doc_section": ["find_docs", "doc_tree"],
+    "risky_to_change": ["what_breaks_if_i_change", "find_tech_debt"],
+    "find_tech_debt": ["risky_to_change", "code_health_report"],
+    "index_library_source": ["migration_guide", "find_code"],
 }
 
-# Result characteristics -> contextual tool suggestions
 _CONTEXTUAL_ON_TAG: dict[str, list[str]] = {
     "result_has_class": ["inheritance_chain", "what_breaks_if_i_change"],
     "result_empty": ["index_library_source", "find_text", "find_docs"],
@@ -177,7 +106,6 @@ _CONTEXTUAL_ON_TAG: dict[str, list[str]] = {
     "many_importers": ["what_breaks_if_i_change", "import_graph"],
 }
 
-# Tool categories for affinity-based discovery
 _TOOL_CATEGORIES: dict[str, str] = {
     "find_code": "search",
     "find_code_batch": "search",
@@ -224,7 +152,6 @@ _TOOL_CATEGORIES: dict[str, str] = {
     "check_version_drift": "library",
 }
 
-# When working in category X, discovery should lean toward Y
 _CATEGORY_AFFINITY: dict[str, list[str]] = {
     "search": ["reading", "impact", "memory"],
     "reading": ["impact", "quality", "history"],
@@ -235,9 +162,7 @@ _CATEGORY_AFFINITY: dict[str, list[str]] = {
     "memory": ["search", "reading"],
 }
 
-# Tiered discovery: higher tiers get surfaced first
 _DISCOVERY_TIERS: list[list[str]] = [
-    # Tier 1: core workflow
     [
         "understand_symbol",
         "what_breaks_if_i_change",
@@ -248,7 +173,6 @@ _DISCOVERY_TIERS: list[list[str]] = [
         "project_structure",
         "repo_deep_dive",
     ],
-    # Tier 2: power tools
     [
         "inheritance_chain",
         "import_graph",
@@ -262,7 +186,6 @@ _DISCOVERY_TIERS: list[list[str]] = [
         "index_library_source",
         "migration_guide",
     ],
-    # Tier 3: batch, workspace, niche
     [
         "find_code_batch",
         "whats_in_files",
@@ -276,7 +199,6 @@ _DISCOVERY_TIERS: list[list[str]] = [
         "check_version_drift",
         "related_code",
     ],
-    # Tier 4: setup, meta
     [
         "reindex_file",
         "index_project",
@@ -285,11 +207,6 @@ _DISCOVERY_TIERS: list[list[str]] = [
         "whats_changed_recently",
     ],
 ]
-
-
-# ---------------------------------------------------------------------------
-# Discovery engine
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -304,19 +221,16 @@ class DiscoveryEngine:
     tools_surfaced: set[str] = field(default_factory=set)
     call_count: int = 0
 
-    # did_you_know budget
     _dyk_count: int = 0
     _dyk_last_at: int = 0
     _dyk_meta_shown: bool = False
     DYK_MAX: int = 4
     DYK_MIN_GAP: int = 4
 
-    # External state (set by the caller before enrich)
     preference_count: int = 0
     preferences_loaded: bool = False
     memory_count: int = 0
 
-    # Track which repos we've checked for preference/memory counts
     _repo_counts_loaded: set[str] = field(default_factory=set)
 
     def record_call(self, tool_name: str) -> None:
@@ -376,7 +290,6 @@ class DiscoveryEngine:
         self.record_call(tool_name)
         tags = tags or []
 
-        # Lazy-load preference/memory counts on first call with a repo
         await self._load_repo_counts(repo)
 
         see_also = self._pick_see_also(tool_name, tags)
@@ -389,8 +302,6 @@ class DiscoveryEngine:
 
         return result
 
-    # -- see_also -----------------------------------------------------------
-
     def _pick_see_also(
         self,
         tool_name: str,
@@ -398,7 +309,6 @@ class DiscoveryEngine:
     ) -> list[str]:
         items: list[str] = []
 
-        # 1. Contextual: based on result tags
         for tag in tags:
             related = _CONTEXTUAL_ON_TAG.get(tag, [])
             for name in related:
@@ -408,7 +318,6 @@ class DiscoveryEngine:
                         items.append(liner)
                         self.tools_surfaced.add(name)
 
-        # 2. Contextual: based on tool that ran
         if len(items) < 2:
             related = _CONTEXTUAL_MAP.get(tool_name, [])
             for name in related:
@@ -418,11 +327,9 @@ class DiscoveryEngine:
                         items.append(liner)
                         self.tools_surfaced.add(name)
 
-        # If nothing contextual, stay silent
         if not items:
             return []
 
-        # 3. Discovery: one item from an affinity-matched tier
         if len(items) < 3:
             pick = self._pick_discovery()
             if pick:
@@ -440,14 +347,12 @@ class DiscoveryEngine:
 
         unseen = set(_ONE_LINERS) - self.tools_surfaced
 
-        # Prefer affinity matches
         affinity_picks = [t for t in unseen if _TOOL_CATEGORIES.get(t) in affinity]
 
         pool = affinity_picks or list(unseen)
         if not pool:
             return None
 
-        # Within the pool, prefer higher tiers
         for tier in _DISCOVERY_TIERS:
             tier_set = set(tier)
             matches = [t for t in pool if t in tier_set]
@@ -458,15 +363,12 @@ class DiscoveryEngine:
                     self.tools_surfaced.add(name)
                     return liner
 
-        # Fallback: any unseen
         name = random.choice(pool)  # noqa: S311
         liner = _ONE_LINERS.get(name)
         if liner:
             self.tools_surfaced.add(name)
             return liner
         return None
-
-    # -- did_you_know -------------------------------------------------------
 
     def _can_dyk(self) -> bool:
         if self._dyk_count >= self.DYK_MAX:
@@ -488,13 +390,11 @@ class DiscoveryEngine:
         if not self._can_dyk():
             return None
 
-        # Slot 1: preferences (first call)
         if self.call_count == 1 and self.preference_count > 0 and not self.preferences_loaded:
             self._record_dyk()
             call = f"load_user_rules(repo='{repo}')" if repo else "load_user_rules()"
             return f"This repo has {self.preference_count} saved preferences from previous sessions. {call} loads them."
 
-        # Meta nudge: mid-session "there's more" (after 2+ dyk, call 6-10)
         if self._should_meta_nudge():
             self._record_dyk()
             self._dyk_meta_shown = True
@@ -506,7 +406,6 @@ class DiscoveryEngine:
                 f"There are {total}+ available. Names describe what they do."
             )
 
-        # Contextual nudges based on tags
         if "high_complexity" in tags:
             complexity = None
             if isinstance(tags, list):
@@ -533,7 +432,6 @@ class DiscoveryEngine:
                 f"previous session ({self.memory_count} memories available)."
             )
 
-        # Late session: save memory reminder
         if self.call_count >= 12 and "remember_this" not in self.tools_used and self._dyk_count < self.DYK_MAX:
             self._record_dyk()
             return (
@@ -551,10 +449,6 @@ class DiscoveryEngine:
             return False
         return self.call_count >= 6
 
-
-# ---------------------------------------------------------------------------
-# Singleton per session
-# ---------------------------------------------------------------------------
 
 _engine: DiscoveryEngine | None = None
 
