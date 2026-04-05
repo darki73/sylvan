@@ -4,12 +4,12 @@ from sylvan.tools.base import HasQuery, HasRepo, Tool, ToolParams, schema_field
 
 
 class SearchColumns(Tool):
-    name = "search_columns"
+    name = "find_columns"
     category = "analysis"
     description = (
-        "Search column metadata from ecosystem context providers (dbt, etc.). "
-        "Finds columns by name or description across all models. Use to answer "
-        "'what columns does this model have?' or 'where is this field defined?'"
+        "Searches column metadata from ecosystem context providers (dbt). "
+        "Finds columns by name or description across models. "
+        "Filterable by model name pattern."
     )
 
     class Params(HasRepo, HasQuery, ToolParams):

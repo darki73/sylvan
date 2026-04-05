@@ -86,30 +86,30 @@ only the exact code you need, saving 90%+ tokens.
 
 | Instead of | Use |
 |---|---|
-| Read/cat a file | `get_symbol` (returns exact function source) |
-| Grep/search | `search_symbols` (ranked, signature-level) |
-| Read for structure | `get_file_outline` (all symbols with signatures) |
-| Grep for imports | `find_importers` (resolved import graph) |
+| Read/cat a file | `read_symbol` (returns exact function source) |
+| Grep/search | `find_code` (ranked, signature-level) |
+| Read for structure | `whats_in_file` (all symbols with signatures) |
+| Grep for imports | `who_depends_on_this` (resolved import graph) |
 
 ## Workflow
 
-1. `index_folder` - index the project (run once, re-run after edits)
-2. `search_symbols` - find code by name or keyword
-3. `get_symbol` - read exact source by ID
-4. `get_blast_radius` - check impact before refactoring
-5. `find_importers` - find who uses a file/module
+1. `index_project` - index the project (run once, re-run after edits)
+2. `find_code` - find code by name or keyword
+3. `read_symbol` - read exact source by ID
+4. `what_breaks_if_i_change` - check impact before refactoring
+5. `who_depends_on_this` - find who uses a file/module
 
 ## Libraries
 
 Before using a third-party package, index it first:
 ```
-add_library(package="npm/htmx.org@2.0.8")
-search_symbols(query="morph swap", repo="htmx.org@2.0.8")
+index_library_source(package="npm/htmx.org@2.0.8")
+find_code(query="morph swap", repo="htmx.org@2.0.8")
 ```
 
 ## After Editing Files
 
-IMPORTANT: After every Edit or Write operation, call `index_file` with the
+IMPORTANT: After every Edit or Write operation, call `reindex_file` with the
 repo name and relative file path to update the index. Stale indexes cause
 search to miss your recent changes. This is the single most common mistake.
 
@@ -117,9 +117,9 @@ search to miss your recent changes. This is the single most common mistake.
 
 - Every response includes `_hints.edit` with exact Read parameters for editing
 - Every response includes `_hints.next` with follow-up tool calls
-- Use `get_file_outline` before reading any file
-- Use `add_library` before integrating any third-party package
-- Use `get_blast_radius` before renaming or deleting anything
+- Use `whats_in_file` before reading any file
+- Use `index_library_source` before integrating any third-party package
+- Use `what_breaks_if_i_change` before renaming or deleting anything
 """
 
 

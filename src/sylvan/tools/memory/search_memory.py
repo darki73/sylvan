@@ -5,17 +5,12 @@ from sylvan.tools.base.meta import get_meta
 
 
 class SearchMemory(Tool):
-    name = "search_memory"
+    name = "recall_previous_sessions"
     category = "search"
     description = (
-        "Check this BEFORE making assumptions about project history, prior "
-        "decisions, or past issues. If the user references something from a "
-        "previous session, or you are about to suggest an approach for something "
-        "that feels like it has history, search here first. Returns project "
-        "memories ranked by semantic relevance: context that was saved because "
-        "it mattered and would be lost between sessions. "
-        "Uses vector similarity, not keyword matching, so natural language queries "
-        "work well. This searches project-scoped knowledge, not your harness memory."
+        "Searches project memories by semantic similarity, not keywords. Returns "
+        "past decisions, root causes, and context ranked by relevance. Finds "
+        "matches even when the query uses different words than what was saved."
     )
 
     class Params(HasRepo, HasQuery, HasPagination, ToolParams):

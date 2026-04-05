@@ -69,7 +69,7 @@ class TestGetHotspotsTool:
         from sylvan.tools.analysis.get_hotspots import GetHotspots
 
         tool = GetHotspots()
-        assert tool.name == "get_hotspots"
+        assert tool.name == "risky_to_change"
         assert tool.category == "analysis"
 
     @pytest.mark.asyncio
@@ -90,5 +90,5 @@ class TestGetHotspotsTool:
 
         tool = GetHotspots()
         mcp = tool.to_mcp_tool()
-        assert mcp.name == "get_hotspots"
+        assert mcp.name == "risky_to_change"
         assert "hotspot" in mcp.description.lower() or "complex" in mcp.description.lower()

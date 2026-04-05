@@ -5,12 +5,9 @@ from sylvan.tools.base.meta import get_meta
 
 
 class RetrieveMemory(Tool):
-    name = "retrieve_memory"
+    name = "get_memory"
     category = "retrieval"
-    description = (
-        "Retrieve a specific memory by its ID. Use when you have a memory ID "
-        "from search results and want to see the full content."
-    )
+    description = "Retrieves a specific memory by ID. Returns the full content, tags, and timestamps."
 
     class Params(HasRepo, ToolParams):
         id: int = schema_field(

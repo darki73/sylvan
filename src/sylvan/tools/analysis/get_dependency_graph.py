@@ -4,13 +4,12 @@ from sylvan.tools.base import HasDirection, HasFilePath, HasRepo, Tool, ToolPara
 
 
 class GetDependencyGraph(Tool):
-    name = "get_dependency_graph"
+    name = "import_graph"
     category = "analysis"
     description = (
-        "Build a file-level import dependency graph. Shows what a file imports "
-        "(direction=imports), what imports it (direction=importers), or both. "
-        "Returns nodes with symbol counts and directed edges. Use to understand "
-        "module coupling before refactoring."
+        "Returns file-level import dependency graph. Shows what a file imports, "
+        "what imports it, or both. Returns nodes with symbol counts and directed "
+        "edges. Follows import chains up to 3 hops deep."
     )
 
     class Params(HasRepo, HasFilePath, HasDirection, ToolParams):

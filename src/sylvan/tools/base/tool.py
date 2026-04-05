@@ -42,7 +42,7 @@ class Tool:
         from sylvan.tools.base import Tool, HasSymbol, HasDepth, ToolParams
 
         class GetBlastRadius(Tool):
-            name = "get_blast_radius"
+            name = "what_breaks_if_i_change"
             category = "analysis"
             description = "Check what breaks if you change a symbol."
 
@@ -132,6 +132,14 @@ class Tool:
                             result["_stale"] = stale_msg
                     except Exception:  # noqa: S110
                         pass
+
+                try:
+                    from sylvan.tools.support.discovery import get_engine
+
+                    tags = self._build_discovery_tags(result)
+                    await get_engine().enrich(result, self.name, tags=tags, repo=repo_name)
+                except Exception:  # noqa: S110
+                    pass
         finally:
             if meta_token is not None:
                 reset_meta(meta_token)
@@ -194,6 +202,31 @@ class Tool:
         Default is ``MeasureMethod.BYTE_ESTIMATE``.
         """
         return MeasureMethod.BYTE_ESTIMATE
+
+    def _build_discovery_tags(self, result: dict) -> list[str]:
+        """Derive discovery tags from the tool response."""
+        tags: list[str] = []
+        symbols = result.get("symbols")
+        if isinstance(symbols, list) and len(symbols) == 0:
+            tags.append("result_empty")
+        if isinstance(symbols, list):
+            for sym in symbols:
+                if isinstance(sym, dict) and sym.get("kind") == "class":
+                    tags.append("result_has_class")
+                    break
+        complexity = result.get("complexity")
+        if isinstance(complexity, (int, float)) and complexity >= 8:
+            tags.append("high_complexity")
+            tags.append(f"complexity:{complexity}")
+        if result.get("has_tests") is False:
+            tags.append("untested")
+        line_count = result.get("line_count")
+        if isinstance(line_count, (int, float)) and line_count >= 60:
+            tags.append("long_symbol")
+        total = result.get("total")
+        if isinstance(total, (int, float)) and total >= 10 and "importers" in result:
+            tags.append("many_importers")
+        return tags
 
 
 def get_registry() -> dict[str, type[Tool]]:

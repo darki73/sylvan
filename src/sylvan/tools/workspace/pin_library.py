@@ -5,13 +5,12 @@ from sylvan.tools.base.meta import get_meta
 
 
 class PinLibrary(Tool):
-    name = "pin_library"
+    name = "pin_library_version"
     category = "meta"
     description = (
-        "Pin a specific library version to a workspace. The library must "
-        "already be indexed via add_library. Once pinned, workspace_search "
-        "includes that library version's symbols. Use this to give each "
-        "project access to the exact library versions it depends on."
+        "Pins a library version to a workspace. Once pinned, search_all_repos "
+        "includes that library's symbols. The library must be indexed via "
+        "index_library_source first."
     )
 
     class Params(HasWorkspace, ToolParams):

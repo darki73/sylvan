@@ -251,19 +251,19 @@ def wrap_response(data: dict, meta: dict, include_hints: bool = False) -> dict:
 
         if symbol_id:
             hints["next"] = {
-                "find_callers": f"find_importers(repo, '{file_path}')",
-                "blast_radius": f"get_blast_radius('{symbol_id}')",
-                "dependency_graph": f"get_dependency_graph(repo, '{file_path}')",
+                "find_callers": f"who_depends_on_this(repo, '{file_path}')",
+                "blast_radius": f"what_breaks_if_i_change('{symbol_id}')",
+                "dependency_graph": f"import_graph(repo, '{file_path}')",
             }
         elif section_id and file_path:
             hints["next"] = {
-                "toc": f"get_toc(repo, doc_path='{file_path}')",
-                "find_callers": f"find_importers(repo, '{file_path}')",
+                "toc": f"doc_table_of_contents(repo, doc_path='{file_path}')",
+                "find_callers": f"who_depends_on_this(repo, '{file_path}')",
             }
         elif file_path:
             hints["next"] = {
-                "file_outline": f"get_file_outline(repo, '{file_path}')",
-                "find_callers": f"find_importers(repo, '{file_path}')",
+                "file_outline": f"whats_in_file(repo, '{file_path}')",
+                "find_callers": f"who_depends_on_this(repo, '{file_path}')",
             }
 
         if hints:

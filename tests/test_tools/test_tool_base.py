@@ -735,7 +735,7 @@ class TestHintBuilder:
         h = HintBuilder().reindex("my-repo", "src/main.py")
         built = h.build()
         assert len(built["reindex"]) == 1
-        assert "index_file" in built["reindex"][0]
+        assert "reindex_file" in built["reindex"][0]
 
     def test_reindex_multiple(self):
         from sylvan.tools.base.hints import HintBuilder
@@ -767,7 +767,7 @@ class TestHintBuilder:
         from sylvan.tools.base.hints import HintBuilder
 
         h = HintBuilder().next_blast_radius("foo::bar#function")
-        assert "get_blast_radius" in h.build()["next"]["blast_radius"]
+        assert "what_breaks_if_i_change" in h.build()["next"]["blast_radius"]
         assert "symbol_id=" in h.build()["next"]["blast_radius"]
 
     def test_next_importers(self):
@@ -775,7 +775,7 @@ class TestHintBuilder:
 
         h = HintBuilder().next_importers("repo", "src/main.py")
         built = h.build()["next"]["find_callers"]
-        assert "find_importers" in built
+        assert "who_depends_on_this" in built
         assert "repo=" in built
         assert "file_path=" in built
 
@@ -784,7 +784,7 @@ class TestHintBuilder:
 
         h = HintBuilder().next_search("dispatch", repo="sylvan", kind="function")
         built = h.build()["next"]["search_deeper"]
-        assert "search_symbols" in built
+        assert "find_code" in built
         assert "dispatch" in built
         assert "sylvan" in built
         assert "function" in built

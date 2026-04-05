@@ -234,13 +234,13 @@ files = [FilePresenter.brief(f) for f in importers]
 ```
 src/sylvan/tools/
     base/         -- Tool class, params, hints, meta, presenters
-    search/       -- search_symbols, search_text, search_sections
-    browsing/     -- get_symbol, get_file_outline, get_toc
+    search/       -- find_code, find_text, find_docs
+    browsing/     -- read_symbol, whats_in_file, doc_table_of_contents
     analysis/     -- blast_radius, hierarchy, references, quality
-    indexing/     -- index_folder, index_file
-    workspace/    -- index_workspace, workspace_search
+    indexing/     -- index_project, reindex_file
+    workspace/    -- index_multi_repo, search_all_repos
     library/      -- add, list, remove
-    meta/         -- list_repos, suggest_queries, scaffold
+    meta/         -- indexed_repos, where_to_start, generate_project_docs
 ```
 
 Adding a tool: create one file with one class. No definitions files, no handler registration, no category mapping.

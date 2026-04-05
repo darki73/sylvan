@@ -4,12 +4,11 @@ from sylvan.tools.base import HasSymbol, Tool, ToolParams, schema_field
 
 
 class CallsTo(Tool):
-    name = "calls_to"
+    name = "what_does_this_call"
     category = "analysis"
     description = (
-        "Find all symbols that a given function or method calls. Returns callees "
-        "with file paths, signatures, and line numbers. Use when debugging to "
-        "understand what a function depends on."
+        "Returns all symbols that a given function or method calls. Each callee "
+        "includes file path, signature, and line number. Shows what a function depends on."
     )
 
     class Params(HasSymbol, ToolParams):

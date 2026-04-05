@@ -18,12 +18,12 @@ from sylvan.tools.base.meta import get_meta
 
 
 class SearchText(Tool):
-    name = "search_text"
+    name = "find_text"
     category = "search"
     description = (
-        "Full-text search across all indexed file content -- like Grep but searches "
-        "cached content without hitting the filesystem. Use for comments, strings, "
-        "TODOs, or literal text that search_symbols wouldn't find."
+        "Full-text search across indexed file content. Finds comments, strings, "
+        "TODOs, and literal text that symbol search misses. Returns matching "
+        "lines with optional surrounding context."
     )
 
     class Params(HasQuery, HasOptionalRepo, HasFileFilter, HasPagination, HasContextLines, ToolParams):

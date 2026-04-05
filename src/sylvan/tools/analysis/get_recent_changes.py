@@ -4,13 +4,12 @@ from sylvan.tools.base import HasOptionalFilePath, HasRepo, Tool, ToolParams, sc
 
 
 class GetRecentChanges(Tool):
-    name = "get_recent_changes"
+    name = "whats_changed_recently"
     category = "analysis"
     description = (
-        "Show what changed in the last N commits at the file level. For each "
-        "changed file in the index, shows language, symbol count, and last commit "
-        "message. A lighter alternative to get_symbol_diff when you just need an "
-        "overview of recent activity."
+        "Returns files changed in the last N commits with language, symbol count, "
+        "and last commit message per file. Lighter than what_changed_in_symbols "
+        "when you only need file-level change overview."
     )
 
     class Params(HasRepo, HasOptionalFilePath, ToolParams):

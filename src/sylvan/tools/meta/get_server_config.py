@@ -4,13 +4,12 @@ from sylvan.tools.base import Tool, ToolParams
 
 
 class GetServerConfig(Tool):
-    name = "get_server_config"
+    name = "connection_config"
     category = "meta"
     description = (
-        "Returns this sylvan server's MCP connection config -- the exact "
-        "command, args, and working directory needed to connect to this "
-        "instance as an MCP server. Use this to configure SDK clients, "
-        "subagents, or other tools that need sylvan MCP access."
+        "Returns this server's MCP connection config: command, args, working "
+        "directory, dashboard URL, and database path. Useful for connecting "
+        "subagents or SDK clients."
     )
 
     class Params(ToolParams):

@@ -45,41 +45,40 @@ def _get_workflow_rules() -> list[dict]:
         {
             "rule": "ALWAYS search before reading",
             "detail": (
-                "Use search_symbols or search_sections instead of Read/Grep/Glob. "
-                "Sylvan returns only the exact code you need."
+                "Use find_code or find_docs instead of Read/Grep/Glob. Sylvan returns only the exact code you need."
             ),
         },
         {
-            "rule": "Use get_symbol instead of Read for source code",
+            "rule": "Use read_symbol instead of Read for source code",
             "detail": (
-                "get_symbol returns exact function/class source by ID. "
+                "read_symbol returns exact function/class source by ID. "
                 "Responses include _hints.edit with read_offset and read_limit."
             ),
         },
         {
             "rule": "Index before exploring",
             "detail": (
-                "Call index_folder once per project. Re-run after code changes. "
+                "Call index_project once per project. Re-run after code changes. "
                 "Incremental reindex only processes changed files."
             ),
         },
         {
-            "rule": "add_library before using third-party packages",
+            "rule": "index_library_source before using third-party packages",
             "detail": (
-                "Index library source code with add_library, then search_symbols "
+                "Index library source code with index_library_source, then find_code "
                 "to find the real API instead of guessing."
             ),
         },
         {
-            "rule": "Use blast_radius before refactoring",
+            "rule": "Check impact before refactoring",
             "detail": (
-                "Call get_blast_radius before renaming or changing signatures. Shows every file that would be affected."
+                "Call what_breaks_if_i_change before renaming or changing signatures. Shows every file that would be affected."
             ),
         },
         {
             "rule": "Reindex after edits",
             "detail": (
-                "After editing files, call index_file with the repo name and "
+                "After editing files, call reindex_file with the repo name and "
                 "relative file path. Stale indexes miss recent changes."
             ),
         },
@@ -92,13 +91,11 @@ def _actions_to_dicts(actions: list[SetupAction]) -> list[dict]:
 
 
 class ConfigureClaudeCode(Tool):
-    name = "configure_claude_code"
+    name = "setup_claude_code"
     category = "meta"
     description = (
-        "Configure Claude Code to use sylvan tools. Creates or updates "
-        ".claude/settings.local.json with mcp__sylvan__* permission and "
-        "SubagentStart hook. Call this instead of get_workflow_guide if "
-        "you are running inside Claude Code."
+        "Creates or updates .claude/settings.local.json with sylvan tool "
+        "permissions and SubagentStart hook for this project."
     )
 
     class Params(HasProjectPath, ToolParams):
@@ -134,14 +131,9 @@ class ConfigureClaudeCode(Tool):
 
 
 class ConfigureCursor(Tool):
-    name = "configure_cursor"
+    name = "setup_cursor"
     category = "meta"
-    description = (
-        "Configure Cursor to use sylvan tools. Creates "
-        ".cursor/rules/sylvan.md with tool usage instructions. "
-        "Call this instead of get_workflow_guide if you are running "
-        "inside Cursor."
-    )
+    description = "Creates .cursor/rules/sylvan.md with tool routing rules for this project."
 
     class Params(HasProjectPath, ToolParams):
         pass
@@ -174,14 +166,9 @@ class ConfigureCursor(Tool):
 
 
 class ConfigureWindsurf(Tool):
-    name = "configure_windsurf"
+    name = "setup_windsurf"
     category = "meta"
-    description = (
-        "Configure Windsurf to use sylvan tools. Creates "
-        ".windsurf/rules/sylvan.md with tool usage instructions. "
-        "Call this instead of get_workflow_guide if you are running "
-        "inside Windsurf."
-    )
+    description = "Creates .windsurf/rules/sylvan.md with tool routing rules for this project."
 
     class Params(HasProjectPath, ToolParams):
         pass
@@ -214,14 +201,9 @@ class ConfigureWindsurf(Tool):
 
 
 class ConfigureCopilot(Tool):
-    name = "configure_copilot"
+    name = "setup_copilot"
     category = "meta"
-    description = (
-        "Configure GitHub Copilot to use sylvan tools. Creates "
-        ".github/copilot-instructions.md with tool routing rules. "
-        "Call this instead of get_workflow_guide if you are running "
-        "inside GitHub Copilot."
-    )
+    description = "Creates .github/copilot-instructions.md with tool routing rules for this project."
 
     class Params(HasProjectPath, ToolParams):
         pass

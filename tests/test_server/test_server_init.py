@@ -32,20 +32,20 @@ class TestGetHandlers:
         _get_handlers.cache_clear()
         handlers = _get_handlers()
         expected_tools = [
-            "search_symbols",
-            "index_folder",
-            "index_file",
-            "get_symbol",
-            "get_symbols",
-            "get_file_outline",
-            "get_file_tree",
-            "list_repos",
-            "search_sections",
-            "get_section",
-            "get_sections",
-            "get_toc",
-            "get_toc_tree",
-            "get_repo_outline",
+            "find_code",
+            "index_project",
+            "reindex_file",
+            "read_symbol",
+            "read_symbols",
+            "whats_in_file",
+            "project_structure",
+            "indexed_repos",
+            "find_docs",
+            "read_doc_section",
+            "read_doc_sections",
+            "doc_table_of_contents",
+            "doc_tree",
+            "repo_overview",
         ]
         for tool in expected_tools:
             assert tool in handlers, f"Missing core tool: {tool}"
@@ -57,14 +57,14 @@ class TestGetHandlers:
         _get_handlers.cache_clear()
         handlers = _get_handlers()
         expected_tools = [
-            "get_blast_radius",
-            "get_class_hierarchy",
-            "get_references",
-            "find_importers",
-            "get_related",
-            "get_quality",
-            "get_quality_report",
-            "get_git_context",
+            "what_breaks_if_i_change",
+            "inheritance_chain",
+            "who_calls_this",
+            "who_depends_on_this",
+            "related_code",
+            "find_tech_debt",
+            "code_health_report",
+            "who_touched_this",
         ]
         for tool in expected_tools:
             assert tool in handlers, f"Missing analysis tool: {tool}"
@@ -76,11 +76,11 @@ class TestGetHandlers:
         _get_handlers.cache_clear()
         handlers = _get_handlers()
         expected_tools = [
-            "index_workspace",
-            "workspace_search",
-            "workspace_blast_radius",
-            "add_to_workspace",
-            "pin_library",
+            "index_multi_repo",
+            "search_all_repos",
+            "cross_repo_impact",
+            "add_repo_to_workspace",
+            "pin_library_version",
         ]
         for tool in expected_tools:
             assert tool in handlers, f"Missing workspace tool: {tool}"
@@ -92,11 +92,11 @@ class TestGetHandlers:
         _get_handlers.cache_clear()
         handlers = _get_handlers()
         expected_tools = [
-            "add_library",
-            "list_libraries",
+            "index_library_source",
+            "indexed_libraries",
             "remove_library",
-            "check_library_versions",
-            "compare_library_versions",
+            "check_version_drift",
+            "migration_guide",
         ]
         for tool in expected_tools:
             assert tool in handlers, f"Missing library tool: {tool}"
@@ -108,11 +108,11 @@ class TestGetHandlers:
         _get_handlers.cache_clear()
         handlers = _get_handlers()
         expected_tools = [
-            "suggest_queries",
-            "get_session_stats",
-            "scaffold",
-            "get_dashboard_url",
-            "get_logs",
+            "where_to_start",
+            "usage_stats",
+            "generate_project_docs",
+            "open_dashboard",
+            "server_logs",
         ]
         for tool in expected_tools:
             assert tool in handlers, f"Missing meta tool: {tool}"

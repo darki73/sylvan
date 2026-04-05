@@ -4,12 +4,12 @@ from sylvan.tools.base import HasSymbol, Tool, ToolParams, schema_field
 
 
 class RenameSymbol(Tool):
-    name = "rename_symbol"
+    name = "rename_everywhere"
     category = "analysis"
     description = (
-        "Find all edit locations needed to rename a symbol. Returns exact "
-        "file/line/old_text/new_text for each occurrence so the agent can "
-        "apply edits directly. Uses blast radius to find affected files."
+        "Finds all edit locations needed to rename a symbol. Returns exact file, "
+        "line, old_text, and new_text for each occurrence. Uses blast radius to "
+        "find affected files across the import graph."
     )
 
     class Params(HasSymbol, ToolParams):

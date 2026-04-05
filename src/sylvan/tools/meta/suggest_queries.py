@@ -4,12 +4,11 @@ from sylvan.tools.base import HasRepo, Tool, ToolParams
 
 
 class SuggestQueries(Tool):
-    name = "suggest_queries"
+    name = "where_to_start"
     category = "meta"
     description = (
-        "Not sure where to start? This suggests the best queries for exploring "
-        "a repo -- key entry points, popular classes, unexplored areas, docs. "
-        "Session-aware: adapts based on what you've already looked at."
+        "Suggests queries for exploring a repo: key entry points, popular classes, "
+        "unexplored areas, docs. Adapts to what has already been explored this session."
     )
 
     class Params(HasRepo, ToolParams):

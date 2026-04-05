@@ -17,14 +17,14 @@ The hook command:
 ```json
 {
   "type": "command",
-  "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SubagentStart\",\"additionalContext\":\"CRITICAL: Always try mcp__sylvan__* tools FIRST before falling back to Read/Grep/Glob. mcp__sylvan__search_symbols to find code, mcp__sylvan__get_symbol to read source, mcp__sylvan__get_file_outline to understand files, mcp__sylvan__find_importers for dependencies, mcp__sylvan__get_blast_radius before refactoring. These return only the exact code you need and save 90%+ tokens. Only fall back to Read/Grep if the repo is not indexed or sylvan returns no results.\"}}'",
+  "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SubagentStart\",\"additionalContext\":\"CRITICAL: Always try mcp__sylvan__* tools FIRST before falling back to Read/Grep/Glob. mcp__sylvan__find_code to find code, mcp__sylvan__read_symbol to read source, mcp__sylvan__whats_in_file to understand files, mcp__sylvan__who_depends_on_this for dependencies, mcp__sylvan__what_breaks_if_i_change before refactoring. These return only the exact code you need and save 90%+ tokens. Only fall back to Read/Grep if the repo is not indexed or sylvan returns no results.\"}}'",
   "timeout": 5
 }
 ```
 
 The subagent sees this reminder before it begins working:
 
-> CRITICAL: Always try mcp__sylvan__* tools FIRST before falling back to Read/Grep/Glob. mcp__sylvan__search_symbols to find code, mcp__sylvan__get_symbol to read source, mcp__sylvan__get_file_outline to understand files, mcp__sylvan__find_importers for dependencies, mcp__sylvan__get_blast_radius before refactoring. These return only the exact code you need and save 90%+ tokens. Only fall back to Read/Grep if the repo is not indexed or sylvan returns no results.
+> CRITICAL: Always try mcp__sylvan__* tools FIRST before falling back to Read/Grep/Glob. mcp__sylvan__find_code to find code, mcp__sylvan__read_symbol to read source, mcp__sylvan__whats_in_file to understand files, mcp__sylvan__who_depends_on_this for dependencies, mcp__sylvan__what_breaks_if_i_change before refactoring. These return only the exact code you need and save 90%+ tokens. Only fall back to Read/Grep if the repo is not indexed or sylvan returns no results.
 
 The `matcher: "*"` setting means this hook fires for every subagent, regardless of the prompt content.
 
@@ -41,7 +41,7 @@ When a subagent starts, it has:
 The hook provides a baseline instruction, but explicit instructions in the Agent tool prompt reinforce the behavior. Always include:
 
 1. Which tools to use
-2. The repo name (so the subagent does not need to call `list_repos`)
+2. The repo name (so the subagent does not need to call `indexed_repos`)
 3. What to search for
 
 **Good prompt:**
@@ -51,9 +51,9 @@ Investigate the authentication module in the 'backend' repo.
 Find all auth-related functions, check their blast radius, and
 report which ones have no test coverage.
 
-Use sylvan MCP tools (mcp__sylvan__search_symbols, mcp__sylvan__get_symbol,
-mcp__sylvan__get_file_outline, mcp__sylvan__get_blast_radius,
-mcp__sylvan__get_quality) instead of Read/Grep/Glob.
+Use sylvan MCP tools (mcp__sylvan__find_code, mcp__sylvan__read_symbol,
+mcp__sylvan__whats_in_file, mcp__sylvan__what_breaks_if_i_change,
+mcp__sylvan__find_tech_debt) instead of Read/Grep/Glob.
 The project is indexed as repo 'backend'.
 ```
 
@@ -72,10 +72,10 @@ This gives the subagent no repo name, no tool guidance, and no specific task. It
 Given a well-structured prompt, the subagent follows this pattern:
 
 1. Calls `ToolSearch` to fetch schemas for the sylvan tools it needs
-2. Calls `search_symbols(query="auth", repo="backend")` to find relevant symbols
-3. Calls `get_symbol(symbol_id=...)` on each result to read source code
-4. Calls `get_blast_radius(symbol_id=...)` to check impact
-5. Calls `get_quality(repo="backend")` or other analysis tools as needed
+2. Calls `find_code(query="auth", repo="backend")` to find relevant symbols
+3. Calls `read_symbol(symbol_id=...)` on each result to read source code
+4. Calls `what_breaks_if_i_change(symbol_id=...)` to check impact
+5. Calls `find_tech_debt(repo="backend")` or other analysis tools as needed
 6. Reports findings back to the parent agent
 
 Each tool call goes to the same sylvan server instance, so the subagent sees the same index as the parent.
@@ -87,7 +87,7 @@ Multiple sylvan server instances can run simultaneously (one per Claude Code ses
 | Concern | How it works |
 |---|---|
 | **Reads** | All instances read concurrently. SQLite WAL mode allows concurrent readers without blocking. |
-| **Writes** | Write operations (index_folder, index_file, index_workspace, add_library) are proxied to the leader instance. Followers detect write tools and forward them over HTTP. |
+| **Writes** | Write operations (index_project, reindex_file, index_multi_repo, index_library_source) are proxied to the leader instance. Followers detect write tools and forward them over HTTP. |
 | **Leader election** | The first instance to start becomes the leader. Followers discover the leader through the cluster state file. |
 | **Consistency** | All instances see the same data. After a write completes on the leader, followers immediately see the updated index on their next read. |
 
@@ -97,12 +97,12 @@ This means multiple agents can search and browse the index simultaneously withou
 
 Each sylvan server instance tracks its own session. Subagent activity rolls up into the same instance stats as the parent agent (because they share the same server process).
 
-- **Tool calls** -- every tool invocation is counted per instance. When a subagent calls `search_symbols`, it shows up in the same instance's tool call count as the parent.
+- **Tool calls** -- every tool invocation is counted per instance. When a subagent calls `find_code`, it shows up in the same instance's tool call count as the parent.
 - **Token efficiency** -- tokens returned vs. equivalent file-read cost, tracked per tool call. The efficiency numbers on the dashboard include both parent and subagent activity.
 - **Symbols seen** -- which symbols the agent has already retrieved. This is shared across parent and subagents on the same instance, so a symbol retrieved by the parent will be deprioritized if the subagent searches for related terms.
-- **Dashboard visibility** -- open the dashboard (via `get_dashboard_url`) to see all instances and their activity. The Session page shows tool call breakdowns, efficiency rings, and coding session history. Subagent tool calls are not distinguished from parent calls -- they all appear under the same instance.
+- **Dashboard visibility** -- open the dashboard (via `open_dashboard`) to see all instances and their activity. The Session page shows tool call breakdowns, efficiency rings, and coding session history. Subagent tool calls are not distinguished from parent calls -- they all appear under the same instance.
 
-Call `get_session_stats` to see current session numbers programmatically.
+Call `usage_stats` to see current session numbers programmatically.
 
 ## Subagent Workflow Example
 
@@ -114,18 +114,18 @@ Agent tool prompt:
 Find all auth-related functions, check their blast radius, and
 report which ones have no test coverage.
 
-Use sylvan MCP tools (mcp__sylvan__search_symbols, mcp__sylvan__get_symbol,
-mcp__sylvan__get_file_outline, mcp__sylvan__get_blast_radius,
-mcp__sylvan__get_quality) instead of Read/Grep/Glob.
+Use sylvan MCP tools (mcp__sylvan__find_code, mcp__sylvan__read_symbol,
+mcp__sylvan__whats_in_file, mcp__sylvan__what_breaks_if_i_change,
+mcp__sylvan__find_tech_debt) instead of Read/Grep/Glob.
 The project is indexed as repo 'backend'."
 ```
 
 The subagent then:
 
-1. Calls `search_symbols(query="auth", repo="backend")` to find symbols
-2. Calls `get_symbol` on each result to read source
-3. Calls `get_blast_radius` to check impact of each symbol
-4. Calls `get_quality(repo="backend", untested_only=True)` to find coverage gaps
+1. Calls `find_code(query="auth", repo="backend")` to find symbols
+2. Calls `read_symbol` on each result to read source
+3. Calls `what_breaks_if_i_change` to check impact of each symbol
+4. Calls `find_tech_debt(repo="backend", untested_only=True)` to find coverage gaps
 5. Reports back to the parent agent with findings
 
 The parent sees a summary of what the subagent found. The dashboard shows the cumulative tool calls and token savings from both the parent and subagent activity.

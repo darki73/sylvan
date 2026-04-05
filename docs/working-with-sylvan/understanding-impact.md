@@ -5,14 +5,14 @@ need to know what will break. This chapter covers the tools that answer "what
 depends on this?" at every level -- symbols, files, and entire module trees.
 
 
-## Checking blast radius with `get_blast_radius`
+## Checking blast radius with `what_breaks_if_i_change`
 
 The blast radius of a symbol is every file and symbol that could be affected by
 changing it. This goes beyond simple text search -- it follows import chains and
 distinguishes between confirmed and potential impact.
 
 ```
-get_blast_radius(
+what_breaks_if_i_change(
     symbol_id="src/config/parser.py::parse_config#function"
 )
 ```
@@ -71,16 +71,16 @@ shows direct importers. Depth 2 follows their importers too. Depth 3 is the
 maximum and covers transitive dependencies.
 
 ```
-get_blast_radius(symbol_id="...", depth=3)
+what_breaks_if_i_change(symbol_id="...", depth=3)
 ```
 
 
-## Checking multiple symbols with `batch_blast_radius`
+## Checking multiple symbols with `what_breaks_if_i_change_these`
 
 If you are refactoring several functions at once, check them all in one call:
 
 ```
-batch_blast_radius(
+what_breaks_if_i_change_these(
     symbol_ids=[
         "src/config/parser.py::parse_config#function",
         "src/config/parser.py::validate_config#function"
@@ -90,15 +90,15 @@ batch_blast_radius(
 ```
 
 Each symbol gets its own confirmed and potential lists. This is always faster
-than calling `get_blast_radius` repeatedly.
+than calling `what_breaks_if_i_change` repeatedly.
 
 
-## Finding who imports a file with `find_importers`
+## Finding who imports a file with `who_depends_on_this`
 
-At the file level, `find_importers` answers "who depends on this module?"
+At the file level, `who_depends_on_this` answers "who depends on this module?"
 
 ```
-find_importers(repo="my-project", file_path="src/config/parser.py")
+who_depends_on_this(repo="my-project", file_path="src/config/parser.py")
 ```
 
 ```json
@@ -124,19 +124,19 @@ the file has its own dependents, so changes can propagate further.
 **Checking multiple files:**
 
 ```
-batch_find_importers(
+who_depends_on_these(
     repo="my-project",
     file_paths=["src/config/parser.py", "src/config/schema.py"]
 )
 ```
 
 
-## Visualizing dependencies with `get_dependency_graph`
+## Visualizing dependencies with `import_graph`
 
 To see the full picture of what a file imports and what imports it:
 
 ```
-get_dependency_graph(
+import_graph(
     repo="my-project",
     file_path="src/config/parser.py",
     direction="both",
@@ -170,14 +170,14 @@ The `direction` parameter controls which side of the graph to build:
 Use `depth` to control how many hops to follow (1-3).
 
 
-## Finding callers and callees with `get_references`
+## Finding callers and callees with `who_calls_this`
 
-While `find_importers` works at the file level, `get_references` works at the
+While `who_depends_on_this` works at the file level, `who_calls_this` works at the
 symbol level. It answers "who calls this function?" and "what does this function
 call?"
 
 ```
-get_references(
+who_calls_this(
     symbol_id="src/config/parser.py::parse_config#function",
     direction="to"
 )
@@ -187,12 +187,12 @@ get_references(
 - `direction="from"` returns callees -- symbols that this one references
 
 
-## Tracing inheritance with `get_class_hierarchy`
+## Tracing inheritance with `inheritance_chain`
 
 Before changing a base class, check its inheritance chain:
 
 ```
-get_class_hierarchy(class_name="BaseHandler", repo="my-project")
+inheritance_chain(class_name="BaseHandler", repo="my-project")
 ```
 
 This returns ancestors (what `BaseHandler` extends) and descendants (what extends
@@ -200,13 +200,13 @@ This returns ancestors (what `BaseHandler` extends) and descendants (what extend
 overrides it might need updating.
 
 
-## Planning a rename with `rename_symbol`
+## Planning a rename with `rename_everywhere`
 
-If you want to rename a symbol, `rename_symbol` finds every location that needs
+If you want to rename a symbol, `rename_everywhere` finds every location that needs
 to change and gives you exact edit instructions:
 
 ```
-rename_symbol(
+rename_everywhere(
     symbol_id="src/config/parser.py::parse_config#function",
     new_name="load_config"
 )
@@ -252,12 +252,12 @@ these directly with a file-editing tool.
 
 Putting it all together, the safe workflow for any code change is:
 
-1. **Search** -- `search_symbols` to find the symbol you want to change
-2. **Read** -- `get_symbol` to see the current source
-3. **Assess** -- `get_blast_radius` to see what depends on it
-4. **Understand** -- `get_references` or `get_class_hierarchy` for details
+1. **Search** -- `find_code` to find the symbol you want to change
+2. **Read** -- `read_symbol` to see the current source
+3. **Assess** -- `what_breaks_if_i_change` to see what depends on it
+4. **Understand** -- `who_calls_this` or `inheritance_chain` for details
 5. **Change** -- make the edit
-6. **Reindex** -- `index_file` to update the index with your changes
+6. **Reindex** -- `reindex_file` to update the index with your changes
 
 The blast radius check in step 3 is the critical one. It turns "I think this is
 safe to change" into "I can see exactly what will be affected." When the confirmed

@@ -4,12 +4,12 @@ from sylvan.tools.base import HasSymbol, Tool, ToolParams, schema_field
 
 
 class GetReferences(Tool):
-    name = "get_references"
+    name = "who_calls_this"
     category = "analysis"
     description = (
-        "PREFERRED over Grep for 'who calls this function?'. Returns symbol-level "
-        "references -- callers (direction=to) or callees (direction=from). "
-        "Structural query that Grep cannot answer accurately."
+        "Returns symbol-level references: callers (direction=to) or callees "
+        "(direction=from). Based on the reference graph, not text matching. "
+        "Each reference includes file path, signature, and line number."
     )
 
     class Params(HasSymbol, ToolParams):

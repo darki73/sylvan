@@ -417,20 +417,20 @@ async def _dispatch(name: str, arguments: dict) -> dict:
     from sylvan.session.tracker import get_session as _early_session
 
     _ungated = {
-        "get_workflow_guide",
-        "list_repos",
-        "list_libraries",
-        "get_session_stats",
-        "get_dashboard_url",
-        "get_peak_status",
-        "get_server_config",
-        "get_logs",
-        "suggest_queries",
-        "index_folder",
-        "configure_claude_code",
-        "configure_cursor",
-        "configure_windsurf",
-        "configure_copilot",
+        "how_to_use_sylvan",
+        "indexed_repos",
+        "indexed_libraries",
+        "usage_stats",
+        "open_dashboard",
+        "is_peak_hours",
+        "connection_config",
+        "server_logs",
+        "where_to_start",
+        "index_project",
+        "setup_claude_code",
+        "setup_cursor",
+        "setup_windsurf",
+        "setup_copilot",
     }
 
     _session = _early_session()
@@ -489,10 +489,10 @@ async def _dispatch(name: str, arguments: dict) -> dict:
             gate_response = {
                 "setup_required": True,
                 "message": (
-                    "Sylvan session is not configured. Call your editor's configure tool "
-                    "(configure_claude_code, configure_cursor, configure_windsurf, or "
-                    "configure_copilot) to set up and unlock all tools. Alternatively, "
-                    "call get_workflow_guide for manual setup."
+                    "Sylvan session is not configured. Call your editor's setup tool "
+                    "(setup_claude_code, setup_cursor, setup_windsurf, or "
+                    "setup_copilot) to set up and unlock all tools. Alternatively, "
+                    "call how_to_use_sylvan for manual setup."
                 ),
                 "blocked_tool": name,
                 "blocked_args": arguments,
@@ -670,6 +670,7 @@ def _import_all_tool_modules() -> None:
     import sylvan.tools.analysis.get_references
     import sylvan.tools.analysis.get_related
     import sylvan.tools.analysis.get_symbol_diff
+    import sylvan.tools.analysis.plan_rename
     import sylvan.tools.analysis.rename_symbol
     import sylvan.tools.analysis.search_columns
     import sylvan.tools.analysis.who_calls
@@ -713,10 +714,10 @@ def _import_all_tool_modules() -> None:
 
 _SERVER_TOOLS: list[tuple[str, str, dict]] = [
     (
-        "get_session_stats",
-        "Usage statistics at three levels: current session, per-project lifetime, "
-        "and overall across all repos. Shows tokens returned vs avoided, tool calls, "
-        "symbols/sections retrieved. Optionally filter to a specific repo.",
+        "usage_stats",
+        "Returns usage statistics: tokens returned vs avoided, tool calls, "
+        "symbols and sections retrieved. Three levels: current session, "
+        "per-project lifetime, and overall. Filterable by repo.",
         {
             "type": "object",
             "properties": {
@@ -725,17 +726,17 @@ _SERVER_TOOLS: list[tuple[str, str, dict]] = [
         },
     ),
     (
-        "get_dashboard_url",
-        "Get the URL for the Sylvan web dashboard. The dashboard provides "
-        "a visual overview of indexed repositories, quality reports, library "
-        "management, and interactive symbol search.",
+        "open_dashboard",
+        "Returns the URL for the sylvan web dashboard. "
+        "The dashboard shows indexed repos, quality reports, "
+        "library management, and interactive symbol search.",
         {"type": "object", "properties": {}},
     ),
     (
-        "get_peak_status",
-        "Check if Claude is currently in peak or off-peak usage hours. "
+        "is_peak_hours",
+        "Returns whether this is peak or off-peak hours for the AI provider. "
         "Peak: weekdays 13:00-19:00 UTC. Weekends are always off-peak. "
-        "Returns current status, time until next transition, and the peak window.",
+        "Includes time until next transition.",
         {"type": "object", "properties": {}},
     ),
 ]
@@ -768,9 +769,9 @@ def _get_handlers() -> dict[str, Callable[..., dict]]:
     async def _get_session_stats(**kwargs: Any) -> dict:
         return await _get_usage_stats(kwargs)
 
-    handlers["get_session_stats"] = _get_session_stats
-    handlers["get_dashboard_url"] = _get_dashboard_url
-    handlers["get_peak_status"] = _get_peak_status
+    handlers["usage_stats"] = _get_session_stats
+    handlers["open_dashboard"] = _get_dashboard_url
+    handlers["is_peak_hours"] = _get_peak_status
 
     from sylvan.extensions import get_registered_tools
 

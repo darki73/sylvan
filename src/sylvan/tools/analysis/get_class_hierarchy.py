@@ -4,12 +4,11 @@ from sylvan.tools.base import HasOptionalRepo, Tool, ToolParams, schema_field
 
 
 class GetClassHierarchy(Tool):
-    name = "get_class_hierarchy"
+    name = "inheritance_chain"
     category = "analysis"
     description = (
-        "Traverse class inheritance chains -- ancestors and descendants. "
-        "Answers 'what does this class extend?' and 'what extends this class?' "
-        "without manual grep. Use before refactoring a base class."
+        "Returns the inheritance chain for a class: ancestors (what it extends) "
+        "and descendants (what extends it). Searched by class name across the index."
     )
 
     class Params(HasOptionalRepo, ToolParams):

@@ -12,12 +12,12 @@ from sylvan.tools.base import (
 
 
 class GetToc(Tool):
-    name = "get_toc"
+    name = "doc_table_of_contents"
     category = "retrieval"
     description = (
-        "PREFERRED over Read for browsing documentation. Returns a structured "
-        "table of contents for all indexed docs -- every heading, section, and "
-        "their hierarchy. Use this to navigate docs instead of reading files."
+        "Returns a structured table of contents for indexed documentation. "
+        "Lists every heading with section IDs and hierarchy. "
+        "Filterable by document path."
     )
 
     class Params(HasRepo, HasDocPath, ToolParams):
@@ -42,17 +42,20 @@ class GetToc(Tool):
         toc = result.get("toc", [])
         if toc:
             first = toc[0]
-            self.hints().next_tool("get_section", f"get_section(section_id='{first['section_id']}')").apply(result)
+            self.hints().next_tool("read_doc_section", f"read_doc_section(section_id='{first['section_id']}')").apply(
+                result
+            )
 
         return result
 
 
 class GetTocTree(Tool):
-    name = "get_toc_tree"
+    name = "doc_tree"
     category = "retrieval"
     description = (
-        "Nested tree table of contents grouped by document. Richer than get_toc "
-        "for multi-doc repos. Use max_depth to limit heading levels and reduce output size."
+        "Nested table of contents grouped by document. Returns heading trees "
+        "per doc file with depth control. Better than doc_table_of_contents "
+        "for repos with many documentation files."
     )
 
     class Params(HasRepo, HasMaxDepth, ToolParams):

@@ -15,12 +15,12 @@ from sylvan.tools.base.meta import get_meta
 
 
 class GetSection(Tool):
-    name = "get_section"
+    name = "read_doc_section"
     category = "retrieval"
     description = (
-        "PREFERRED over Read for viewing documentation. Retrieves the exact "
-        "content of a doc section by ID -- one heading's worth of content instead "
-        "of the entire file. Use section IDs from search_sections or get_toc."
+        "Retrieves the content of one documentation section by ID. Returns one "
+        "heading's worth of content instead of the entire file. "
+        "~100 tokens vs ~2000 for reading the full doc."
     )
 
     class Params(HasSectionId, HasVerify, ToolParams):
@@ -77,9 +77,9 @@ class GetSection(Tool):
 
 
 class GetSections(Tool):
-    name = "get_sections"
+    name = "read_doc_sections"
     category = "retrieval"
-    description = "Batch retrieve multiple doc sections at once. More efficient than multiple get_section calls."
+    description = "Batch retrieves multiple documentation sections in one call. Returns content for each section ID."
 
     class Params(HasSectionIds, ToolParams):
         pass

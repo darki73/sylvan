@@ -54,7 +54,7 @@ class HintBuilder:
 
         Can be called multiple times for multiple files (e.g. after rename).
         """
-        self._reindexes.append(f"index_file(repo='{repo}', file_path='{file_path}')")
+        self._reindexes.append(f"reindex_file(repo='{repo}', file_path='{file_path}')")
         return self
 
     def test_files(self, paths: list[str]) -> HintBuilder:
@@ -68,23 +68,23 @@ class HintBuilder:
         return self
 
     def next_importers(self, repo: str, file_path: str) -> HintBuilder:
-        self._next["find_callers"] = f"find_importers(repo='{repo}', file_path='{file_path}')"
+        self._next["find_callers"] = f"who_depends_on_this(repo='{repo}', file_path='{file_path}')"
         return self
 
     def next_blast_radius(self, symbol_id: str) -> HintBuilder:
-        self._next["blast_radius"] = f"get_blast_radius(symbol_id='{symbol_id}')"
+        self._next["blast_radius"] = f"what_breaks_if_i_change(symbol_id='{symbol_id}')"
         return self
 
     def next_dependency_graph(self, repo: str, file_path: str) -> HintBuilder:
-        self._next["dependency_graph"] = f"get_dependency_graph(repo='{repo}', file_path='{file_path}')"
+        self._next["dependency_graph"] = f"import_graph(repo='{repo}', file_path='{file_path}')"
         return self
 
     def next_symbol(self, symbol_id: str) -> HintBuilder:
-        self._next["get_source"] = f"get_symbol(symbol_id='{symbol_id}')"
+        self._next["get_source"] = f"read_symbol(symbol_id='{symbol_id}')"
         return self
 
     def next_outline(self, repo: str, file_path: str) -> HintBuilder:
-        self._next["outline"] = f"get_file_outline(repo='{repo}', file_path='{file_path}')"
+        self._next["outline"] = f"whats_in_file(repo='{repo}', file_path='{file_path}')"
         return self
 
     def next_search(self, query: str, repo: str | None = None, kind: str | None = None) -> HintBuilder:
@@ -94,7 +94,7 @@ class HintBuilder:
             parts.append(f"repo='{repo}'")
         if kind:
             parts.append(f"kind='{kind}'")
-        self._next["search_deeper"] = f"search_symbols({', '.join(parts)})"
+        self._next["search_deeper"] = f"find_code({', '.join(parts)})"
         return self
 
     def working_files(self, files: list[str], limit: int = 3) -> HintBuilder:

@@ -11,13 +11,12 @@ from sylvan.tools.base import (
 
 
 class GetFileTree(Tool):
-    name = "get_file_tree"
+    name = "project_structure"
     category = "retrieval"
     description = (
-        "PREFERRED over ls/Glob for exploring repo structure. Returns a compact "
-        "indented tree (like the `tree` command) with language and symbol counts. "
-        "Directories beyond max_depth are collapsed with file counts. "
-        "Use this instead of running ls or Glob to understand a project layout."
+        "Returns the repository's directory tree with language and symbol counts "
+        "per directory. Directories beyond max_depth are collapsed with file counts. "
+        "Compact output like the `tree` command."
     )
 
     class Params(HasRepo, HasMaxDepth, ToolParams):

@@ -5,13 +5,12 @@ from sylvan.tools.base.meta import get_meta
 
 
 class GetQualityReport(Tool):
-    name = "get_quality_report"
+    name = "code_health_report"
     category = "analysis"
     description = (
-        "Run a comprehensive quality analysis on a repository -- the mini SonarQube. "
-        "Returns test coverage, documentation coverage, code smells, security "
-        "findings, code duplication, and quality gate pass/fail status. "
-        "All analysis is static (no test execution needed) and fast."
+        "Comprehensive static quality analysis for a repository. Returns test "
+        "coverage, documentation coverage, code smells, security findings, "
+        "code duplication, and quality gate pass/fail. No test execution needed."
     )
 
     class Params(HasRepo, ToolParams):

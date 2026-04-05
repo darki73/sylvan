@@ -11,13 +11,13 @@ from sylvan.tools.base import (
 
 
 class FindImporters(Tool):
-    name = "find_importers"
+    name = "who_depends_on_this"
     category = "analysis"
     description = (
-        "Find all files that import a given file. Answers 'who depends on this "
-        "module?' -- a structural query that Grep cannot reliably answer. Each "
-        "importer includes has_importers: when false, the importer has no importers "
-        "itself -- meaning the import chain is transitively dead."
+        "Returns all files that import a given module. Each result includes "
+        "has_importers flag: false means the import chain is transitively dead "
+        "(nothing depends on that importer). Structural query based on the import "
+        "graph, not text matching."
     )
 
     class Params(HasRepo, HasFilePath, ToolParams):
@@ -43,12 +43,10 @@ class FindImporters(Tool):
 
 
 class BatchFindImporters(Tool):
-    name = "batch_find_importers"
+    name = "who_depends_on_these"
     category = "analysis"
     description = (
-        "Find importers for MULTIPLE files in ONE call. More efficient than "
-        "calling find_importers repeatedly. Use to check dependency status "
-        "of several modules at once."
+        "Importers for multiple files in one call. Returns dependency lists per file with per-file max_results limit."
     )
 
     class Params(HasRepo, HasFilePaths, ToolParams):

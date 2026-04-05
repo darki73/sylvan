@@ -10,12 +10,11 @@ from sylvan.tools.base import (
 
 
 class GetRepoOutline(Tool):
-    name = "get_repo_outline"
+    name = "repo_overview"
     category = "retrieval"
     description = (
-        "START HERE when exploring an unfamiliar repo. Returns a high-level "
-        "summary: file count, languages, symbol breakdown by kind, documentation "
-        "coverage. Use this to orient before diving into search_symbols or get_toc."
+        "High-level repository summary: file count, languages, symbol breakdown "
+        "by kind, documentation coverage. Quick orientation for unfamiliar codebases."
     )
 
     class Params(HasRepo, ToolParams):

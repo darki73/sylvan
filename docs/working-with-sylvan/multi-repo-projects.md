@@ -27,10 +27,10 @@ sylvan workspace add my-stack --repo backend
 
 ### From MCP tools
 
-The `index_workspace` tool does the same thing in one call:
+The `index_multi_repo` tool does the same thing in one call:
 
 ```
-index_workspace(
+index_multi_repo(
     workspace="my-stack",
     paths=[
         "/home/dev/frontend",
@@ -45,12 +45,12 @@ Either way, each folder becomes its own repo in the index, but the workspace
 ties them together. Cross-repo imports are resolved automatically.
 
 
-## Searching across repos with `workspace_search`
+## Searching across repos with `search_all_repos`
 
 Once the workspace exists, search all repos simultaneously:
 
 ```
-workspace_search(workspace="my-stack", query="UserProfile")
+search_all_repos(workspace="my-stack", query="UserProfile")
 ```
 
 ```json
@@ -89,13 +89,13 @@ which repository each result comes from. You can still filter by `kind` and
 `language` to narrow results.
 
 
-## Cross-repo blast radius with `workspace_blast_radius`
+## Cross-repo blast radius with `cross_repo_impact`
 
 This is where workspaces become essential. If you change a shared type, you need
 to know which files in *every* repo are affected:
 
 ```
-workspace_blast_radius(
+cross_repo_impact(
     workspace="my-stack",
     symbol_id="src/schemas.py::UserProfile#class"
 )
@@ -126,8 +126,8 @@ workspace_blast_radius(
 }
 ```
 
-A regular `get_blast_radius` only sees the repo the symbol lives in.
-`workspace_blast_radius` follows imports across repo boundaries, so you see
+A regular `what_breaks_if_i_change` only sees the repo the symbol lives in.
+`cross_repo_impact` follows imports across repo boundaries, so you see
 impact in the backend *and* frontend when changing a shared type.
 
 
@@ -136,7 +136,7 @@ impact in the backend *and* frontend when changing a shared type.
 If you already have indexed repos and want to group them:
 
 ```
-add_to_workspace(workspace="my-stack", repo="infrastructure")
+add_repo_to_workspace(workspace="my-stack", repo="infrastructure")
 ```
 
 This adds the already-indexed repo to the workspace without re-indexing it. Use
@@ -146,11 +146,11 @@ was indexed separately.
 
 ## Pinning library versions
 
-Workspaces can have pinned library versions. When pinned, `workspace_search`
+Workspaces can have pinned library versions. When pinned, `search_all_repos`
 includes that library's symbols in results:
 
 ```
-pin_library(workspace="my-stack", library="django@4.2")
+pin_library_version(workspace="my-stack", library="django@4.2")
 ```
 
 This means a search for `ModelForm` in the `my-stack` workspace will return both
@@ -174,7 +174,7 @@ of a shared dependency.
 - Changes in one repo can break another
 - You want unified search across the full stack
 
-Workspaces add no overhead to individual repo operations. `search_symbols` with
+Workspaces add no overhead to individual repo operations. `find_code` with
 a `repo` filter still searches just that repo. The workspace tools are additional
 capabilities, not replacements.
 
@@ -183,13 +183,13 @@ capabilities, not replacements.
 
 Setting up a multi-repo project:
 
-1. `index_workspace` with all repo paths -- index and group in one call
-2. `workspace_search` -- find code across all repos
-3. `workspace_blast_radius` before changing shared code -- see cross-repo impact
-4. `pin_library` for shared dependencies -- include library source in searches
+1. `index_multi_repo` with all repo paths -- index and group in one call
+2. `search_all_repos` -- find code across all repos
+3. `cross_repo_impact` before changing shared code -- see cross-repo impact
+4. `pin_library_version` for shared dependencies -- include library source in searches
 
 Adding a repo later:
 
-1. `sylvan index /path/to/new-repo` -- index it (via CLI or `index_folder`)
-2. `add_to_workspace` -- add it to the workspace
+1. `sylvan index /path/to/new-repo` -- index it (via CLI or `index_project`)
+2. `add_repo_to_workspace` -- add it to the workspace
 3. Cross-repo analysis now includes the new repo automatically

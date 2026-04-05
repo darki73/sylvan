@@ -29,13 +29,13 @@ Typical reduction rates:
 
 | Tool type | Typical reduction |
 |-----------|------------------|
-| `get_symbol` (retrieval) | 90%+ |
-| `search_symbols` (search) | 70-85% |
-| `get_file_outline` (browsing) | 50-70% |
-| `get_blast_radius` (analysis) | varies by graph size |
+| `read_symbol` (retrieval) | 90%+ |
+| `find_code` (search) | 70-85% |
+| `whats_in_file` (browsing) | 50-70% |
+| `what_breaks_if_i_change` (analysis) | varies by graph size |
 | Memory/preference tools | ~200-500 tokens per call |
 
-Memory and preference tools (`save_memory`, `get_preferences`, etc.) are meta
+Memory and preference tools (`remember_this`, `load_user_rules`, etc.) are meta
 operations. They add a small fixed cost per call with no file-read equivalent to
 measure against.
 

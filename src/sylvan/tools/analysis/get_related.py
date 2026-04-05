@@ -4,11 +4,11 @@ from sylvan.tools.base import HasSymbol, Tool, ToolParams, schema_field
 
 
 class GetRelated(Tool):
-    name = "get_related"
+    name = "related_code"
     category = "analysis"
     description = (
-        "Find symbols related to a given symbol -- by co-location, shared imports, "
-        "or name similarity. Useful for discovering related code to understand context."
+        "Returns symbols related to a given symbol by co-location, shared imports, "
+        "or name similarity. Useful for discovering nearby code and understanding context."
     )
 
     class Params(HasSymbol, ToolParams):

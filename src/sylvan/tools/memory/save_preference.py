@@ -5,20 +5,12 @@ from sylvan.tools.base.meta import get_meta
 
 
 class SavePreference(Tool):
-    name = "save_preference"
+    name = "save_user_rule"
     category = "meta"
     description = (
-        "Save this when the user corrects your behavior or establishes a rule. "
-        "Triggers: the user says 'don't do X', 'always do Y', 'I prefer Z', "
-        "or pushes back on your approach: that is a preference, save it. "
-        "Use this for project or workflow rules that should follow the codebase, "
-        "not the user. Your harness memory is better for personal identity and "
-        "cross-project preferences. Key should be descriptive "
-        "(e.g. 'test_style', 'commit_format'). Instruction must be actionable, "
-        "write it as a direct rule a future agent can follow without context. "
-        "Scope: 'global' applies to all repos, 'workspace' to repos in a "
-        "workspace, 'repo' to one repository. Pass the numeric ID from "
-        "list_repos as scope_id for workspace/repo scopes."
+        "Saves a behavioral rule the user established. Key should be descriptive "
+        "(e.g. 'test_style'). Instruction must be actionable as a standalone rule. "
+        "Scope: global (all repos), workspace, or repo."
     )
 
     class Params(ToolParams):

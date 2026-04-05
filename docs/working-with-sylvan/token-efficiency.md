@@ -27,7 +27,7 @@ Every response from the server includes a `_meta.token_efficiency` block:
 | `reduction_percent` | How much was saved: `(1 - returned/equivalent) * 100` |
 | `method` | How tokens were counted (see below) |
 
-When `get_symbol` returns a 30-line function from a 500-line file, `returned` is
+When `read_symbol` returns a 30-line function from a 500-line file, `returned` is
 the token count of those 30 lines and `equivalent_file_read` is the token count
 of the entire file. The difference is what your agent did not have to process.
 
@@ -50,10 +50,10 @@ so you know the precision of the numbers.
 ## Session tracking
 
 Token efficiency accumulates across all tool calls in a session. Use
-`get_session_stats` to see the running totals:
+`usage_stats` to see the running totals:
 
 ```
-get_session_stats()
+usage_stats()
 ```
 
 ```json
@@ -94,11 +94,11 @@ The `by_category` breakdown shows efficiency by tool type:
 
 | Category | Tools included |
 |---|---|
-| `search` | `search_symbols`, `search_text`, `search_sections`, `workspace_search` |
-| `retrieval` | `get_symbol`, `get_section`, `get_file_outline`, `get_context_bundle` |
-| `analysis` | `get_blast_radius`, `get_references`, `get_class_hierarchy` |
-| `indexing` | `index_folder`, `index_file`, `index_workspace` |
-| `meta` | `get_session_stats`, `get_dashboard_url`, `list_repos` |
+| `search` | `find_code`, `find_text`, `find_docs`, `search_all_repos` |
+| `retrieval` | `read_symbol`, `read_doc_section`, `whats_in_file`, `understand_symbol` |
+| `analysis` | `what_breaks_if_i_change`, `who_calls_this`, `inheritance_chain` |
+| `indexing` | `index_project`, `reindex_file`, `index_multi_repo` |
+| `meta` | `usage_stats`, `open_dashboard`, `indexed_repos` |
 
 Retrieval tools typically have the highest reduction percentages because they
 return small slices of large files. Search tools return compact result lists
@@ -108,7 +108,7 @@ that replace what would otherwise be multiple file reads.
 ## All-time tracking
 
 Efficiency data persists across server restarts. The `overall` section of
-`get_session_stats` shows lifetime totals:
+`usage_stats` shows lifetime totals:
 
 ```json
 "overall": {
@@ -143,7 +143,7 @@ see whether the server is earning its keep during an active session.
 To see efficiency for a specific repository:
 
 ```
-get_session_stats(repo="my-project")
+usage_stats(repo="my-project")
 ```
 
 This filters the session and overall statistics to only include tool calls that
@@ -165,13 +165,13 @@ and does not access.
 
 ## What the numbers mean in practice
 
-- **90%+ reduction** is typical for `get_symbol` calls, where a single function
+- **90%+ reduction** is typical for `read_symbol` calls, where a single function
   is returned from a large file.
 - **70-85% reduction** is typical for search calls, where a ranked result list
   replaces reading multiple files.
-- **50-70% reduction** is typical for `get_file_outline`, where signatures replace
+- **50-70% reduction** is typical for `whats_in_file`, where signatures replace
   full source.
-- **Negative reduction** can happen with `search_text` on small files, where the
+- **Negative reduction** can happen with `find_text` on small files, where the
   context lines plus metadata exceed the file size. This is rare and the absolute
   token count is small when it happens.
 

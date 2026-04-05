@@ -4,13 +4,12 @@ from sylvan.tools.base import HasSymbol, Tool, ToolParams, schema_field
 
 
 class WhoCalls(Tool):
-    name = "who_calls"
+    name = "what_calls_this"
     category = "analysis"
     description = (
-        "Find all symbols that call a given function or method. Returns callers "
-        "with file paths, signatures, and line numbers. Use before changing a "
-        "function to see exactly what breaks. More precise than find_importers "
-        "which works at file level."
+        "Returns all symbols that call a given function or method. Each caller "
+        "includes file path, signature, and line number. Symbol-level precision, "
+        "more granular than file-level who_depends_on_this."
     )
 
     class Params(HasSymbol, ToolParams):

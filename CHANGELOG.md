@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.10.1 (2026-04-06)
+
+### Agent-first tool naming
+
+All 65+ MCP tools renamed from technical names to agent-intent names. Agents see tool names in the deferred tool list without descriptions, so the name itself needs to convey purpose. Examples: `get_blast_radius` -> `what_breaks_if_i_change`, `search_symbols` -> `find_code`, `get_preferences` -> `load_user_rules`, `save_memory` -> `remember_this`.
+
+All tool descriptions rewritten to be concise and factual. Removed marketing language ("PREFERRED over", "CALL THIS FIRST", "ALWAYS use") and agent instructions. Each description states what the tool does, what it returns, and token savings where relevant.
+
+### Ambient discovery engine
+
+New `see_also` and `did_you_know` fields injected into tool responses by the discovery engine (`src/sylvan/tools/support/discovery.py`).
+
+`see_also` surfaces 1-3 contextual tool suggestions per response based on result characteristics (empty results, class in results, high complexity, many importers) and tool affinity maps. Silent when nothing is relevant. Discovery picks are tiered (core workflow tools surface before niche ones) and category-aware (agent doing impact analysis gets quality/history suggestions, not setup tools). Each tool appears at most once per session.
+
+`did_you_know` fires max 4 times per session: preferences on first call when preferences exist, contextual (complexity warnings, empty results with memories available), meta "there's more" prompt mid-session, and late-session memory save reminder.
+
+### plan_rename tool
+
+New `plan_rename` and `batch_plan_rename` tools for context-aware string rename planning. Given an old name and new name, searches the repo and classifies each occurrence: `string_literal` (rename-safe), `import_path` (skip, rename the file instead), `class_name` (skip), `code_identifier` (skip), `documentation` (rename-safe), `comment` (rename-safe). Returns structured edit entries with file, line, old_text, new_text for safe renames, and skip entries with reasons.
+
+67 new tests.
+
 ## 1.10.0 (2026-04-04)
 
 ### Agent memory and preferences

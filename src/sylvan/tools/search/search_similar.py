@@ -16,13 +16,12 @@ from sylvan.tools.base.meta import get_meta
 
 
 class SearchSimilarSymbols(Tool):
-    name = "search_similar_symbols"
+    name = "find_similar_code"
     category = "search"
     description = (
-        "Find symbols semantically similar to a given source symbol using "
-        "vector similarity search. Useful for discovering related code, "
-        "alternative implementations, or patterns similar to a known symbol. "
-        "Requires the source symbol's ID (from search_symbols or get_symbol)."
+        "Vector similarity search for code patterns. Given a symbol ID, finds "
+        "semantically similar functions, classes, or methods across the codebase. "
+        "Useful for discovering alternative implementations or repeated patterns."
     )
 
     class Params(HasSymbol, HasOptionalRepo, ToolParams):

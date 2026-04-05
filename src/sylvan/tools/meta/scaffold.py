@@ -4,14 +4,13 @@ from sylvan.tools.base import HasRepo, Tool, ToolParams, schema_field
 
 
 class Scaffold(Tool):
-    name = "scaffold"
+    name = "generate_project_docs"
     category = "meta"
     description = (
-        "Generate sylvan/ project context directory and agent instructions. "
-        "Creates auto-generated architecture docs, quality reports, dependency maps, "
-        "and planning directories (future/working/completed). Also generates the "
-        "agent instruction file (CLAUDE.md or .cursorrules) that teaches the agent "
-        "how to use the sylvan/ directory. Run after indexing a project."
+        "Generates a sylvan/ project context directory with architecture docs, "
+        "quality reports, dependency maps, and an agent instruction file "
+        "(CLAUDE.md or .cursorrules). Creates planning directories for "
+        "future/working/completed tasks."
     )
 
     class Params(HasRepo, ToolParams):

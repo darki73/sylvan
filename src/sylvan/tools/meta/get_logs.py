@@ -4,13 +4,11 @@ from sylvan.tools.base import Tool, ToolParams, schema_field
 
 
 class GetLogs(Tool):
-    name = "get_logs"
+    name = "server_logs"
     category = "meta"
     description = (
-        "Retrieve sylvan server log entries for debugging. Returns the "
-        "most recent lines by default (tail). Use from_start=true for "
-        "head, offset to paginate. Use this to diagnose errors, check "
-        "tool call history, or debug issues without searching for log files."
+        "Returns sylvan server log entries. Defaults to most recent lines (tail). "
+        "Supports from_start for head and offset for pagination."
     )
 
     class Params(ToolParams):
