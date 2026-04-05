@@ -183,7 +183,7 @@ sylvan library map pip/mypackage https://github.com/org/mypackage
 
 ## Quality
 
-Thresholds for the quality analysis tools (`get_quality`, `get_quality_report`).
+Thresholds for the quality analysis tools (`find_tech_debt`, `code_health_report`).
 
 ```yaml
 quality:

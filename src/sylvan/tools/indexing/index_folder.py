@@ -8,17 +8,12 @@ from sylvan.tools.base import Tool, ToolParams, schema_field
 
 
 class IndexFolder(Tool):
-    name = "index_folder"
+    name = "index_project"
     category = "indexing"
     description = (
-        "REQUIRED FIRST STEP: Index a local folder before exploring its code or docs. "
-        "Run this once per project, and RE-RUN after making code changes (edits, "
-        "new files, refactors) to keep the index current -- incremental reindex is "
-        "fast and only processes changed files. After indexing, ALWAYS prefer sylvan "
-        "tools (search_symbols, get_symbol, get_file_outline, search_sections) over "
-        "reading files directly with Read/cat. Sylvan returns only the exact code "
-        "you need instead of entire files. "
-        "For third-party libraries, use add_library instead (fetches source from PyPI/npm/etc)."
+        "Indexes a local folder for code and documentation search. Incremental: "
+        "re-runs only process changed files. Returns file count and symbol count. "
+        "For third-party libraries, use index_library_source instead."
     )
 
     class Params(ToolParams):

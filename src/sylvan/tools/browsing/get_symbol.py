@@ -16,14 +16,12 @@ from sylvan.tools.base.meta import get_meta
 
 
 class GetSymbol(Tool):
-    name = "get_symbol"
+    name = "read_symbol"
     category = "retrieval"
     description = (
-        "PREFERRED over Read for viewing code. Retrieves the exact source of a "
-        "function, class, or method by ID -- without reading the entire file. "
-        "Returns only the symbol's source lines instead of the full file. "
-        "Use symbol IDs from search_symbols results. ALWAYS use this instead of "
-        "Read when you know the symbol name or have its ID."
+        "Retrieves exact source code of a function, class, or method by symbol ID. "
+        "Returns only that symbol's lines, signature, and docstring. "
+        "~50-200 tokens vs ~2000 for reading the full file."
     )
 
     class Params(HasSymbol, HasOptionalRepo, HasVerify, HasContextLines, ToolParams):
@@ -86,11 +84,11 @@ class GetSymbol(Tool):
 
 
 class GetSymbols(Tool):
-    name = "get_symbols"
+    name = "read_symbols"
     category = "retrieval"
     description = (
-        "Batch retrieve multiple symbols at once. More efficient than multiple "
-        "get_symbol calls or reading multiple files with Read."
+        "Batch retrieves source code for multiple symbols in one call. "
+        "Returns source, signature, and file info for each. Reports not_found for any missing IDs."
     )
 
     class Params(HasSymbolIds, ToolParams):

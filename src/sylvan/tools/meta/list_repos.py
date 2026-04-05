@@ -5,13 +5,9 @@ from sylvan.tools.base.meta import get_meta
 
 
 class ListRepos(Tool):
-    name = "list_repos"
+    name = "indexed_repos"
     category = "meta"
-    description = (
-        "List all indexed repositories. Check this FIRST to see if a repo is "
-        "already indexed before using index_folder. Shows file count, symbol "
-        "count, and indexing timestamp."
-    )
+    description = "Lists all indexed repositories with file count, symbol count, source path, and indexing timestamp."
 
     class Params(ToolParams):
         pass

@@ -9,11 +9,10 @@ from sylvan.tools.base.meta import get_meta
 
 
 class IndexFile(Tool):
-    name = "index_file"
+    name = "reindex_file"
     category = "indexing"
     description = (
-        "Surgical single-file reindex -- much faster than index_folder when you've "
-        "only edited one file. Use after editing a file to keep the index current."
+        "Reindexes a single file. Faster than index_project when only one file changed. Returns updated symbol count."
     )
 
     class Params(HasRepo, HasFilePath, ToolParams):

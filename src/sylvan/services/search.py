@@ -217,7 +217,7 @@ class SearchService:
         query = str(query)
         ctx = get_context()
         session = ctx.session if ctx.session else get_session()
-        session.record_query(query, "search_symbols")
+        session.record_query(query, "find_code")
         max_results = _clamp(max_results, 1, 1000)
 
         if not query or not query.strip():
@@ -297,7 +297,7 @@ class SearchService:
                 all_results.append({"query": query_text, "symbols": [], "error": "empty_query"})
                 continue
 
-            session.record_query(query_text, "batch_search_symbols")
+            session.record_query(query_text, "find_code_batch")
 
             q_repo = q.get("repo", repo)
             q_kind = q.get("kind")
@@ -374,7 +374,7 @@ class SearchService:
         context_lines = _clamp(context_lines, 0, 50)
 
         ctx = get_context()
-        ctx.session.record_query(query, "search_text")
+        ctx.session.record_query(query, "find_text")
 
         query_builder = FileRecord.query().join("repos", "repos.id = files.repo_id")
 
@@ -450,7 +450,7 @@ class SearchService:
         max_results = _clamp(max_results, 1, 1000)
 
         ctx = get_context()
-        ctx.session.record_query(query, "search_sections")
+        ctx.session.record_query(query, "find_docs")
 
         if not query or not query.strip():
             raise EmptyQueryError()
@@ -521,7 +521,7 @@ class SearchService:
             RepoNotFoundError: If the repo filter does not match any indexed repo.
         """
         ctx = get_context()
-        ctx.session.record_query(symbol_id, "search_similar_symbols")
+        ctx.session.record_query(symbol_id, "find_similar_code")
 
         max_results = _clamp(max_results, 1, 100)
 

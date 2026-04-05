@@ -5,16 +5,12 @@ from sylvan.tools.base.meta import get_meta
 
 
 class GetPreferences(Tool):
-    name = "get_preferences"
+    name = "load_user_rules"
     category = "retrieval"
     description = (
-        "CALL THIS FIRST at the start of every session, before doing any work. "
-        "Returns the user's behavioral rules: how they want you to write code, "
-        "run tests, format commits, and interact. Without this, you risk repeating "
-        "mistakes the user already corrected in a previous session. Merges rules "
-        "from global, workspace, and repo scopes (repo wins over workspace wins "
-        "over global for the same key). These preferences complement your harness "
-        "defaults with project-specific rules. One DB query, no inference."
+        "Returns the user's behavioral rules for this repo: code style, test "
+        "patterns, commit format, interaction preferences. Merges global, "
+        "workspace, and repo scopes (repo wins). One DB query, no inference."
     )
 
     class Params(HasRepo, ToolParams):

@@ -9,13 +9,12 @@ from sylvan.tools.base.meta import get_meta
 
 
 class CompareLibraryVersions(Tool):
-    name = "compare_library_versions"
+    name = "migration_guide"
     category = "meta"
     description = (
-        "Compare two indexed versions of the same library to generate a migration "
-        "guide. Shows symbols added, removed, and with changed signatures between "
-        "versions. Use BEFORE upgrading a workspace's pinned library version to "
-        "assess breaking changes. Both versions must be indexed via add_library."
+        "Compares two indexed versions of a library. Returns symbols added, "
+        "removed, and changed with signature diffs. Both versions must be "
+        "indexed via index_library_source first."
     )
 
     class Params(ToolParams):

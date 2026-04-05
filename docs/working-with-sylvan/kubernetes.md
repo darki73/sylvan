@@ -49,16 +49,16 @@ Any YAML file with `apiVersion` and `kind` fields is recognized as a Kubernetes 
 Index a project that contains k8s manifests:
 
 ```
-index_folder(path="/path/to/infra-repo")
+index_project(path="/path/to/infra-repo")
 ```
 
 Then search like any other code:
 
 ```
-search_symbols(query="redis", repo="infra")          # find Redis Deployment
-search_symbols(query="ExternalSecret", repo="infra")  # find all external secrets
-search_symbols(query="vault", repo="infra")           # find anything using Vault
-get_file_outline(repo="infra", file_path="k8s/app/deployment.yaml")  # outline of resources
+find_code(query="redis", repo="infra")          # find Redis Deployment
+find_code(query="ExternalSecret", repo="infra")  # find all external secrets
+find_code(query="vault", repo="infra")           # find anything using Vault
+whats_in_file(repo="infra", file_path="k8s/app/deployment.yaml")  # outline of resources
 ```
 
 ## Cross-references and blast radius
@@ -66,13 +66,13 @@ get_file_outline(repo="infra", file_path="k8s/app/deployment.yaml")  # outline o
 Deployments reference Secrets, ConfigMaps, PVCs, and ServiceAccounts. These are stored as imports, so the existing dependency tools work:
 
 ```
-find_importers(repo="infra", file_path="k8s/secrets/db-creds.yaml")
+who_depends_on_this(repo="infra", file_path="k8s/secrets/db-creds.yaml")
 # -> shows which Deployments use this Secret
 
-get_blast_radius(symbol_id="deploy.yaml::Deployment/web@prod#class")
+what_breaks_if_i_change(symbol_id="deploy.yaml::Deployment/web@prod#class")
 # -> shows all resources affected if this Deployment changes
 
-get_dependency_graph(repo="infra", file_path="k8s/app/deployment.yaml")
+import_graph(repo="infra", file_path="k8s/app/deployment.yaml")
 # -> shows Secrets, PVCs, ServiceAccount dependencies
 ```
 

@@ -4,13 +4,12 @@ from sylvan.tools.base import HasOptionalFilePath, HasRepo, Tool, ToolParams, sc
 
 
 class GetSymbolDiff(Tool):
-    name = "get_symbol_diff"
+    name = "what_changed_in_symbols"
     category = "analysis"
     description = (
-        "Compare symbols between the current index and a previous git commit. "
-        "Shows which symbols were added, removed, or changed -- with signature "
-        "diffs. Use before reviewing a PR or after a rebase to understand what "
-        "actually changed at the symbol level."
+        "Compares symbols between the current index and a previous git commit. "
+        "Returns symbols added, removed, or changed with signature diffs. "
+        "Works at symbol level, not line level."
     )
 
     class Params(HasRepo, HasOptionalFilePath, ToolParams):
@@ -48,7 +47,7 @@ class GetSymbolDiff(Tool):
                 if sym_name:
                     self.hints().next_tool(
                         "get_source",
-                        f"search_symbols(query='{sym_name}', repo='{result.get('repo', '')}')",
+                        f"find_code(query='{sym_name}', repo='{result.get('repo', '')}')",
                     ).apply(result)
 
         return result

@@ -20,18 +20,13 @@ from sylvan.tools.base.meta import get_meta
 
 
 class SearchSymbols(Tool):
-    name = "search_symbols"
+    name = "find_code"
     category = "search"
     description = (
-        "PREFERRED over Grep/Glob for finding code. Searches indexed symbols "
-        "(functions, classes, methods, constants, types) by name, signature, "
-        "docstring, or keywords with ranked results. Returns signatures and "
-        "locations without reading any files. Use this FIRST when looking for "
-        "any code -- it's faster and more precise than grep or glob. If the repo is "
-        "indexed, always use search_symbols before falling back to Grep. "
-        "Also searches indexed third-party libraries -- use add_library first to "
-        "index a library's source code for precise API lookup. "
-        "NOTE: If results seem stale (missing recent changes), re-run index_folder to refresh."
+        "Searches indexed symbols (functions, classes, methods, constants, types) "
+        "by name, keyword, or docstring. Returns ranked results with signatures "
+        "and locations, no file content loaded. Also searches indexed third-party "
+        "libraries. ~50 tokens per result vs ~2000 for reading each file."
     )
 
     class Params(HasQuery, HasOptionalRepo, HasKindFilter, HasLanguageFilter, HasFileFilter, HasPagination, ToolParams):
@@ -103,12 +98,11 @@ class SearchSymbols(Tool):
 
 
 class BatchSearchSymbols(Tool):
-    name = "batch_search_symbols"
+    name = "find_code_batch"
     category = "search"
     description = (
-        "Run multiple symbol searches in ONE call. More efficient than calling "
-        "search_symbols repeatedly. Each query can override repo, kind, and language. "
-        "Use when you need to find several unrelated symbols at once."
+        "Multiple symbol searches in one call. Each query runs independently "
+        "with optional repo, kind, and language overrides. Returns results grouped by query."
     )
 
     class Params(HasOptionalRepo, ToolParams):

@@ -10,15 +10,13 @@ from sylvan.tools.base import (
 
 
 class GetRepoBriefing(Tool):
-    name = "get_repo_briefing"
+    name = "repo_deep_dive"
     category = "retrieval"
     description = (
-        "Structured orientation for a repository - stats (files, symbols, "
-        "sections), directory tree with per-directory file counts, language "
-        "breakdown, and raw manifest contents (pyproject.toml, package.json, "
-        "go.mod, etc). One call replaces the typical 5-10 orientation calls. "
-        "Use this FIRST on unfamiliar repos to understand scale, structure, "
-        "and stack before diving into search_symbols."
+        "Full repository orientation: stats (files, symbols, sections), directory "
+        "tree, language breakdown, and manifest contents (pyproject.toml, "
+        "package.json, go.mod). Replaces 5-10 separate calls to understand "
+        "a repo's scale, structure, and stack."
     )
 
     class Params(HasRepo, ToolParams):

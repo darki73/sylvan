@@ -4,12 +4,11 @@ from sylvan.tools.base import HasOptionalFilePath, HasOptionalSymbol, HasRepo, T
 
 
 class GetGitContext(Tool):
-    name = "get_git_context"
+    name = "who_touched_this"
     category = "analysis"
     description = (
-        "Get git blame, change frequency, and recent commits for a file or symbol. "
-        "Answers 'who last touched this?' and 'how often does this change?' "
-        "without running git commands manually."
+        "Returns git blame, change frequency, and recent commits for a file "
+        "or symbol. Accepts either file_path or symbol_id to scope the query."
     )
 
     class Params(HasRepo, HasOptionalFilePath, HasOptionalSymbol, ToolParams):

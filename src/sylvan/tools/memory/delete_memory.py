@@ -5,11 +5,9 @@ from sylvan.tools.base.meta import get_meta
 
 
 class DeleteMemory(Tool):
-    name = "delete_memory"
+    name = "forget_this"
     category = "meta"
-    description = (
-        "Delete a memory that is no longer accurate or relevant. Use the memory ID from search or retrieve results."
-    )
+    description = "Deletes a memory by ID. Permanent removal from the project knowledge base."
 
     class Params(HasRepo, ToolParams):
         id: int = schema_field(

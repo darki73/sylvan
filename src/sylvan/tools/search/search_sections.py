@@ -17,13 +17,12 @@ from sylvan.tools.base.meta import get_meta
 
 
 class SearchSections(Tool):
-    name = "search_sections"
+    name = "find_docs"
     category = "search"
     description = (
-        "PREFERRED over Read/Grep for finding documentation. Searches indexed "
-        "doc sections (markdown, RST, HTML, OpenAPI, etc.) by title, summary, "
-        "or tags. Returns section summaries without reading files. Use this to "
-        "find configuration docs, API references, or any documentation section."
+        "Searches indexed documentation sections (markdown, RST, HTML, OpenAPI) "
+        "by title, summary, or content. Returns section summaries and IDs "
+        "without loading file content."
     )
 
     class Params(HasQuery, HasOptionalRepo, HasDocPath, ToolParams):
@@ -63,7 +62,9 @@ class SearchSections(Tool):
 
         if result["sections"]:
             first = result["sections"][0]
-            self.hints().next_tool("get_section", f"get_section(section_id='{first['section_id']}')").apply(result)
+            self.hints().next_tool("read_doc_section", f"read_doc_section(section_id='{first['section_id']}')").apply(
+                result
+            )
 
         return result
 

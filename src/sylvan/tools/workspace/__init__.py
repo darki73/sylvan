@@ -17,9 +17,9 @@ from sylvan.tools.base.meta import get_meta
 
 
 class AddToWorkspace(Tool):
-    name = "add_to_workspace"
+    name = "add_repo_to_workspace"
     category = "meta"
-    description = "Add an already-indexed repo to a workspace."
+    description = "Adds an indexed repo to a workspace. Resolves cross-repo imports automatically."
 
     class Params(HasWorkspace, HasRepo, ToolParams):
         pass
@@ -50,12 +50,12 @@ class AddToWorkspace(Tool):
 
 
 class IndexWorkspace(Tool):
-    name = "index_workspace"
+    name = "index_multi_repo"
     category = "indexing"
     description = (
-        "BEST WAY to set up multi-repo projects. Indexes multiple folders at once, "
-        "groups them into a workspace, and resolves cross-repo imports automatically. "
-        "Enables cross-repo search, blast radius, and dependency analysis."
+        "Indexes multiple folders and groups them into a workspace. Resolves "
+        "cross-repo imports automatically. Enables cross-repo search, blast "
+        "radius, and dependency analysis."
     )
 
     class Params(HasWorkspace, ToolParams):
@@ -102,12 +102,12 @@ class IndexWorkspace(Tool):
 
 
 class WorkspaceSearch(Tool):
-    name = "workspace_search"
+    name = "search_all_repos"
     category = "meta"
     description = (
-        "Search symbols across ALL repos in a workspace simultaneously. "
-        "Results from different repos are ranked together. Use this when "
-        "working on multi-repo projects (frontend + backend + shared)."
+        "Searches symbols across all repos in a workspace. Results from "
+        "different repos are ranked together. Supports kind, language, "
+        "and pagination filters."
     )
 
     class Params(HasWorkspace, HasQuery, HasKindFilter, HasLanguageFilter, HasPagination, ToolParams):
@@ -152,12 +152,12 @@ class WorkspaceSearch(Tool):
 
 
 class WorkspaceBlastRadius(Tool):
-    name = "workspace_blast_radius"
+    name = "cross_repo_impact"
     category = "meta"
     description = (
-        "Cross-repo blast radius -- shows impact ACROSS repositories. "
-        "If you change a shared type, this tells you which files in the "
-        "backend AND frontend are affected. Grep cannot do this."
+        "Cross-repo blast radius. Shows which files across multiple "
+        "repositories are affected by changing a shared symbol. Returns "
+        "confirmed and potential impact per repo."
     )
 
     class Params(HasWorkspace, HasSymbol, HasDepth, ToolParams):

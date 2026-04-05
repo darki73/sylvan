@@ -4,12 +4,11 @@ from sylvan.tools.base import HasRepo, Tool, ToolParams
 
 
 class RemoveRepo(Tool):
-    name = "remove_repo"
+    name = "delete_repo_index"
     category = "meta"
     description = (
-        "Delete an indexed repository and ALL its data (files, symbols, "
-        "sections, imports, quality records, references). This is permanent "
-        "and cannot be undone. Use list_repos first to verify the repo name."
+        "Permanently deletes a repository's index and all associated data: "
+        "files, symbols, sections, imports, quality records, references. Cannot be undone."
     )
 
     class Params(HasRepo, ToolParams):

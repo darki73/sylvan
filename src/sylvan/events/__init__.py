@@ -15,7 +15,7 @@ Usage::
     on("tool_call", on_tool_call)
 
     # Emit from anywhere
-    emit("tool_call", {"name": "search_symbols", "duration_ms": 42})
+    emit("tool_call", {"name": "find_code", "duration_ms": 42})
 
     # Async subscribers work too
     async def on_index_complete(data):

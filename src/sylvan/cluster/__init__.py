@@ -3,16 +3,16 @@
 # Tools that perform writes and must be proxied to the leader
 WRITE_TOOLS = frozenset(
     {
-        "index_folder",
-        "index_file",
-        "index_workspace",
-        "add_library",
+        "index_project",
+        "reindex_file",
+        "index_multi_repo",
+        "index_library_source",
         "remove_library",
-        "add_to_workspace",
-        "pin_library",
-        "remove_repo",
-        "get_quality",
-        "get_quality_report",
+        "add_repo_to_workspace",
+        "pin_library_version",
+        "delete_repo_index",
+        "find_tech_debt",
+        "code_health_report",
     }
 )
 

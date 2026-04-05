@@ -17,21 +17,21 @@ class TestToolRegistry:
     def test_expected_tools_present(self):
         registry = get_registry()
         names = set(registry)
-        assert "search_symbols" in names
-        assert "index_folder" in names
-        assert "get_symbol" in names
-        assert "get_file_outline" in names
-        assert "list_repos" in names
-        assert "search_text" in names
-        assert "get_blast_radius" in names
-        assert "get_class_hierarchy" in names
-        assert "get_references" in names
-        assert "get_quality" in names
-        assert "search_sections" in names
-        assert "get_section" in names
-        assert "get_toc" in names
-        assert "scaffold" in names
-        assert "add_library" in names
+        assert "find_code" in names
+        assert "index_project" in names
+        assert "read_symbol" in names
+        assert "whats_in_file" in names
+        assert "indexed_repos" in names
+        assert "find_text" in names
+        assert "what_breaks_if_i_change" in names
+        assert "inheritance_chain" in names
+        assert "who_calls_this" in names
+        assert "find_tech_debt" in names
+        assert "find_docs" in names
+        assert "read_doc_section" in names
+        assert "doc_table_of_contents" in names
+        assert "generate_project_docs" in names
+        assert "index_library_source" in names
 
     def test_total_tool_count(self):
         registry = get_registry()

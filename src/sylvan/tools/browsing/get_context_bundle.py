@@ -16,13 +16,12 @@ from sylvan.tools.base.presenters import FilePresenter, ImportPresenter, SymbolP
 
 
 class GetContextBundle(Tool):
-    name = "get_context_bundle"
+    name = "understand_symbol"
     category = "retrieval"
     description = (
-        "MOST EFFICIENT way to understand a symbol. Returns source + imports + "
-        "callers + sibling symbols in ONE call -- replaces what would otherwise be "
-        "3-5 separate Read/Grep calls. Use this when you need to understand a "
-        "symbol in its full context."
+        "Returns a symbol's source code, file imports, callers, and sibling symbols "
+        "in one call. Replaces 3-5 separate lookups when you need full context "
+        "around a function or class."
     )
 
     class Params(HasSymbol, ToolParams):

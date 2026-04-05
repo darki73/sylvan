@@ -6,7 +6,7 @@ Complete reference for all 52 sylvan MCP tools. Every parameter, every default.
 
 ## Indexing (3 tools)
 
-### index_folder
+### index_project
 
 Index a local folder. Run once per project, re-run after code changes. Incremental reindex only processes changed files.
 
@@ -16,23 +16,23 @@ Index a local folder. Run once per project, re-run after code changes. Increment
 | `name` | string | no | folder name | Display name for the repository |
 
 ```
-index_folder(path="/home/user/my-project", name="my-project")
+index_project(path="/home/user/my-project", name="my-project")
 ```
 
-### index_file
+### reindex_file
 
 Surgical single-file reindex. Use after editing one file instead of re-indexing the whole folder.
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `repo` | string | yes | -- | Repository name (as shown in list_repos) |
+| `repo` | string | yes | -- | Repository name (as shown in indexed_repos) |
 | `file_path` | string | yes | -- | Relative path within the repo |
 
 ```
-index_file(repo="my-project", file_path="src/main.py")
+reindex_file(repo="my-project", file_path="src/main.py")
 ```
 
-### index_workspace
+### index_multi_repo
 
 Index multiple folders at once, group them into a workspace, and resolve cross-repo imports.
 
@@ -43,14 +43,14 @@ Index multiple folders at once, group them into a workspace, and resolve cross-r
 | `description` | string | no | -- | Workspace description |
 
 ```
-index_workspace(workspace="my-app", paths=["/path/to/frontend", "/path/to/backend"])
+index_multi_repo(workspace="my-app", paths=["/path/to/frontend", "/path/to/backend"])
 ```
 
 ---
 
 ## Search (5 tools)
 
-### search_symbols
+### find_code
 
 Search indexed symbols by name, signature, docstring, or keywords. Returns signatures and locations without reading files.
 
@@ -65,10 +65,10 @@ Search indexed symbols by name, signature, docstring, or keywords. Returns signa
 | `token_budget` | integer | no | -- | Greedy-pack results until budget exhausted |
 
 ```
-search_symbols(query="authenticate", repo="backend", kind="function")
+find_code(query="authenticate", repo="backend", kind="function")
 ```
 
-### batch_search_symbols
+### find_code_batch
 
 Run multiple symbol searches in one call.
 
@@ -79,12 +79,12 @@ Run multiple symbol searches in one call.
 | `max_results_per_query` | integer | no | 10 | Default max results per query |
 
 ```
-batch_search_symbols(queries=[{"query": "auth"}, {"query": "session"}], repo="backend")
+find_code_batch(queries=[{"query": "auth"}, {"query": "session"}], repo="backend")
 ```
 
-### search_text
+### find_text
 
-Full-text search across all indexed file content. Use for comments, strings, TODOs, or literal text that search_symbols would not find.
+Full-text search across all indexed file content. Use for comments, strings, TODOs, or literal text that find_code would not find.
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -95,10 +95,10 @@ Full-text search across all indexed file content. Use for comments, strings, TOD
 | `context_lines` | integer | no | 2 | Lines of context around matches |
 
 ```
-search_text(query="TODO: fix", repo="backend")
+find_text(query="TODO: fix", repo="backend")
 ```
 
-### search_sections
+### find_docs
 
 Search indexed documentation sections by title, summary, or tags.
 
@@ -110,10 +110,10 @@ Search indexed documentation sections by title, summary, or tags.
 | `max_results` | integer | no | 10 | Maximum results |
 
 ```
-search_sections(query="configuration", repo="my-project")
+find_docs(query="configuration", repo="my-project")
 ```
 
-### search_similar_symbols
+### find_similar_code
 
 Find symbols semantically similar to a given source symbol using vector similarity.
 
@@ -124,14 +124,14 @@ Find symbols semantically similar to a given source symbol using vector similari
 | `max_results` | integer | no | 10 | Maximum similar symbols to return |
 
 ```
-search_similar_symbols(symbol_id="src/auth.py::login#function", repo="backend")
+find_similar_code(symbol_id="src/auth.py::login#function", repo="backend")
 ```
 
 ---
 
 ## Browsing (11 tools)
 
-### get_symbol
+### read_symbol
 
 Retrieve the exact source of a function, class, or method by ID.
 
@@ -142,10 +142,10 @@ Retrieve the exact source of a function, class, or method by ID.
 | `context_lines` | integer | no | 0 | Number of surrounding lines to include (0-50) |
 
 ```
-get_symbol(symbol_id="src/auth.py::login#function")
+read_symbol(symbol_id="src/auth.py::login#function")
 ```
 
-### get_symbols
+### read_symbols
 
 Batch retrieve multiple symbols at once.
 
@@ -154,10 +154,10 @@ Batch retrieve multiple symbols at once.
 | `symbol_ids` | string[] | yes | -- | List of symbol identifiers to retrieve |
 
 ```
-get_symbols(symbol_ids=["src/auth.py::login#function", "src/auth.py::logout#function"])
+read_symbols(symbol_ids=["src/auth.py::login#function", "src/auth.py::logout#function"])
 ```
 
-### get_file_outline
+### whats_in_file
 
 Hierarchical outline of all symbols in a file with signatures and line numbers.
 
@@ -167,10 +167,10 @@ Hierarchical outline of all symbols in a file with signatures and line numbers.
 | `file_path` | string | yes | -- | Relative file path |
 
 ```
-get_file_outline(repo="backend", file_path="src/auth.py")
+whats_in_file(repo="backend", file_path="src/auth.py")
 ```
 
-### get_file_outlines
+### whats_in_files
 
 Batch retrieve outlines for multiple files in one call.
 
@@ -180,10 +180,10 @@ Batch retrieve outlines for multiple files in one call.
 | `file_paths` | string[] | yes | -- | List of relative file paths |
 
 ```
-get_file_outlines(repo="backend", file_paths=["src/auth.py", "src/users.py"])
+whats_in_files(repo="backend", file_paths=["src/auth.py", "src/users.py"])
 ```
 
-### get_file_tree
+### project_structure
 
 Compact indented tree of the repo structure with language and symbol counts.
 
@@ -193,10 +193,10 @@ Compact indented tree of the repo structure with language and symbol counts.
 | `max_depth` | integer | no | 3 | Max directory depth to expand (max: 10) |
 
 ```
-get_file_tree(repo="backend", max_depth=2)
+project_structure(repo="backend", max_depth=2)
 ```
 
-### get_section
+### read_doc_section
 
 Retrieve the exact content of a doc section by ID.
 
@@ -206,10 +206,10 @@ Retrieve the exact content of a doc section by ID.
 | `verify` | boolean | no | false | Verify content hash |
 
 ```
-get_section(section_id="docs/config.md::database-setup#section")
+read_doc_section(section_id="docs/config.md::database-setup#section")
 ```
 
-### get_sections
+### read_doc_sections
 
 Batch retrieve multiple doc sections at once.
 
@@ -218,10 +218,10 @@ Batch retrieve multiple doc sections at once.
 | `section_ids` | string[] | yes | -- | List of section identifiers |
 
 ```
-get_sections(section_ids=["docs/config.md::setup#section", "docs/config.md::options#section"])
+read_doc_sections(section_ids=["docs/config.md::setup#section", "docs/config.md::options#section"])
 ```
 
-### get_toc
+### doc_table_of_contents
 
 Structured table of contents for all indexed docs.
 
@@ -231,10 +231,10 @@ Structured table of contents for all indexed docs.
 | `doc_path` | string | no | -- | Filter to a specific document |
 
 ```
-get_toc(repo="backend")
+doc_table_of_contents(repo="backend")
 ```
 
-### get_toc_tree
+### doc_tree
 
 Nested tree table of contents grouped by document.
 
@@ -244,10 +244,10 @@ Nested tree table of contents grouped by document.
 | `max_depth` | integer | no | 3 | Max heading depth to include (max: 6) |
 
 ```
-get_toc_tree(repo="backend", max_depth=2)
+doc_tree(repo="backend", max_depth=2)
 ```
 
-### get_repo_outline
+### repo_overview
 
 High-level summary of a repo: file count, languages, symbol breakdown, documentation coverage.
 
@@ -256,10 +256,10 @@ High-level summary of a repo: file count, languages, symbol breakdown, documenta
 | `repo` | string | yes | -- | Repository name |
 
 ```
-get_repo_outline(repo="backend")
+repo_overview(repo="backend")
 ```
 
-### get_context_bundle
+### understand_symbol
 
 Source + imports + callers + sibling symbols in one call. Replaces 3-5 separate Read/Grep calls.
 
@@ -270,14 +270,14 @@ Source + imports + callers + sibling symbols in one call. Replaces 3-5 separate 
 | `include_imports` | boolean | no | true | Include import information |
 
 ```
-get_context_bundle(symbol_id="src/auth.py::login#function", include_callers=true)
+understand_symbol(symbol_id="src/auth.py::login#function", include_callers=true)
 ```
 
 ---
 
 ## Analysis (15 tools)
 
-### get_blast_radius
+### what_breaks_if_i_change
 
 Show which files and symbols would be affected by changing a symbol. Check this before refactoring.
 
@@ -287,10 +287,10 @@ Show which files and symbols would be affected by changing a symbol. Check this 
 | `depth` | integer | no | 2 | Import hops to follow (1-3) |
 
 ```
-get_blast_radius(symbol_id="src/auth.py::login#function")
+what_breaks_if_i_change(symbol_id="src/auth.py::login#function")
 ```
 
-### batch_blast_radius
+### what_breaks_if_i_change_these
 
 Check blast radius for multiple symbols in one call.
 
@@ -300,10 +300,10 @@ Check blast radius for multiple symbols in one call.
 | `depth` | integer | no | 2 | Import hops to follow (1-3) |
 
 ```
-batch_blast_radius(symbol_ids=["src/auth.py::login#function", "src/auth.py::logout#function"])
+what_breaks_if_i_change_these(symbol_ids=["src/auth.py::login#function", "src/auth.py::logout#function"])
 ```
 
-### get_class_hierarchy
+### inheritance_chain
 
 Traverse class inheritance chains -- ancestors and descendants.
 
@@ -313,10 +313,10 @@ Traverse class inheritance chains -- ancestors and descendants.
 | `repo` | string | no | -- | Optional repo filter |
 
 ```
-get_class_hierarchy(class_name="BaseModel", repo="backend")
+inheritance_chain(class_name="BaseModel", repo="backend")
 ```
 
-### get_references
+### who_calls_this
 
 Symbol-level references -- callers or callees.
 
@@ -326,10 +326,10 @@ Symbol-level references -- callers or callees.
 | `direction` | string | no | "to" | `to` = callers, `from` = callees |
 
 ```
-get_references(symbol_id="src/auth.py::login#function", direction="to")
+who_calls_this(symbol_id="src/auth.py::login#function", direction="to")
 ```
 
-### find_importers
+### who_depends_on_this
 
 Find all files that import a given file.
 
@@ -340,10 +340,10 @@ Find all files that import a given file.
 | `max_results` | integer | no | 50 | Maximum results |
 
 ```
-find_importers(repo="backend", file_path="src/auth.py")
+who_depends_on_this(repo="backend", file_path="src/auth.py")
 ```
 
-### batch_find_importers
+### who_depends_on_these
 
 Find importers for multiple files in one call.
 
@@ -354,10 +354,10 @@ Find importers for multiple files in one call.
 | `max_results` | integer | no | 20 | Max importers per file |
 
 ```
-batch_find_importers(repo="backend", file_paths=["src/auth.py", "src/users.py"])
+who_depends_on_these(repo="backend", file_paths=["src/auth.py", "src/users.py"])
 ```
 
-### get_related
+### related_code
 
 Find symbols related to a given symbol by co-location, shared imports, or name similarity.
 
@@ -367,10 +367,10 @@ Find symbols related to a given symbol by co-location, shared imports, or name s
 | `max_results` | integer | no | 10 | Maximum results |
 
 ```
-get_related(symbol_id="src/auth.py::login#function")
+related_code(symbol_id="src/auth.py::login#function")
 ```
 
-### get_dependency_graph
+### import_graph
 
 File-level import dependency graph. Shows what a file imports and what imports it.
 
@@ -382,10 +382,10 @@ File-level import dependency graph. Shows what a file imports and what imports i
 | `depth` | integer | no | 1 | Import hops to follow (1-3) |
 
 ```
-get_dependency_graph(repo="backend", file_path="src/auth.py", direction="imports")
+import_graph(repo="backend", file_path="src/auth.py", direction="imports")
 ```
 
-### get_symbol_diff
+### what_changed_in_symbols
 
 Compare symbols between the current index and a previous git commit.
 
@@ -397,10 +397,10 @@ Compare symbols between the current index and a previous git commit.
 | `max_files` | integer | no | 50 | Maximum files to compare |
 
 ```
-get_symbol_diff(repo="backend", commit="HEAD~3")
+what_changed_in_symbols(repo="backend", commit="HEAD~3")
 ```
 
-### get_git_context
+### who_touched_this
 
 Git blame, change frequency, and recent commits for a file or symbol.
 
@@ -411,10 +411,10 @@ Git blame, change frequency, and recent commits for a file or symbol.
 | `symbol_id` | string | no | -- | Symbol ID (alternative to file_path) |
 
 ```
-get_git_context(repo="backend", file_path="src/auth.py")
+who_touched_this(repo="backend", file_path="src/auth.py")
 ```
 
-### rename_symbol
+### rename_everywhere
 
 Find all edit locations needed to rename a symbol. Returns exact file/line/old_text/new_text for each occurrence.
 
@@ -424,10 +424,10 @@ Find all edit locations needed to rename a symbol. Returns exact file/line/old_t
 | `new_name` | string | yes | -- | Desired new name (must be a valid identifier) |
 
 ```
-rename_symbol(symbol_id="src/auth.py::login#function", new_name="authenticate")
+rename_everywhere(symbol_id="src/auth.py::login#function", new_name="authenticate")
 ```
 
-### get_recent_changes
+### whats_changed_recently
 
 Show what changed in the last N commits at the file level.
 
@@ -438,10 +438,10 @@ Show what changed in the last N commits at the file level.
 | `file_path` | string | no | -- | Optional file path filter |
 
 ```
-get_recent_changes(repo="backend", commits=10)
+whats_changed_recently(repo="backend", commits=10)
 ```
 
-### get_quality
+### find_tech_debt
 
 Quality metrics per symbol: has_tests, has_docs, has_types, complexity score.
 
@@ -454,10 +454,10 @@ Quality metrics per symbol: has_tests, has_docs, has_types, complexity score.
 | `limit` | integer | no | 50 | Maximum results |
 
 ```
-get_quality(repo="backend", untested_only=true)
+find_tech_debt(repo="backend", untested_only=true)
 ```
 
-### get_quality_report
+### code_health_report
 
 Comprehensive quality analysis: test coverage, documentation coverage, code smells, security findings, duplication, quality gate status.
 
@@ -466,10 +466,10 @@ Comprehensive quality analysis: test coverage, documentation coverage, code smel
 | `repo` | string | yes | -- | Repository name |
 
 ```
-get_quality_report(repo="backend")
+code_health_report(repo="backend")
 ```
 
-### search_columns
+### find_columns
 
 Search column metadata from ecosystem context providers (dbt, etc.).
 
@@ -481,14 +481,14 @@ Search column metadata from ecosystem context providers (dbt, etc.).
 | `max_results` | integer | no | 20 | Maximum results |
 
 ```
-search_columns(repo="analytics", query="user_id")
+find_columns(repo="analytics", query="user_id")
 ```
 
 ---
 
 ## Library (5 tools)
 
-### add_library
+### index_library_source
 
 Index a third-party library's source code for precise API lookup.
 
@@ -497,15 +497,15 @@ Index a third-party library's source code for precise API lookup.
 | `package` | string | yes | -- | Package spec: `manager/name[@version]` (e.g., `pip/django@4.2`, `npm/react@18`, `go/github.com/gin-gonic/gin`) |
 
 ```
-add_library(package="pip/django@4.2")
+index_library_source(package="pip/django@4.2")
 ```
 
-### list_libraries
+### indexed_libraries
 
 List all indexed third-party libraries. No parameters.
 
 ```
-list_libraries()
+indexed_libraries()
 ```
 
 ### remove_library
@@ -520,7 +520,7 @@ Remove an indexed library and its source files from disk.
 remove_library(name="django@4.2")
 ```
 
-### compare_library_versions
+### migration_guide
 
 Compare two indexed versions of the same library. Shows added, removed, and changed symbols.
 
@@ -531,10 +531,10 @@ Compare two indexed versions of the same library. Shows added, removed, and chan
 | `to_version` | string | yes | -- | The new version to compare to |
 
 ```
-compare_library_versions(package="numpy", from_version="1.26.0", to_version="2.2.2")
+migration_guide(package="numpy", from_version="1.26.0", to_version="2.2.2")
 ```
 
-### check_library_versions
+### check_version_drift
 
 Compare a project's installed dependencies against indexed library versions.
 
@@ -543,14 +543,14 @@ Compare a project's installed dependencies against indexed library versions.
 | `repo` | string | yes | -- | Indexed repository name to check |
 
 ```
-check_library_versions(repo="backend")
+check_version_drift(repo="backend")
 ```
 
 ---
 
 ## Workspace (5 tools)
 
-### index_workspace
+### index_multi_repo
 
 *Also listed under Indexing.* Index multiple folders and group into a workspace.
 
@@ -561,10 +561,10 @@ check_library_versions(repo="backend")
 | `description` | string | no | -- | Workspace description |
 
 ```
-index_workspace(workspace="my-app", paths=["/path/to/frontend", "/path/to/backend"])
+index_multi_repo(workspace="my-app", paths=["/path/to/frontend", "/path/to/backend"])
 ```
 
-### workspace_search
+### search_all_repos
 
 Search symbols across all repos in a workspace.
 
@@ -577,10 +577,10 @@ Search symbols across all repos in a workspace.
 | `max_results` | integer | no | 20 | Maximum results |
 
 ```
-workspace_search(workspace="my-app", query="authenticate")
+search_all_repos(workspace="my-app", query="authenticate")
 ```
 
-### workspace_blast_radius
+### cross_repo_impact
 
 Cross-repo blast radius -- shows impact across repositories.
 
@@ -591,10 +591,10 @@ Cross-repo blast radius -- shows impact across repositories.
 | `depth` | integer | no | 2 | Import hops to follow |
 
 ```
-workspace_blast_radius(workspace="my-app", symbol_id="shared/types.ts::User#type")
+cross_repo_impact(workspace="my-app", symbol_id="shared/types.ts::User#type")
 ```
 
-### add_to_workspace
+### add_repo_to_workspace
 
 Add an already-indexed repo to a workspace.
 
@@ -604,12 +604,12 @@ Add an already-indexed repo to a workspace.
 | `repo` | string | yes | -- | Repository name |
 
 ```
-add_to_workspace(workspace="my-app", repo="shared-lib")
+add_repo_to_workspace(workspace="my-app", repo="shared-lib")
 ```
 
-### pin_library
+### pin_library_version
 
-Pin a specific library version to a workspace. The library must already be indexed via add_library.
+Pin a specific library version to a workspace. The library must already be indexed via index_library_source.
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -617,14 +617,14 @@ Pin a specific library version to a workspace. The library must already be index
 | `library` | string | yes | -- | Library display name with version (e.g., `numpy@2.2.2`) |
 
 ```
-pin_library(workspace="my-app", library="numpy@2.2.2")
+pin_library_version(workspace="my-app", library="numpy@2.2.2")
 ```
 
 ---
 
 ## Meta (9 tools)
 
-### get_workflow_guide
+### how_to_use_sylvan
 
 Call this first in every session. Returns workflow rules, common tool chains, and checks settings configuration.
 
@@ -633,18 +633,18 @@ Call this first in every session. Returns workflow rules, common tool chains, an
 | `project_path` | string | no | cwd | Absolute path to the project directory |
 
 ```
-get_workflow_guide(project_path="/home/user/my-project")
+how_to_use_sylvan(project_path="/home/user/my-project")
 ```
 
-### list_repos
+### indexed_repos
 
 List all indexed repositories. Shows file count, symbol count, and indexing timestamp. No parameters.
 
 ```
-list_repos()
+indexed_repos()
 ```
 
-### remove_repo
+### delete_repo_index
 
 Delete an indexed repository and all its data. Permanent and cannot be undone.
 
@@ -653,10 +653,10 @@ Delete an indexed repository and all its data. Permanent and cannot be undone.
 | `repo` | string | yes | -- | Repository name to delete |
 
 ```
-remove_repo(repo="old-project")
+delete_repo_index(repo="old-project")
 ```
 
-### suggest_queries
+### where_to_start
 
 Suggest the best queries for exploring a repo. Session-aware.
 
@@ -665,10 +665,10 @@ Suggest the best queries for exploring a repo. Session-aware.
 | `repo` | string | yes | -- | Repository name |
 
 ```
-suggest_queries(repo="backend")
+where_to_start(repo="backend")
 ```
 
-### get_session_stats
+### usage_stats
 
 Usage statistics for the current session, per-project lifetime, and overall.
 
@@ -677,26 +677,26 @@ Usage statistics for the current session, per-project lifetime, and overall.
 | `repo` | string | no | -- | Show stats for a specific repo |
 
 ```
-get_session_stats(repo="backend")
+usage_stats(repo="backend")
 ```
 
-### get_dashboard_url
+### open_dashboard
 
 Get the URL for the sylvan web dashboard. No parameters.
 
 ```
-get_dashboard_url()
+open_dashboard()
 ```
 
-### get_server_config
+### connection_config
 
 Returns this server's MCP connection config (command, args, working directory). No parameters.
 
 ```
-get_server_config()
+connection_config()
 ```
 
-### get_logs
+### server_logs
 
 Retrieve sylvan server log entries for debugging.
 
@@ -707,10 +707,10 @@ Retrieve sylvan server log entries for debugging.
 | `offset` | integer | no | 0 | Skip this many lines before reading |
 
 ```
-get_logs(lines=100)
+server_logs(lines=100)
 ```
 
-### scaffold
+### generate_project_docs
 
 Generate a sylvan/ project context directory and agent instructions.
 
@@ -721,5 +721,5 @@ Generate a sylvan/ project context directory and agent instructions.
 | `root` | string | no | -- | Override project root path |
 
 ```
-scaffold(repo="backend", agent="claude")
+generate_project_docs(repo="backend", agent="claude")
 ```

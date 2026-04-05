@@ -230,9 +230,9 @@ class TestAgentConfig:
 
         result = await async_generate_agent_config("myproject")
 
-        assert "search_symbols" in result
-        assert "get_symbol" in result
-        assert "get_file_outline" in result
+        assert "find_code" in result
+        assert "read_symbol" in result
+        assert "whats_in_file" in result
 
     async def test_build_instructions_contains_sylvan_table(self, scaffold_ctx):
         from sylvan.scaffold.agent_config import _build_instructions

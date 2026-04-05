@@ -16,14 +16,12 @@ from sylvan.tools.base.meta import get_meta
 
 
 class GetFileOutline(Tool):
-    name = "get_file_outline"
+    name = "whats_in_file"
     category = "retrieval"
     description = (
-        "PREFERRED over Read for understanding a file's structure. Returns a "
-        "hierarchical outline of all symbols (functions, classes, methods) with "
-        "signatures and line numbers -- without reading the file content. Use this "
-        "BEFORE reading a file to understand what's in it, then use get_symbol "
-        "to fetch only the specific symbol you need."
+        "Returns a hierarchical outline of all symbols in a file: functions, classes, "
+        "methods with signatures and line numbers. No file content loaded. "
+        "~100 tokens vs ~2000 for reading the file."
     )
 
     class Params(HasRepo, HasFilePath, ToolParams):
@@ -77,12 +75,11 @@ class GetFileOutline(Tool):
 
 
 class GetFileOutlines(Tool):
-    name = "get_file_outlines"
+    name = "whats_in_files"
     category = "retrieval"
     description = (
-        "Batch retrieve outlines for multiple files in ONE call. More efficient "
-        "than calling get_file_outline repeatedly. Returns symbol trees for each "
-        "file with signatures and line numbers."
+        "Batch retrieves outlines for multiple files in one call. "
+        "Returns symbol trees with signatures and line numbers for each file."
     )
 
     class Params(HasRepo, HasFilePaths, ToolParams):

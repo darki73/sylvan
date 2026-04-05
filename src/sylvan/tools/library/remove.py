@@ -10,7 +10,7 @@ from sylvan.tools.base import Tool, ToolParams, schema_field
 class RemoveLibrary(Tool):
     name = "remove_library"
     category = "meta"
-    description = "Remove an indexed library and its source files from disk."
+    description = "Removes an indexed library and its source files from disk."
 
     class Params(ToolParams):
         name: str = schema_field(

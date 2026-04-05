@@ -9,13 +9,9 @@ from sylvan.tools.base.meta import get_meta
 
 
 class ListLibraries(Tool):
-    name = "list_libraries"
+    name = "indexed_libraries"
     category = "meta"
-    description = (
-        "List all indexed third-party libraries. Check this to see what library "
-        "source code is available for search. If a library you need isn't listed, "
-        "use add_library to index it."
-    )
+    description = "Lists all indexed third-party libraries with name, version, and symbol count."
 
     class Params(ToolParams):
         pass

@@ -82,11 +82,11 @@ PROMPT_SUBMIT_EVENTS = {
 SUBAGENT_HOOK = (
     Hook("SubagentStart")
     .context("CRITICAL: Always try mcp__sylvan__* tools FIRST before falling back to Read/Grep/Glob.")
-    .context("mcp__sylvan__search_symbols to find code,")
-    .context("mcp__sylvan__get_symbol to read source,")
-    .context("mcp__sylvan__get_file_outline to understand files,")
-    .context("mcp__sylvan__find_importers for dependencies,")
-    .context("mcp__sylvan__get_blast_radius before refactoring.")
+    .context("mcp__sylvan__find_code to find code,")
+    .context("mcp__sylvan__read_symbol to read source,")
+    .context("mcp__sylvan__whats_in_file to understand files,")
+    .context("mcp__sylvan__who_depends_on_this for dependencies,")
+    .context("mcp__sylvan__what_breaks_if_i_change before refactoring.")
     .context("These return only the exact code you need and save 90%+ tokens.")
     .context("Only fall back to Read/Grep if the repo is not indexed or sylvan returns no results.")
 )
@@ -94,7 +94,7 @@ SUBAGENT_HOOK = (
 POST_TOOL_HOOK = (
     Hook("PostToolUse")
     .context("You just edited a file.")
-    .context("Run mcp__sylvan__index_file to update the index so search results stay fresh.")
+    .context("Run mcp__sylvan__reindex_file to update the index so search results stay fresh.")
     .context("Pass the repo name and the relative file path.")
 )
 

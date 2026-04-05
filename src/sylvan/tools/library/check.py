@@ -8,14 +8,12 @@ from sylvan.tools.base import HasRepo, Tool, ToolParams
 
 
 class CheckLibraryVersions(Tool):
-    name = "check_library_versions"
+    name = "check_version_drift"
     category = "meta"
     description = (
-        "Compare a project's installed dependencies against indexed library "
-        "versions. Reads pyproject.toml, package.json, go.mod, etc. and reports "
-        "which libraries are outdated (installed version differs from indexed), "
-        "up-to-date, or not indexed at all. Use after uv sync or npm install "
-        "to detect version drift and decide which libraries to re-index."
+        "Compares installed dependencies against indexed library versions. "
+        "Reads pyproject.toml, package.json, go.mod and reports outdated, "
+        "up-to-date, and not-indexed libraries."
     )
 
     class Params(HasRepo, ToolParams):

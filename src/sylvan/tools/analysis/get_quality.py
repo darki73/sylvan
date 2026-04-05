@@ -4,12 +4,12 @@ from sylvan.tools.base import HasRepo, Tool, ToolParams, schema_field
 
 
 class GetQuality(Tool):
-    name = "get_quality"
+    name = "find_tech_debt"
     category = "analysis"
     description = (
-        "Find untested, undocumented, or complex code. Returns quality metrics "
-        "per symbol: has_tests, has_docs, has_types, complexity score. "
-        "Use for code review targeting or identifying technical debt."
+        "Returns quality metrics per symbol: has_tests, has_docs, has_types, "
+        "complexity score. Filterable by untested_only, undocumented_only, "
+        "or min_complexity threshold."
     )
 
     class Params(HasRepo, ToolParams):

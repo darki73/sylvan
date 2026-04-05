@@ -8,15 +8,12 @@ from sylvan.tools.base import Tool, ToolParams, schema_field
 
 
 class AddLibrary(Tool):
-    name = "add_library"
+    name = "index_library_source"
     category = "meta"
     description = (
-        "Index a third-party library's SOURCE CODE for precise API lookup. "
-        "Fetches the real implementation at a specific version -- more reliable "
-        "than documentation. When you encounter an unfamiliar library or need to "
-        "look up how an API actually works, use this tool FIRST to index it, then "
-        "search_symbols to find the implementation. "
-        "Format: pip/django@4.2, npm/react@18, go/github.com/gin-gonic/gin, cargo/serde"
+        "Indexes a third-party library's source code for API lookup. Fetches "
+        "the actual implementation at a specific version from pip, npm, go, or cargo. "
+        "Format: pip/django@4.2, npm/react@18, go/github.com/gin-gonic/gin, cargo/serde."
     )
 
     class Params(ToolParams):

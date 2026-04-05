@@ -4,12 +4,12 @@ from sylvan.tools.base import HasSymbol, HasSymbolIds, Tool, ToolParams, schema_
 
 
 class GetBlastRadius(Tool):
-    name = "get_blast_radius"
+    name = "what_breaks_if_i_change"
     category = "analysis"
     description = (
-        "BEFORE making changes, check the blast radius. Shows which files and "
-        "symbols would be affected by changing a symbol -- with confirmed (name "
-        "referenced) vs potential (file imported) impact. Grep cannot answer this."
+        "Shows which files and symbols would be affected by changing a given symbol. "
+        "Separates confirmed impact (name actually referenced) from potential impact "
+        "(file imported but name not confirmed). Follows import chains up to 3 hops."
     )
 
     class Params(HasSymbol, ToolParams):
@@ -42,12 +42,11 @@ class GetBlastRadius(Tool):
 
 
 class BatchBlastRadius(Tool):
-    name = "batch_blast_radius"
+    name = "what_breaks_if_i_change_these"
     category = "analysis"
     description = (
-        "Check blast radius for MULTIPLE symbols in ONE call. More efficient "
-        "than calling get_blast_radius repeatedly before a large refactor. "
-        "Returns confirmed and potential impact for each symbol."
+        "Blast radius for multiple symbols in one call. Returns confirmed "
+        "and potential impact for each symbol independently."
     )
 
     class Params(HasSymbolIds, ToolParams):

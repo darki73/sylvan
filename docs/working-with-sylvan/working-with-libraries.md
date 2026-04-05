@@ -5,13 +5,13 @@ documentation's version, but the real implementation -- you can index its source
 code and search it the same way you search your own code.
 
 
-## Indexing a library with `add_library`
+## Indexing a library with `index_library_source`
 
 To index a library, specify the package manager and package name with an optional
 version:
 
 ```
-add_library(package="pip/django@4.2")
+index_library_source(package="pip/django@4.2")
 ```
 
 The server fetches the real source code for that version, indexes every symbol,
@@ -30,19 +30,19 @@ need to match what your project actually uses.
 
 ## Searching library code
 
-Once indexed, library symbols appear in `search_symbols` results alongside your
+Once indexed, library symbols appear in `find_code` results alongside your
 own code. Use the `repo` filter to search only within a library:
 
 ```
-search_symbols(query="ModelForm.save", repo="django@4.2")
+find_code(query="ModelForm.save", repo="django@4.2")
 ```
 
 This returns the actual implementation of `ModelForm.save` in Django 4.2 -- the
-real source code, not a documentation summary. You can then use `get_symbol` to
+real source code, not a documentation summary. You can then use `read_symbol` to
 read it:
 
 ```
-get_symbol(symbol_id="django/forms/models.py::ModelForm.save#method")
+read_symbol(symbol_id="django/forms/models.py::ModelForm.save#method")
 ```
 
 This is how you answer questions like "what does this method actually do under
@@ -55,7 +55,7 @@ implementation directly.
 To see what is already indexed:
 
 ```
-list_libraries()
+indexed_libraries()
 ```
 
 ```json
@@ -82,13 +82,13 @@ list_libraries()
 Check this before indexing -- the library might already be available.
 
 
-## Comparing versions with `compare_library_versions`
+## Comparing versions with `migration_guide`
 
 When upgrading a dependency, you need to know what changed. If both the old and
-new versions are indexed, `compare_library_versions` generates a migration guide:
+new versions are indexed, `migration_guide` generates a migration guide:
 
 ```
-compare_library_versions(
+migration_guide(
     package="numpy",
     from_version="1.24",
     to_version="2.0"
@@ -120,18 +120,18 @@ This shows symbols added, removed, and with changed signatures. Use it to assess
 breaking changes before upgrading.
 
 Both versions must be indexed first. If you only have one version, use
-`add_library` to index the other.
+`index_library_source` to index the other.
 
 
-## Detecting version drift with `check_library_versions`
+## Detecting version drift with `check_version_drift`
 
 Over time, the libraries indexed by the server can fall out of sync with what your
-project actually has installed. `check_library_versions` compares your project's
+project actually has installed. `check_version_drift` compares your project's
 dependency file (pyproject.toml, package.json, go.mod, etc.) against what is
 indexed:
 
 ```
-check_library_versions(repo="my-project")
+check_version_drift(repo="my-project")
 ```
 
 ```json
@@ -151,11 +151,11 @@ libraries that need re-indexing.
 ## Pinning libraries to workspaces
 
 When you have a workspace (a group of related repos), you can pin specific library
-versions to it. This means `workspace_search` will include that library's symbols
+versions to it. This means `search_all_repos` will include that library's symbols
 in results:
 
 ```
-pin_library(workspace="my-stack", library="django@4.2")
+pin_library_version(workspace="my-stack", library="django@4.2")
 ```
 
 Each workspace can have its own set of pinned library versions. This is covered
@@ -205,10 +205,10 @@ This deletes the indexed data and the fetched source files.
 A typical library investigation looks like this:
 
 1. You encounter an unfamiliar API call in your code
-2. `list_libraries` -- check if the library is already indexed
-3. `add_library` if not -- index it
-4. `search_symbols` with the library's repo name -- find the implementation
-5. `get_symbol` -- read the actual source
+2. `indexed_libraries` -- check if the library is already indexed
+3. `index_library_source` if not -- index it
+4. `find_code` with the library's repo name -- find the implementation
+5. `read_symbol` -- read the actual source
 
 This replaces guessing from documentation or searching GitHub manually. You get
 the exact source code for the exact version your project uses, searchable with

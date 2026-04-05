@@ -4,10 +4,10 @@ You have the server running and your agent connected. Here is what the first fiv
 
 ## Step 1: Index the project
 
-Your agent calls `index_folder` to build the index:
+Your agent calls `index_project` to build the index:
 
 ```
-Agent: index_folder(path="/home/user/projects/webapp")
+Agent: index_project(path="/home/user/projects/webapp")
 ```
 
 ```json
@@ -28,7 +28,7 @@ The server walks the project, parses every supported file with tree-sitter, extr
 Before diving into specific code, the agent asks for a high-level view:
 
 ```
-Agent: get_repo_outline(repo="webapp")
+Agent: repo_overview(repo="webapp")
 ```
 
 ```json
@@ -46,10 +46,10 @@ Agent: get_repo_outline(repo="webapp")
 }
 ```
 
-For a more detailed view, `get_file_tree` returns the full directory structure:
+For a more detailed view, `project_structure` returns the full directory structure:
 
 ```
-Agent: get_file_tree(repo="webapp")
+Agent: project_structure(repo="webapp")
 ```
 
 ```
@@ -72,7 +72,7 @@ webapp/
 Now the agent needs to find something specific. Instead of grepping across every file, it searches the index:
 
 ```
-Agent: search_symbols(query="authenticate user", repo="webapp")
+Agent: find_code(query="authenticate user", repo="webapp")
 ```
 
 ```json
@@ -105,7 +105,7 @@ Two results, with signatures and locations. The agent spent about 200 tokens ins
 The agent picks the function it needs and requests its source:
 
 ```
-Agent: get_symbol(symbol_id="src/auth/middleware.py::authenticate_request#function")
+Agent: read_symbol(symbol_id="src/auth/middleware.py::authenticate_request#function")
 ```
 
 ```json
@@ -126,7 +126,7 @@ Just the function. Not the imports, not the module docstring, not the 40 other f
 Before modifying this function, the agent checks who calls it:
 
 ```
-Agent: find_importers(repo="webapp", file_path="src/auth/middleware.py")
+Agent: who_depends_on_this(repo="webapp", file_path="src/auth/middleware.py")
 ```
 
 ```json
@@ -146,7 +146,7 @@ Three files depend on this module. The agent now knows the scope of any change.
 For a more thorough impact analysis:
 
 ```
-Agent: get_blast_radius(symbol_id="src/auth/middleware.py::authenticate_request#function")
+Agent: what_breaks_if_i_change(symbol_id="src/auth/middleware.py::authenticate_request#function")
 ```
 
 ```json

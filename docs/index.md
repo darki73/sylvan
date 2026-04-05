@@ -3,10 +3,10 @@
 Sylvan is a code intelligence engine that gives AI agents fast, precise access to your codebase. Instead of reading entire files to find a single function or grepping across directories to trace a dependency, agents query sylvan's structured index and get back exactly the symbols, signatures, and relationships they need. The server parses your code with tree-sitter, stores it in a SQLite database with full-text and vector search, and exposes everything through 58 MCP tools. Typical token savings exceed 80%.
 
 ```
-Agent: search_symbols("authentication middleware")
+Agent: find_code("authentication middleware")
 -> 3 results with signatures, 280 tokens
 
-Agent: get_symbol(symbol_id)
+Agent: read_symbol(symbol_id)
 -> exact function source, 150 tokens
 
 vs. Read("src/auth/middleware.py")
@@ -66,8 +66,8 @@ The agent can now search, browse, and analyze the code. See [Your First Project]
 ### Working With Sylvan
 
 - [Searching Code](working-with-sylvan/searching-code.md) -- full-text, vector, and hybrid search
-- [Browsing and Reading](working-with-sylvan/browsing-and-reading.md) -- get_symbol, get_file_outline, get_toc
-- [Understanding Impact](working-with-sylvan/understanding-impact.md) -- blast radius, dependency graphs, find_importers
+- [Browsing and Reading](working-with-sylvan/browsing-and-reading.md) -- read_symbol, whats_in_file, doc_table_of_contents
+- [Understanding Impact](working-with-sylvan/understanding-impact.md) -- blast radius, dependency graphs, who_depends_on_this
 - [Working With Libraries](working-with-sylvan/working-with-libraries.md) -- indexing third-party packages
 - [Multi-Repo Projects](working-with-sylvan/multi-repo-projects.md) -- workspaces and cross-repo search
 - [Quality and Security](working-with-sylvan/quality-and-security.md) -- quality reports, dead code, security scanning

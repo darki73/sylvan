@@ -11,7 +11,7 @@ port.
 The dashboard URL is available through the MCP tool:
 
 ```
-get_dashboard_url()
+open_dashboard()
 ```
 
 ```json
@@ -173,7 +173,7 @@ in as they are processed.
 
 The blast radius page provides interactive impact analysis:
 
-- **Symbol ID input** -- enter a symbol ID (from search results or `get_symbol`
+- **Symbol ID input** -- enter a symbol ID (from search results or `read_symbol`
   output) to see its blast radius.
 - **Symbol search** -- alternatively, type a symbol name and select from
   autocomplete results. The search uses the same index as the Search page.
@@ -184,7 +184,7 @@ The blast radius page provides interactive impact analysis:
 - **Impact summary** -- counts of directly affected files, potentially affected
   files, and total files in the dependency chain.
 
-This is the visual version of the `get_blast_radius` MCP tool. It is useful when
+This is the visual version of the `what_breaks_if_i_change` MCP tool. It is useful when
 you want to see the dependency structure rather than read it as JSON.
 
 
@@ -202,8 +202,8 @@ The memory page provides management for agent memories and preferences:
   instruction in a detail dialog. An inline form lets you add new preferences
   with key, instruction, scope, and target selection.
 
-Changes made through MCP tools (e.g., an agent calling `save_memory` or
-`save_preference`) appear on this page in real time via WebSocket push events.
+Changes made through MCP tools (e.g., an agent calling `remember_this` or
+`save_user_rule`) appear on this page in real time via WebSocket push events.
 
 
 ## Auto-updating

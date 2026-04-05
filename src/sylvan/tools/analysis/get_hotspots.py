@@ -5,12 +5,12 @@ from sylvan.tools.base.tool import Tool
 
 
 class GetHotspots(Tool):
-    name = "get_hotspots"
+    name = "risky_to_change"
     category = "analysis"
     description = (
-        "Find code hotspots - symbols that are both complex and frequently changed. "
-        "High hotspot scores indicate code that is risky to modify. "
-        "Combines cyclomatic complexity with git churn rate using Tornhill's methodology."
+        "Ranks symbols by risk: combines cyclomatic complexity with git churn rate. "
+        "High hotspot scores mean the code is both complex and frequently changed. "
+        "Configurable time window and complexity threshold."
     )
 
     class Params(HasRepo, ToolParams):

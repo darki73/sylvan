@@ -75,9 +75,9 @@ async def _find_entry_points(repo_id: int) -> list[dict]:
     )
     return [
         {
-            "query": f"get_symbol for {ep.name} in {getattr(ep, 'path', '')}",
+            "query": f"read_symbol for {ep.name} in {getattr(ep, 'path', '')}",
             "reason": "Entry point / main function",
-            "tool": "get_symbol",
+            "tool": "read_symbol",
         }
         for ep in entry_symbols
     ]
@@ -108,7 +108,7 @@ async def _find_popular_classes(repo_id: int) -> list[dict]:
         {
             "query": cls.name,
             "reason": f"Key class ({getattr(cls, 'method_count', 0)} methods)",
-            "tool": "search_symbols",
+            "tool": "find_code",
         }
         for cls in popular_classes
     ]
@@ -128,9 +128,9 @@ async def _suggest_structure_exploration(repo_id: int, repo: str) -> dict | None
     if languages:
         lang_names = ", ".join(languages.keys()) if isinstance(languages, dict) else ""
         return {
-            "query": f"get_file_tree for {repo}",
+            "query": f"project_structure for {repo}",
             "reason": f"Explore structure ({lang_names})",
-            "tool": "get_file_tree",
+            "tool": "project_structure",
         }
     return None
 
@@ -150,9 +150,9 @@ async def _suggest_documentation(repo_id: int, repo: str) -> dict | None:
     )
     if doc_count > 0:
         return {
-            "query": f"get_toc for {repo}",
+            "query": f"doc_table_of_contents for {repo}",
             "reason": f"Browse documentation ({doc_count} sections)",
-            "tool": "get_toc",
+            "tool": "doc_table_of_contents",
         }
     return None
 
@@ -174,9 +174,9 @@ async def _suggest_unexplored_files(repo_id: int, session: object) -> dict | Non
     unseen = [p for p in all_file_paths if p not in seen_files]
     if unseen:
         return {
-            "query": f"get_file_outline for {unseen[0]}",
+            "query": f"whats_in_file for {unseen[0]}",
             "reason": f"Unexplored file ({len(unseen)} files not yet visited)",
-            "tool": "get_file_outline",
+            "tool": "whats_in_file",
         }
     return None
 

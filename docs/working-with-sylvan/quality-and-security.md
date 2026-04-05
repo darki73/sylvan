@@ -6,12 +6,12 @@ without executing any tests or running external tools. Think of it as a lightwei
 SonarQube built into your code intelligence layer.
 
 
-## Running a quality report with `get_quality_report`
+## Running a quality report with `code_health_report`
 
 To get a full quality analysis of a repository:
 
 ```
-get_quality_report(repo="my-project")
+code_health_report(repo="my-project")
 ```
 
 ```json
@@ -124,13 +124,13 @@ appears.
 anywhere in the indexed codebase. These are candidates for removal.
 
 
-## Per-symbol quality with `get_quality`
+## Per-symbol quality with `find_tech_debt`
 
-While `get_quality_report` gives you the overview, `get_quality` lets you drill
+While `code_health_report` gives you the overview, `find_tech_debt` lets you drill
 into individual symbols:
 
 ```
-get_quality(repo="my-project", untested_only=true, limit=20)
+find_tech_debt(repo="my-project", untested_only=true, limit=20)
 ```
 
 ```json
@@ -165,9 +165,9 @@ merely missing a docstring.
 
 The quality report is most useful at two points:
 
-**Before a code review** -- Run `get_quality_report` to see the current state.
+**Before a code review** -- Run `code_health_report` to see the current state.
 Focus review attention on areas with low coverage or code smells. Use
-`get_quality(untested_only=true)` to find which functions in the changed files
+`find_tech_debt(untested_only=true)` to find which functions in the changed files
 lack tests.
 
 **After a refactoring** -- Run the report again to confirm you have not introduced

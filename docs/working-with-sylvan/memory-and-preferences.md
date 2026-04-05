@@ -24,7 +24,7 @@ a session. They are stored per-repository and searchable via vector similarity.
 ### Saving a memory
 
 ```
-save_memory(
+remember_this(
     repo="my-project",
     content="Auth middleware rewrite is driven by compliance requirements, not tech debt. Scope decisions should favor compliance over ergonomics.",
     tags=["architecture", "auth", "compliance"]
@@ -48,7 +48,7 @@ This prevents the same insight from being saved ten times across sessions.
 ### Searching memories
 
 ```
-search_memory(
+recall_previous_sessions(
     repo="my-project",
     query="auth middleware decision"
 )
@@ -79,13 +79,13 @@ Ollama).
 Direct lookup by ID:
 
 ```
-retrieve_memory(repo="my-project", id=4)
+get_memory(repo="my-project", id=4)
 ```
 
 Delete a memory that is no longer accurate:
 
 ```
-delete_memory(repo="my-project", id=4)
+forget_this(repo="my-project", id=4)
 ```
 
 
@@ -110,7 +110,7 @@ For the same key, repo overrides workspace, workspace overrides global.
 ### Saving a preference
 
 ```
-save_preference(
+save_user_rule(
     key="commit_format",
     instruction="Use conventional commits with feat:, fix:, docs: prefixes. Keep messages under 72 characters.",
     scope="global"
@@ -120,7 +120,7 @@ save_preference(
 For repo or workspace scope, pass the numeric ID:
 
 ```
-save_preference(
+save_user_rule(
     key="test_command",
     instruction="Always run tests with uv run pytest, never bare pytest.",
     scope="repo",
@@ -133,7 +133,7 @@ If a preference with the same key and scope already exists, it is updated.
 ### Loading preferences
 
 ```
-get_preferences(repo="my-project")
+load_user_rules(repo="my-project")
 ```
 
 ```json
@@ -166,14 +166,14 @@ preference share the same key, only the repo version appears. Semantically
 similar instructions across scopes are deduplicated automatically, keeping the
 narrower scope.
 
-The `get_preferences` tool description instructs agents to call it at the start
+The `load_user_rules` tool description instructs agents to call it at the start
 of every session, before doing any work. Without it, agents risk repeating
 mistakes the user already corrected in a previous session.
 
 ### Deleting a preference
 
 ```
-delete_preference(key="test_command", scope="repo", scope_id=1)
+delete_user_rule(key="test_command", scope="repo", scope_id=1)
 ```
 
 

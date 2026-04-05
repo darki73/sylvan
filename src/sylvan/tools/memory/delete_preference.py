@@ -5,12 +5,9 @@ from sylvan.tools.base.meta import get_meta
 
 
 class DeletePreference(Tool):
-    name = "delete_preference"
+    name = "delete_user_rule"
     category = "meta"
-    description = (
-        "Delete a preference that is no longer needed. Specify the same key "
-        "and scope used when saving. For global scope, scope_id is not needed."
-    )
+    description = "Deletes a preference by key and scope. For global scope, scope_id is not needed."
 
     class Params(ToolParams):
         key: str = schema_field(
