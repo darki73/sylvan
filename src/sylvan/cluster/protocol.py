@@ -18,6 +18,7 @@ MSG_WRITE = "write"
 MSG_RESULT = "result"
 MSG_STATS = "stats"
 MSG_LOG = "log"
+MSG_JOB_SUBMIT = "job_submit"
 
 
 def make_id() -> str:
@@ -128,6 +129,26 @@ def stats_message(node_id: str, stats: dict[str, Any], efficiency: dict[str, Any
             "stats": stats,
             "efficiency": efficiency,
             "cache": cache,
+        }
+    )
+
+
+def job_submit_request(job_type: str, key: str | None, kwargs: dict[str, Any], request_id: str | None = None) -> str:
+    """Build a job submission request (follower -> leader).
+
+    Args:
+        job_type: Registered worker type name.
+        key: Optional deduplication key.
+        kwargs: Arguments passed to the worker's handle method.
+        request_id: Optional correlation ID (auto-generated if None).
+    """
+    return encode(
+        {
+            "type": MSG_JOB_SUBMIT,
+            "id": request_id or make_id(),
+            "job_type": job_type,
+            "key": key,
+            "kwargs": kwargs,
         }
     )
 
