@@ -96,6 +96,11 @@ def parse_file(content: str, filename: str, language: str) -> list[Symbol]:
 
         return extract_json_symbols(content, filename)
 
+    if language == "blade":
+        from sylvan.indexing.source_code.blade_extractor import extract_blade_symbols
+
+        return extract_blade_symbols(content, filename)
+
     vue_byte_offset = 0
     if language == "vue":
         script_content, language, vue_byte_offset = _extract_vue_script(content)

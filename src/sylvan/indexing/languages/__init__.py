@@ -170,6 +170,7 @@ def _load_builtin_languages() -> None:
 
     from sylvan.indexing.languages import (  # noqa: F401
         _tree_sitter_only,
+        blade,
         c_family,
         csharp,
         go,

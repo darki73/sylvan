@@ -44,6 +44,9 @@ def _ensure_plugins_loaded() -> None:
 def detect_language(filename: str) -> str | None:
     """Detect language from file extension.
 
+    Checks compound extensions first (e.g. ``.blade.php``) before
+    falling back to the last extension segment.
+
     Args:
         filename: File name or relative path.
 
@@ -53,7 +56,20 @@ def detect_language(filename: str) -> str | None:
     _ensure_plugins_loaded()
     from sylvan.indexing.source_code.language_registry import get_language_for_extension
 
-    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if "." not in filename:
+        return None
+
+    basename = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1].lower()
+    segments = basename.split(".")
+
+    # Try compound extension first (e.g. .blade.php from view.blade.php)
+    if len(segments) >= 3:
+        compound = "." + ".".join(segments[-2:])
+        result = get_language_for_extension(compound)
+        if result is not None:
+            return result
+
+    ext = "." + segments[-1]
     return get_language_for_extension(ext)
 
 
