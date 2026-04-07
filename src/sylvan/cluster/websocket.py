@@ -224,6 +224,23 @@ async def _handle_leader_message(websocket: WebSocket, follower_id: str, msg: di
         except Exception as exc:
             logger.debug("usage_record_failed", from_node=follower_id, error=str(exc))
 
+    elif msg_type == protocol.MSG_JOB_SUBMIT:
+        request_id = msg.get("id", "")
+        job_type = msg.get("job_type", "")
+        key = msg.get("key")
+        kwargs = msg.get("kwargs", {})
+        logger.info("proxy_job_submit", follower=follower_id, job_type=job_type, key=key)
+        try:
+            from sylvan.queue import submit as _submit
+
+            future = await _submit(job_type, key=key, **kwargs)
+            result = await future
+            data = result if isinstance(result, dict) else {}
+            await websocket.send_text(protocol.write_result(request_id, data=data))
+        except Exception as exc:
+            logger.warning("proxy_job_submit_failed", job_type=job_type, error=str(exc))
+            await websocket.send_text(protocol.write_result(request_id, error=str(exc)))
+
     elif msg_type == protocol.MSG_LOG:
         lines = msg.get("lines", [])
         if lines:
