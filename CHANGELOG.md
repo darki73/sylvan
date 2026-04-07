@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.10.2 (2026-04-07)
+
+### Cluster queue proxy
+
+Follower instances were silently dropping queued jobs because they enqueued into local in-memory queues that no runner could process. Jobs are now proxied to the leader via WebSocket using a new `job_submit` protocol message.
+
+### Blade template indexing
+
+`.blade.php` files are now indexed as their own language instead of being misidentified as PHP. Adds compound extension detection to the language registry and a regex-based extractor for Blade directives.
+
+**Symbols extracted:** `@section`, `@yield`, `@slot`, `@push`, `@props`, `@aware`, plus PHP symbols from `@php` blocks via tree-sitter.
+
+**Imports extracted:** `@extends`, `@include` variants, `@component`, `@livewire`, `<x-...>` tags, `<livewire:...>` tags, `@each`, `@use` (Laravel 11+), namespaced views (`mail::message`), PHP `use` in `@php` blocks.
+
+**Import resolution:** Blade dot notation converted to Laravel view paths (`layouts.app` -> `resources/views/layouts/app.blade.php`), with Livewire class candidates and vendor namespace support.
+
+53 new tests.
+
 ## 1.10.1 (2026-04-06)
 
 ### Agent-first tool naming
