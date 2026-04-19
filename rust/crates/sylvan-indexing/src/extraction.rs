@@ -84,9 +84,10 @@ mod tests {
             &["a", "a-alias"]
         }
         fn extract(&self, ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError> {
-            let mut s = Symbol::default();
-            s.name = format!("a:{}", ctx.filename);
-            Ok(vec![s])
+            Ok(vec![Symbol {
+                name: format!("a:{}", ctx.filename),
+                ..Symbol::default()
+            }])
         }
     }
 
@@ -96,9 +97,10 @@ mod tests {
             &["b"]
         }
         fn extract(&self, ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError> {
-            let mut s = Symbol::default();
-            s.name = format!("b:{}", ctx.filename);
-            Ok(vec![s])
+            Ok(vec![Symbol {
+                name: format!("b:{}", ctx.filename),
+                ..Symbol::default()
+            }])
         }
     }
 
@@ -108,9 +110,10 @@ mod tests {
             &["a"]
         }
         fn extract(&self, _ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError> {
-            let mut s = Symbol::default();
-            s.name = "replacement".into();
-            Ok(vec![s])
+            Ok(vec![Symbol {
+                name: "replacement".into(),
+                ..Symbol::default()
+            }])
         }
     }
 

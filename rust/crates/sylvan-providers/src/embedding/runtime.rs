@@ -10,7 +10,7 @@
 //! or custom build bypass the download entirely.
 
 use std::fs;
-use std::io::{self, Read};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use super::ProviderError;
@@ -42,6 +42,12 @@ fn home_dir() -> Option<PathBuf> {
 }
 
 /// Platform identifier used for archive selection.
+///
+/// Variants are `#[allow(dead_code)]` because only the current-host
+/// variant is ever constructed (the others live behind `#[cfg]` in
+/// [`Platform::current`]); every variant is still reachable at
+/// compile time on *some* platform the workspace targets.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Platform {
     /// Windows x86_64 (zip archive).
