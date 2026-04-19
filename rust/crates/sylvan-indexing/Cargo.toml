@@ -7,3 +7,11 @@ authors.workspace = true
 repository.workspace = true
 publish.workspace = true
 description = "File discovery, parsing, extraction, and the indexing pipeline for sylvan."
+
+[dependencies]
+sylvan-core = { path = "../sylvan-core" }
+sylvan-security = { path = "../sylvan-security" }
+ignore = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
