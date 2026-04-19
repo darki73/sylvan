@@ -25,6 +25,7 @@ pub(crate) fn discover_via_walk(
 ) {
     let walker = WalkBuilder::new(root)
         .standard_filters(true)
+        .require_git(false)
         .git_ignore(true)
         .git_exclude(true)
         .git_global(false)
