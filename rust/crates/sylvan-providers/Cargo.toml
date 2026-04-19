@@ -7,3 +7,13 @@ authors.workspace = true
 repository.workspace = true
 publish.workspace = true
 description = "Embedding and summarization providers (ORT, Ollama, heuristic, ...) for sylvan."
+
+[dependencies]
+ort-sys = { version = "2.0.0-rc.12", default-features = false, features = ["disable-linking"] }
+libloading = "0.9"
+tokenizers = { version = "0.22", default-features = false, features = ["unstable_wasm"] }
+thiserror = "2"
+once_cell = "1"
+
+[dev-dependencies]
+tempfile = "3"
