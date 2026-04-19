@@ -92,10 +92,11 @@ mod tests {
             &["stub", "dummy"]
         }
         fn extract(&self, ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError> {
-            let mut symbol = Symbol::default();
-            symbol.name = ctx.filename.to_string();
-            symbol.language = ctx.language.to_string();
-            Ok(vec![symbol])
+            Ok(vec![Symbol {
+                name: ctx.filename.to_string(),
+                language: ctx.language.to_string(),
+                ..Symbol::default()
+            }])
         }
     }
 

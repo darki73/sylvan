@@ -4,6 +4,21 @@
 //! field-for-field so PyO3 conversions stay mechanical and Python
 //! callers see unchanged shapes.
 
+use std::fmt;
+use std::str::FromStr;
+
+/// Error returned when parsing an unknown [`SymbolKind`] string.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownSymbolKind(pub String);
+
+impl fmt::Display for UnknownSymbolKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown symbol kind: {}", self.0)
+    }
+}
+
+impl std::error::Error for UnknownSymbolKind {}
+
 /// Recognised symbol kinds.
 ///
 /// String values match the legacy Python `SymbolKind` enum; persisted
@@ -40,20 +55,24 @@ impl SymbolKind {
         }
     }
 
-    /// Parse from the canonical lowercase string. Returns `None` for
-    /// unrecognised values; the extraction pipeline is expected to use
-    /// only the enum variants directly, but persisted rows read from
-    /// SQLite may need this path.
-    pub fn from_str(s: &str) -> Option<Self> {
+}
+
+impl FromStr for SymbolKind {
+    type Err = UnknownSymbolKind;
+
+    /// Parse from the canonical lowercase string. The extraction
+    /// pipeline uses enum variants directly; persisted rows read from
+    /// SQLite take this path.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "function" => Some(Self::Function),
-            "class" => Some(Self::Class),
-            "method" => Some(Self::Method),
-            "constant" => Some(Self::Constant),
-            "type" => Some(Self::Type),
-            "template" => Some(Self::Template),
-            "import" => Some(Self::Import),
-            _ => None,
+            "function" => Ok(Self::Function),
+            "class" => Ok(Self::Class),
+            "method" => Ok(Self::Method),
+            "constant" => Ok(Self::Constant),
+            "type" => Ok(Self::Type),
+            "template" => Ok(Self::Template),
+            "import" => Ok(Self::Import),
+            other => Err(UnknownSymbolKind(other.to_string())),
         }
     }
 }
@@ -63,7 +82,7 @@ impl SymbolKind {
 /// Field names and types match the Python `Symbol` dataclass. Defaults
 /// mirror the dataclass too, so building a partially-populated Symbol
 /// from Rust produces the same serialised shape Python callers expect.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Symbol {
     /// Stable unique identifier: `"{path}::{qualified_name}[#{kind}]"`.
     pub symbol_id: String,
@@ -105,32 +124,6 @@ pub struct Symbol {
     pub param_count: u32,
 }
 
-impl Default for Symbol {
-    fn default() -> Self {
-        Self {
-            symbol_id: String::new(),
-            name: String::new(),
-            qualified_name: String::new(),
-            kind: String::new(),
-            language: String::new(),
-            signature: None,
-            docstring: None,
-            summary: None,
-            decorators: Vec::new(),
-            keywords: Vec::new(),
-            parent_symbol_id: None,
-            line_start: None,
-            line_end: None,
-            byte_offset: 0,
-            byte_length: 0,
-            content_hash: None,
-            cyclomatic: 0,
-            max_nesting: 0,
-            param_count: 0,
-        }
-    }
-}
-
 /// Build the canonical symbol id: `"{file_path}::{qualified_name}#{kind}"`.
 ///
 /// When `kind` is an empty string the `#` suffix is omitted, matching
@@ -158,14 +151,14 @@ mod tests {
             SymbolKind::Template,
             SymbolKind::Import,
         ] {
-            assert_eq!(SymbolKind::from_str(kind.as_str()), Some(kind));
+            assert_eq!(kind.as_str().parse::<SymbolKind>().unwrap(), kind);
         }
     }
 
     #[test]
     fn symbol_kind_rejects_unknown_strings() {
-        assert_eq!(SymbolKind::from_str("nope"), None);
-        assert_eq!(SymbolKind::from_str(""), None);
+        assert!("nope".parse::<SymbolKind>().is_err());
+        assert!("".parse::<SymbolKind>().is_err());
     }
 
     #[test]
