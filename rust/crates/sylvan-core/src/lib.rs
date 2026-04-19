@@ -3,6 +3,8 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod discovery;
+
 /// Crate version, baked in at compile time.
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

@@ -7,3 +7,6 @@ authors.workspace = true
 repository.workspace = true
 publish.workspace = true
 description = "Filter rules, secret detection, and path validation for sylvan."
+
+[dependencies]
+glob = "0.3"
