@@ -404,12 +404,11 @@ async def _dispatch(name: str, arguments: dict) -> dict:
     """
     global _tool_semaphore
 
-    import structlog
-
     from sylvan.error_codes import SylvanError
+    from sylvan.logging import bind_contextvars
 
     request_id = uuid.uuid4().hex[:8]
-    structlog.contextvars.bind_contextvars(request_id=request_id)
+    bind_contextvars(request_id=request_id)
 
     await _get_or_create_backend()
 
@@ -650,7 +649,9 @@ async def _dispatch(name: str, arguments: dict) -> dict:
                 return exc.to_dict()
         finally:
             _tool_semaphore.release()
-            structlog.contextvars.unbind_contextvars("request_id")
+            from sylvan.logging import unbind_contextvars
+
+            unbind_contextvars("request_id")
     finally:
         reset_identity_map(_im_token)
 
