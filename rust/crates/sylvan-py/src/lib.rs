@@ -8,6 +8,7 @@
 
 mod discovery;
 mod logging;
+mod watch;
 
 use pyo3::prelude::*;
 
@@ -23,5 +24,6 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
     discovery::register(m)?;
     logging::register(m)?;
+    watch::register(m)?;
     Ok(())
 }

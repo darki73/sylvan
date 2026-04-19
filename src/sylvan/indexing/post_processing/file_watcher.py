@@ -1,87 +1,105 @@
-"""Optional file watcher for live re-indexing on file changes."""
+"""File watcher driving live re-indexing on filesystem changes.
+
+Backed by ``sylvan-indexing``'s Rust watcher (the ``notify`` crate)
+since v2.x. The previous ``watchfiles`` optional dependency is gone;
+watching is always available.
+"""
+
+from __future__ import annotations
 
 import asyncio
 from pathlib import Path
 
+from sylvan._rust import Watcher as _RustWatcher
 from sylvan.logging import get_logger
+from sylvan.security.patterns import should_skip_dir, should_skip_file
 
 logger = get_logger(__name__)
+
+_DEFAULT_DEBOUNCE_MS = 2000
+_POLL_TIMEOUT_MS = 1000
 
 
 async def watch_folder(
     folder_path: str,
     repo_name: str | None = None,
-    debounce_ms: int = 2000,
+    debounce_ms: int = _DEFAULT_DEBOUNCE_MS,
 ) -> None:
-    """Watch a folder for changes and trigger incremental re-indexing.
-
-    Requires the 'watchfiles' optional dependency.
+    """Watch *folder_path* recursively and reindex when files change.
 
     Args:
-        folder_path: Path to watch.
-        repo_name: Repo name for re-indexing.
-        debounce_ms: Milliseconds to wait after last change before re-indexing.
+        folder_path: Directory to watch.
+        repo_name: Repo name to pass to the indexer. Defaults to the
+            directory's basename.
+        debounce_ms: Debounce window in milliseconds. Change flurries
+            inside the window collapse into one reindex.
     """
-    try:
-        from watchfiles import Change, awatch
-    except ImportError:
-        logger.error("watchfiles not installed. Install with: pip install sylvan[watch]")
-        return
-
     root = Path(folder_path).resolve()
     if repo_name is None:
         repo_name = root.name
 
+    watcher = _RustWatcher(str(root), debounce_ms)
     logger.info("watching_folder", path=str(root), debounce_ms=debounce_ms)
 
-    async for changes in awatch(root, debounce=debounce_ms):
-        changed_files = _collect_changed_files(changes, root)
-
-        if changed_files:
-            logger.info("reindexing_changed_files", count=len(changed_files), repo=repo_name)
+    try:
+        while True:
+            batch = await asyncio.to_thread(watcher.next_batch, _POLL_TIMEOUT_MS)
+            if not batch:
+                continue
+            changed = _filter_indexable(batch, root)
+            if not changed:
+                continue
+            logger.info("reindexing_changed_files", count=len(changed), repo=repo_name)
             await _reindex(root, repo_name)
+    finally:
+        watcher.close()
 
 
-def _collect_changed_files(changes: object, root: Path) -> list[str]:
-    """Filter and collect changed file paths from a set of watchfiles changes.
+def _filter_indexable(batch: list[tuple[str, str]], root: Path) -> list[str]:
+    """Filter out events for paths the indexer would reject anyway.
 
     Args:
-        changes: Set of (change_type, path) tuples from watchfiles.
+        batch: List of ``(kind, absolute_path)`` pairs emitted by the
+            Rust watcher.
         root: Repository root directory.
 
     Returns:
-        List of relative paths for files that were added or modified.
+        Relative paths whose changes warrant a reindex.
     """
-    from watchfiles import Change
+    keep: list[str] = []
+    for kind, raw_path in batch:
+        if kind == "removed":
+            # Removed files still need reindex to prune their symbols,
+            # so we keep them too. Directory prune events land here as
+            # "removed" with the directory path; the indexer handles
+            # either case.
+            pass
+        elif kind not in {"added", "modified"}:
+            continue
 
-    from sylvan.security.patterns import should_skip_dir, should_skip_file
-
-    changed_files = []
-    for change_type, path_str in changes:
-        path = Path(path_str)
-        rel = str(path.relative_to(root)).replace("\\", "/")
+        path = Path(raw_path)
+        try:
+            rel = str(path.relative_to(root)).replace("\\", "/")
+        except ValueError:
+            continue
 
         parts = Path(rel).parts
         if any(should_skip_dir(p) for p in parts[:-1]):
             continue
-        if should_skip_file(path.name):
+        name = parts[-1] if parts else path.name
+        if should_skip_file(name) or name.startswith("."):
             continue
-        if path.name.startswith("."):
-            continue
-
-        if change_type in (Change.added, Change.modified):
-            changed_files.append(rel)
-            logger.debug("file_changed", path=rel)
-
-    return changed_files
+        keep.append(rel)
+        logger.debug("file_changed", path=rel, kind=kind)
+    return keep
 
 
 async def _reindex(root: Path, repo_name: str) -> None:
-    """Run a full re-index (incremental via hash check).
+    """Trigger an incremental reindex of *root*.
 
     Args:
         root: Repository root directory.
-        repo_name: Display name of the repository.
+        repo_name: Repository display name.
     """
     try:
         from sylvan.indexing.pipeline.orchestrator import index_folder
@@ -97,16 +115,15 @@ async def _reindex(root: Path, repo_name: str) -> None:
 
 
 def start_watcher_background(folder_path: str, repo_name: str | None = None) -> None:
-    """Start the file watcher in a background thread.
+    """Start :func:`watch_folder` in a daemon thread.
 
     Args:
-        folder_path: Path to watch for changes.
-        repo_name: Optional repo name for re-indexing.
+        folder_path: Directory to watch.
+        repo_name: Optional repo name forwarded to :func:`watch_folder`.
     """
     import threading
 
     def _run() -> None:
-        """Run the async watcher in a new event loop."""
         asyncio.run(watch_folder(folder_path, repo_name))
 
     thread = threading.Thread(target=_run, daemon=True, name="sylvan-watcher")

@@ -4,6 +4,7 @@
 #![deny(missing_docs)]
 
 pub mod discovery;
+pub mod watch;
 
 /// Crate version, baked in at compile time.
 pub fn version() -> &'static str {

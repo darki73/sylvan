@@ -37,9 +37,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-watch = ["watchfiles>=1.0.0"]
 postgres = ["asyncpg>=0.30.0"]
-all = ["watchfiles>=1.0.0", "asyncpg>=0.30.0"]
+all = ["asyncpg>=0.30.0"]
 
 [project.scripts]
 sylvan = "sylvan.cli:main"
