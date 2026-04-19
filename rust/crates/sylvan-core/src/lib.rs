@@ -4,6 +4,11 @@
 #![deny(missing_docs)]
 
 pub mod discovery;
+pub mod extraction;
+pub mod symbol;
+
+pub use extraction::{ExtractionContext, ExtractionError, LanguageExtractor};
+pub use symbol::{Symbol, SymbolKind, make_symbol_id};
 
 /// Crate version, baked in at compile time.
 pub fn version() -> &'static str {

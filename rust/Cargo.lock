@@ -1852,6 +1852,9 @@ version = "0.1.0"
 [[package]]
 name = "sylvan-core"
 version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "sylvan-dashboard"
