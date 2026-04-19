@@ -6,6 +6,7 @@
 
 #![deny(missing_docs)]
 
+mod discovery;
 mod logging;
 
 use pyo3::prelude::*;
@@ -20,6 +21,7 @@ fn version() -> &'static str {
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
+    discovery::register(m)?;
     logging::register(m)?;
     Ok(())
 }

@@ -539,6 +539,8 @@ version = "0.1.0"
 dependencies = [
  "pyo3",
  "serde_json",
+ "sylvan-core",
+ "sylvan-indexing",
  "sylvan-logging",
  "tracing",
 ]
