@@ -1,10 +1,11 @@
-"""Structured logging configuration for sylvan.
+"""Structured logging for sylvan.
 
-Logs to both stderr (for dev) and a file in ``~/.sylvan/logs/`` (always).
-The file log is critical for debugging MCP server issues where stderr
-is not visible.
+Backed by ``sylvan-logging`` (Rust) since v2.x. All Python log calls are
+routed through the Rust tracing subscriber, so level filtering, file
+rotation, and output formatting are handled uniformly whether the event
+originated in Python or Rust.
 
-Usage::
+Public API is unchanged from v1.x::
 
     from sylvan.logging import get_logger
 
@@ -12,24 +13,38 @@ Usage::
     logger.info("indexed_repo", repo="sylvan", files=126)
 """
 
-import logging
+from __future__ import annotations
+
+import json
+import logging as stdlib_logging
 import os
-import sys
 from pathlib import Path
+from typing import Any
 
 import structlog
 
+from sylvan._rust import logging as _rust_logging
+
+_configured = False
+
 
 def _get_log_dir() -> Path:
-    """Get the log directory, creating it if needed.
-
-    Returns:
-        Path to ``~/.sylvan/logs/``.
-    """
+    """Return the directory for sylvan log files, creating it if needed."""
     home = Path(os.environ.get("SYLVAN_HOME", Path.home() / ".sylvan"))
-    log_dir = home / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir
+    d = home / "logs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+class _RustBridgeHandler(stdlib_logging.Handler):
+    """Forwards stdlib ``LogRecord`` instances to the Rust subscriber."""
+
+    def emit(self, record: stdlib_logging.LogRecord) -> None:
+        try:
+            message = self.format(record)
+            _rust_logging.emit(record.levelname, record.name, message)
+        except Exception:
+            self.handleError(record)
 
 
 def configure_logging(
@@ -37,155 +52,85 @@ def configure_logging(
     json_output: bool = False,
     log_to_file: bool = True,
 ) -> None:
-    """Configure structured logging for the process.
+    """Configure sylvan's logging pipeline.
 
-    Always logs to ``~/.sylvan/logs/sylvan.log`` at DEBUG level.
-    Optionally logs to stderr at a configurable level.
+    Idempotent: subsequent calls after the first are no-ops, matching the
+    one-shot semantics of the underlying Rust subscriber.
 
     Args:
-        level: Minimum log level for the stderr handler (e.g. ``"INFO"``).
-        json_output: If ``True``, render stderr logs as JSON instead of
-            human-readable console output.
-        log_to_file: If ``True``, also write JSON logs to the sylvan log file.
+        level: Minimum level for the console sink. Case-insensitive.
+        json_output: If ``True``, render logs as newline-delimited JSON.
+        log_to_file: If ``True``, also write to
+            ``~/.sylvan/logs/sylvan.log`` with daily rotation.
     """
-    log_level = getattr(logging, level.upper(), logging.INFO)
+    global _configured
+    if _configured:
+        return
+    _configured = True
 
-    shared_processors: list = [
-        structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.UnicodeDecoder(),
-    ]
+    config: dict[str, Any] = {
+        "level": level.lower() if level else "info",
+        "format": "json" if json_output else "pretty",
+        "overrides": {
+            "httpx": "warn",
+            "httpcore": "warn",
+            "urllib3": "warn",
+            "huggingface_hub": "warn",
+            "onnxruntime": "warn",
+            "filelock": "warn",
+            "aiosqlite": "warn",
+            "asyncio": "warn",
+            "mcp": "warn",
+            "uvicorn": "warn",
+            "uvicorn.access": "warn",
+            "uvicorn.error": "warn",
+        },
+    }
+    if log_to_file:
+        config["file"] = {
+            "path": str(_get_log_dir() / "sylvan.log"),
+            "rotation": "daily",
+            "format": "json" if json_output else "pretty",
+        }
+
+    _rust_logging.init_from_json(json.dumps(config))
+
+    root = stdlib_logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(_RustBridgeHandler())
+    # Keep stdlib permissive; the Rust subscriber does level filtering.
+    root.setLevel(stdlib_logging.DEBUG)
 
     if json_output:
-        console_renderer = structlog.processors.JSONRenderer()
+        final_processor: Any = structlog.processors.JSONRenderer()
     else:
-        console_renderer = structlog.dev.ConsoleRenderer(
-            colors=sys.stderr.isatty(),
-        )
+        final_processor = structlog.dev.ConsoleRenderer(colors=False)
 
     structlog.configure(
         processors=[
-            *shared_processors,
-            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.UnicodeDecoder(),
+            final_processor,
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
 
-    root = logging.getLogger()
-    root.handlers.clear()
-
-    foreign_pre_chain = [
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.stdlib.ExtraAdder(),
-    ]
-
-    console_formatter = structlog.stdlib.ProcessorFormatter(
-        processors=[
-            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-            console_renderer,
-        ],
-        foreign_pre_chain=foreign_pre_chain,
-    )
-    console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setFormatter(console_formatter)
-    console_handler.setLevel(log_level)
-    root.addHandler(console_handler)
-
-    if log_to_file:
-        try:
-            log_dir = _get_log_dir()
-            log_file = log_dir / "sylvan.log"
-
-            file_formatter = structlog.stdlib.ProcessorFormatter(
-                processors=[
-                    structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-                    structlog.processors.JSONRenderer(),
-                ],
-                foreign_pre_chain=foreign_pre_chain,
-            )
-            from logging.handlers import RotatingFileHandler
-
-            file_handler = RotatingFileHandler(
-                str(log_file),
-                maxBytes=10 * 1024 * 1024,
-                backupCount=3,
-                encoding="utf-8",
-            )
-            file_handler.setFormatter(file_formatter)
-            file_handler.setLevel(logging.DEBUG)
-            _original_emit = file_handler.emit
-
-            def _flushing_emit(record, _orig=_original_emit):
-                """Emit and immediately flush to ensure log lines are visible for debugging."""
-                _orig(record)
-                file_handler.flush()
-
-            file_handler.emit = _flushing_emit
-            root.addHandler(file_handler)
-        except Exception:  # noqa: S110 -- can't log about logging failure
-            pass
-
-    root.setLevel(logging.DEBUG)
-
-    noisy_loggers = (
-        "httpx",
-        "httpcore",
-        "urllib3",
-        "huggingface_hub",
-        "onnxruntime",
-        "filelock",
-        "aiosqlite",
-        "asyncio",
-        "mcp",
-        "mcp.server",
-        "mcp.server.lowlevel",
-        "mcp.server.lowlevel.server",
-        "mcp.shared",
-        "mcp.server.stdio",
-    )
-    for name in noisy_loggers:
-        logging.getLogger(name).setLevel(logging.WARNING)
-
-    for uv_name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
-        uv_logger = logging.getLogger(uv_name)
-        uv_logger.handlers.clear()
-        uv_logger.propagate = True
-        uv_logger.setLevel(logging.WARNING)
-
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
-    """Get a structured logger instance.
+    """Return a structured logger routed through the Rust subscriber.
 
     Args:
         name: Logger name, typically ``__name__``.
 
     Returns:
-        A bound structlog logger.
+        A structlog ``BoundLogger`` whose output flows to the configured
+        console and file sinks via the Rust bridge.
     """
     return structlog.get_logger(name)
 
 
-# Auto-configure on import
-_configured = False
-
-
-def _auto_configure() -> None:
-    """Apply default logging configuration on first import."""
-    global _configured
-    if _configured:
-        return
-    _configured = True
-
-    level = os.environ.get("SYLVAN_LOG_LEVEL", "WARNING")
-    json_out = os.environ.get("SYLVAN_LOG_FORMAT", "").lower() == "json"
-    configure_logging(level=level, json_output=json_out, log_to_file=True)
-
-
-_auto_configure()
+_auto_level = os.environ.get("SYLVAN_LOG_LEVEL", "INFO")
+_auto_json = os.environ.get("SYLVAN_LOG_FORMAT", "").lower() == "json"
+configure_logging(level=_auto_level, json_output=_auto_json, log_to_file=True)

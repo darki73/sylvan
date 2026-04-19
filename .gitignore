@@ -13,6 +13,8 @@ rust/target/
 src/sylvan/_rust*.so
 src/sylvan/_rust*.pyd
 src/sylvan/_rust*.dylib
+src/sylvan/sylvan_rust*.pdb
+src/sylvan/*.pdb
 
 # Virtual environments
 .venv/

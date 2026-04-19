@@ -6,6 +6,8 @@
 
 #![deny(missing_docs)]
 
+mod logging;
+
 use pyo3::prelude::*;
 
 /// Loaded extension's version.
@@ -18,5 +20,6 @@ fn version() -> &'static str {
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
+    logging::register(m)?;
     Ok(())
 }
