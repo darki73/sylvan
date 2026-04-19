@@ -195,12 +195,26 @@ class EmbeddingConfig:
         endpoint: Remote endpoint URL (for ollama provider).
         model: Model identifier for embedding generation.
         dimensions: Dimensionality of the embedding vectors.
+        model_cache_path: Directory where downloaded ONNX weights and
+            tokenizers are cached. Defaults to ``~/.sylvan/models`` (or
+            ``$SYLVAN_HOME/models`` if the env var is set).
     """
 
     provider: str = "sentence-transformers"
     endpoint: str = ""
     model: str = "sentence-transformers/all-MiniLM-L6-v2"
     dimensions: int = 384
+    model_cache_path: str = ""
+
+    def __post_init__(self) -> None:
+        """Set default model cache path if empty."""
+        if not self.model_cache_path:
+            self.model_cache_path = str(_sylvan_home() / "models")
+
+    @property
+    def resolved_cache_path(self) -> Path:
+        """Return the cache path as a resolved Path object."""
+        return Path(self.model_cache_path)
 
 
 @dataclass(slots=True)

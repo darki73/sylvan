@@ -13,9 +13,13 @@ use tokenizers::{
     TruncationParams, TruncationStrategy,
 };
 
+mod download;
 mod ort;
+mod runtime;
 
+pub use download::{DEFAULT_MODEL, DownloadedModel, download, download_into, sylvan_model_dir};
 pub use ort::OrtError;
+pub use runtime::ensure_runtime;
 
 /// Maximum tokens per sequence. Fixed shape lets ORT's memory pattern
 /// caching kick in; Python fastembed uses the same value.
@@ -97,6 +101,22 @@ impl EmbeddingModelConfig {
             disable_mem_arena: true,
             allow_spinning: true,
         }
+    }
+
+    /// Build a config using a model name resolved through HuggingFace's
+    /// cache. The model (and its tokenizer) are downloaded on first
+    /// call and reused thereafter. `ort_library_path` still has to be
+    /// supplied explicitly; locating the ONNX Runtime binary is a
+    /// distribution-level concern.
+    pub fn from_model_name(
+        ort_library_path: impl Into<PathBuf>,
+        model_name: &str,
+    ) -> Result<Self, ProviderError> {
+        let DownloadedModel {
+            model_path,
+            tokenizer_path,
+        } = download(model_name)?;
+        Ok(Self::new(ort_library_path, model_path, tokenizer_path))
     }
 }
 

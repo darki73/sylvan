@@ -377,6 +377,12 @@ impl Drop for Env {
     }
 }
 
+// SAFETY: OrtEnv is global logger/state, documented as thread-safe for
+// all Ort API calls that reference it. We only ever pass it to Create*
+// functions at setup time.
+unsafe impl Send for Env {}
+unsafe impl Sync for Env {}
+
 /// ORT session options handle.
 pub struct SessionOptions {
     runtime: Arc<Runtime>,
@@ -391,6 +397,12 @@ impl Drop for SessionOptions {
         }
     }
 }
+
+// SAFETY: SessionOptions is consumed by CreateSession and never touched
+// afterwards; we keep it alive only so Drop can run at EmbeddingModel
+// drop time.
+unsafe impl Send for SessionOptions {}
+unsafe impl Sync for SessionOptions {}
 
 /// Loaded ONNX inference session.
 pub struct Session {
@@ -407,9 +419,12 @@ impl Drop for Session {
     }
 }
 
-// SAFETY: Caller guards concurrent Run calls with a Mutex; Send is
-// what's needed to move a Session into an Arc or across threads.
+// SAFETY: Caller guards concurrent Run calls with a Mutex; Send/Sync
+// claim that Session is safe to move across threads and to share via
+// shared references — true because every accessor path into Session
+// either takes &mut (Run) or is called only from the Drop path.
 unsafe impl Send for Session {}
+unsafe impl Sync for Session {}
 
 /// CPU memory-info descriptor.
 pub struct MemoryInfo {

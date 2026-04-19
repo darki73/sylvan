@@ -1,38 +1,70 @@
-"""Embedding provider -- fastembed (ONNX, no torch, 15x faster)."""
+"""Embedding provider backed by the Rust sylvan-providers crate.
 
+Every call to the ``sentence-transformers`` provider routes through
+``sylvan._rust.EmbeddingModel`` (raw ``ort-sys`` FFI with RAII safety).
+The ONNX Runtime shared library is downloaded on first use from
+Microsoft's GitHub releases into ``~/.sylvan/runtime/``; no Python
+``onnxruntime`` package dependency is required.
+
+Set ``ORT_DLL_PATH`` to bypass the download and point at an existing
+ORT installation (useful for air-gapped setups or custom builds).
+
+The provider key and file name are historical artefacts from the
+fastembed era; see the canopy memory for the rename plan deferred to
+v3.0.
+"""
+
+from __future__ import annotations
+
+from functools import lru_cache
 from typing import override
 
+from sylvan._rust import EmbeddingModel as _RustEmbeddingModel
 from sylvan.providers.base import EmbeddingProvider
 from sylvan.providers.registry import register_embedding_provider
 
-_model = None
-_model_name: str | None = None
+# Cache loaded models keyed on (model_name, cache_path). Loading is
+# expensive (filesystem read + tokenizer init + ORT session compile)
+# so repeated provider instantiations with the same config reuse the
+# same underlying handle.
+_model_cache: dict[tuple[str, str], _RustEmbeddingModel] = {}
 
 
-def _get_model(model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
-    """Get or create the singleton fastembed TextEmbedding model.
+@lru_cache(maxsize=1)
+def _default_cache_path() -> str:
+    """Return the configured model cache directory.
 
-    Args:
-        model_name: Hugging Face model identifier.
-
-    Returns:
-        A :class:`fastembed.TextEmbedding` instance.
+    Reads :class:`sylvan.config.EmbeddingConfig.model_cache_path` so
+    any override in ``~/.sylvan/config.yaml`` is respected; falls back
+    to the default ``~/.sylvan/models`` otherwise.
     """
-    global _model, _model_name
-    if _model is not None and _model_name == model_name:
-        return _model
-    from fastembed import TextEmbedding
+    from sylvan.config import load_config
 
-    _model = TextEmbedding(model_name)
-    _model_name = model_name
-    return _model
+    return load_config().embedding.model_cache_path
+
+
+def _get_model(model_name: str, cache_path: str | None = None) -> _RustEmbeddingModel:
+    """Get or create the cached Rust embedding model for this config."""
+    resolved_cache = cache_path or _default_cache_path()
+    key = (model_name, resolved_cache)
+    cached = _model_cache.get(key)
+    if cached is not None:
+        return cached
+    # ort_library_path omitted → Rust downloads + caches the platform
+    # binary under `$SYLVAN_HOME/runtime/` on first call.
+    model = _RustEmbeddingModel(
+        model_name=model_name,
+        cache_dir=resolved_cache,
+    )
+    _model_cache[key] = model
+    return model
 
 
 @register_embedding_provider("sentence-transformers")
 class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
-    """Generate embeddings using fastembed (ONNX, no torch).
+    """Generate embeddings through the Rust ONNX Runtime pipeline.
 
-    Default model: all-MiniLM-L6-v2 (384 dimensions).
+    Default model: ``all-MiniLM-L6-v2`` (384 dimensions).
     """
 
     name = "sentence-transformers"
@@ -49,11 +81,7 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
     @property
     @override
     def dimensions(self) -> int:
-        """Return the dimensionality of the embedding vectors, auto-detected on first use.
-
-        Returns:
-            Number of dimensions in each embedding vector.
-        """
+        """Return the embedding dimension, auto-detected on first use."""
         if self._dims is None:
             vec = self.embed_one("test")
             self._dims = len(vec)
@@ -61,27 +89,10 @@ class SentenceTransformerEmbeddingProvider(EmbeddingProvider):
 
     @override
     def available(self) -> bool:
-        """Check whether fastembed is importable.
-
-        Returns:
-            ``True`` if the ``fastembed`` package is installed.
-        """
-        try:
-            from fastembed import TextEmbedding
-
-            return True
-        except ImportError:
-            return False
+        """Rust backend is always present once the sylvan wheel loads."""
+        return True
 
     @override
     def _generate_embeddings(self, texts: list[str]) -> list[list[float]]:
-        """Generate embedding vectors using the fastembed model.
-
-        Args:
-            texts: List of text strings to embed.
-
-        Returns:
-            List of float vectors, one per input text.
-        """
-        model = _get_model(self._model_name)
-        return [e.tolist() for e in model.embed(texts)]
+        """Embed *texts* through the Rust backend."""
+        return _get_model(self._model_name).embed(texts)
