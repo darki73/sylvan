@@ -6,6 +6,7 @@
 
 #![deny(missing_docs)]
 
+mod call_sites;
 mod complexity;
 mod discovery;
 mod logging;
@@ -23,6 +24,7 @@ fn version() -> &'static str {
 #[pymodule]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
+    call_sites::register(m)?;
     complexity::register(m)?;
     discovery::register(m)?;
     logging::register(m)?;

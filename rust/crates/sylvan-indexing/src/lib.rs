@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod call_sites;
 pub mod complexity;
 pub mod discovery;
 pub mod watch;
