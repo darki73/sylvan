@@ -1,0 +1,9 @@
+[package]
+name = "sylvan-indexing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "File discovery, parsing, extraction, and the indexing pipeline for sylvan."

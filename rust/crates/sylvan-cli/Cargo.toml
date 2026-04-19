@@ -1,0 +1,9 @@
+[package]
+name = "sylvan-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Native CLI for sylvan (clap-based, Stage 10 port target)."

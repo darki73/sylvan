@@ -1,0 +1,9 @@
+[package]
+name = "sylvan-analysis"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Code intelligence: blast radius, hierarchy, complexity, quality metrics."

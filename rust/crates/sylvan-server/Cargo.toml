@@ -1,0 +1,9 @@
+[package]
+name = "sylvan-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "MCP server core: transports (stdio/SSE/HTTP), dispatch, lifecycle."

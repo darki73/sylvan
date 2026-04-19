@@ -60,6 +60,11 @@ Sylvan indexes your codebase into a structured database of symbols, sections, an
 uv tool install sylvan
 ```
 
+> **Building from source:** sylvan ships a Rust core as a compiled Python
+> extension. Prebuilt wheels cover Linux x64/aarch64, macOS x64/aarch64, and
+> Windows x64; if your platform is not in that list (or you are working on
+> sylvan itself), a [Rust toolchain](https://rustup.rs) is required.
+
 Add to your MCP client config:
 
 ```json

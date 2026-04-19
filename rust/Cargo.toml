@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+authors = ["darki73 <apple.zhivolupov@gmail.com>"]
+repository = "https://github.com/darki73/sylvan"
+publish = false
+
+[workspace.dependencies]
+pyo3 = { version = "0.28", default-features = false, features = ["abi3-py312", "macros"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[profile.bench]
+lto = "thin"
+codegen-units = 1

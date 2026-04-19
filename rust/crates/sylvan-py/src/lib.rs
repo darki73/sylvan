@@ -1,0 +1,22 @@
+//! PyO3 bindings exposed to Python as `sylvan._rust`.
+//!
+//! `cargo test -p sylvan-py` does not work: the `extension-module` PyO3
+//! feature leaves libpython unresolved at link time. Exercise the binding
+//! layer through Python integration tests.
+
+#![deny(missing_docs)]
+
+use pyo3::prelude::*;
+
+/// Loaded extension's version.
+#[pyfunction]
+fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
+/// The `sylvan._rust` Python module.
+#[pymodule]
+fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(version, m)?)?;
+    Ok(())
+}

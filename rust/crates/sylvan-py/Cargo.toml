@@ -1,0 +1,16 @@
+[package]
+name = "sylvan-py"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "PyO3 bindings: the sole crate Python imports as `sylvan._rust`."
+
+[lib]
+name = "sylvan_rust"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { workspace = true, features = ["extension-module"] }

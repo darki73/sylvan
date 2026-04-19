@@ -8,6 +8,12 @@ wheels/
 node_modules/
 *.egg-info
 
+# Rust
+rust/target/
+src/sylvan/_rust*.so
+src/sylvan/_rust*.pyd
+src/sylvan/_rust*.dylib
+
 # Virtual environments
 .venv/
 

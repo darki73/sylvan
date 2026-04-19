@@ -1,0 +1,9 @@
+[package]
+name = "sylvan-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Shared types, port traits, and error hierarchy for sylvan. Foundation layer."
