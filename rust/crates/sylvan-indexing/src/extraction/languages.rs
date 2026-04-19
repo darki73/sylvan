@@ -14,17 +14,13 @@ use std::sync::Arc;
 
 use super::Registry;
 
+pub mod json;
+
 /// Populate `reg` with every extractor this crate ships. Safe to call
 /// on a pre-populated registry; later registrations replace earlier
 /// ones for the same language identifier.
 pub fn register_builtins(reg: &mut Registry) {
-    // Intentionally empty right now: the walker + first language port
-    // lands in follow-up work. The registration surface stays stable
-    // so sub-agents can fan out one language per file without touching
-    // this table more than once each.
-    let _ = reg;
-    // Example of the final shape:
-    // reg.register(Arc::new(python::PythonExtractor::new()));
-    // reg.register(Arc::new(javascript::JavaScriptExtractor::new()));
-    let _ = Arc::<()>::new; // keep the import used in release builds
+    reg.register(Arc::new(json::JsonExtractor::new()));
+    // Additional languages land here one file at a time — see the
+    // module doc for the three-step addition recipe.
 }

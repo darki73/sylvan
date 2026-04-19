@@ -154,11 +154,16 @@ mod tests {
     }
 
     #[test]
-    fn with_builtins_is_empty_until_languages_are_added() {
-        // Built-ins table starts empty; languages plug in via
-        // `register_builtins`. Keeping the test here lets future PRs
-        // see the registry grow file-by-file.
+    fn with_builtins_includes_registered_languages() {
+        // As languages land, this assertion grows. It serves as a
+        // lightweight sanity check that `register_builtins` is
+        // wiring them in — if a sub-agent ports a language but
+        // forgets the registration line, this test catches it.
         let reg = Registry::with_builtins();
-        let _ = reg.languages(); // exercise the path
+        let langs = reg.languages();
+        assert!(
+            langs.contains(&"json"),
+            "expected json in builtins, got {langs:?}"
+        );
     }
 }

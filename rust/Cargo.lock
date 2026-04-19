@@ -1878,6 +1878,7 @@ dependencies = [
  "notify-debouncer-full",
  "once_cell",
  "pulldown-cmark",
+ "serde_json",
  "sylvan-core",
  "sylvan-security",
  "tempfile",
