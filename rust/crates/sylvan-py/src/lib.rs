@@ -9,6 +9,7 @@
 mod call_sites;
 mod complexity;
 mod discovery;
+mod docs;
 mod logging;
 mod watch;
 
@@ -27,6 +28,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     call_sites::register(m)?;
     complexity::register(m)?;
     discovery::register(m)?;
+    docs::register(m)?;
     logging::register(m)?;
     watch::register(m)?;
     Ok(())

@@ -6,6 +6,7 @@
 pub mod call_sites;
 pub mod complexity;
 pub mod discovery;
+pub mod docs;
 pub mod watch;
 
 /// Crate version, baked in at compile time.
