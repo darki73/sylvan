@@ -12,9 +12,20 @@ import hashlib
 
 from tree_sitter_language_pack import get_parser
 
+from sylvan._rust import (
+    extract_symbols as _rust_extract_symbols,
+)
+from sylvan._rust import (
+    supported_languages as _rust_supported_languages,
+)
 from sylvan.database.validation import Symbol, make_symbol_id
 from sylvan.indexing.source_code.complexity import compute_complexity
 from sylvan.indexing.source_code.language_specs import LanguageSpec, get_spec
+
+_RUST_LANGUAGES: frozenset[str] = frozenset(_rust_supported_languages())
+"""Languages handled end-to-end by the Rust extractor. Everything else
+stays on the legacy Python path; the set is built once at import time
+from the Rust registry so the two sides cannot drift."""
 from sylvan.indexing.source_code.stylesheet_extractor import (
     extract_less_extras,
     extract_scss_extras,
@@ -91,6 +102,9 @@ def parse_file(content: str, filename: str, language: str) -> list[Symbol]:
     Returns:
         List of Symbol objects extracted from the file.
     """
+    if language in _RUST_LANGUAGES and language not in ("json", "css"):
+        return [Symbol(**d) for d in _rust_extract_symbols(content, filename, language)]
+
     if language == "json":
         from sylvan.indexing.source_code.json_extractor import extract_json_symbols
 

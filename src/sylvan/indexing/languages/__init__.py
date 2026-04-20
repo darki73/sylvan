@@ -158,7 +158,10 @@ def get_complexity_provider(language: str) -> ComplexityProvider | None:
     return _COMPLEXITY_PROVIDERS.get(language)
 
 
+import threading
+
 _loaded = False
+_load_lock = threading.Lock()
 
 
 def _load_builtin_languages() -> None:
@@ -166,20 +169,24 @@ def _load_builtin_languages() -> None:
     global _loaded
     if _loaded:
         return
-    _loaded = True
+    with _load_lock:
+        if _loaded:
+            return
 
-    from sylvan.indexing.languages import (  # noqa: F401
-        _tree_sitter_only,
-        blade,
-        c_family,
-        csharp,
-        go,
-        java,
-        javascript,
-        php,
-        python,
-        ruby,
-        rust,
-        stylesheets,
-        swift,
-    )
+        from sylvan.indexing.languages import (  # noqa: F401
+            _tree_sitter_only,
+            blade,
+            c_family,
+            csharp,
+            go,
+            java,
+            javascript,
+            php,
+            python,
+            ruby,
+            rust,
+            stylesheets,
+            swift,
+        )
+
+        _loaded = True

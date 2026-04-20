@@ -22,6 +22,9 @@ use sylvan_core::{
 };
 use tree_sitter::{Language, Node, Parser};
 
+use crate::complexity::compute_complexity;
+use crate::enrichment::{content_hash, disambiguate_overloads, extract_keywords, heuristic_summary};
+
 /// Strategy for attaching a docstring to an extracted symbol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DocstringStrategy {
@@ -183,7 +186,34 @@ impl LanguageExtractor for SpecExtractor {
             language: ctx.language,
         };
         walker.walk(tree.root_node(), None, None, &[], &mut out);
+        enrich_symbols(&mut out, ctx);
+        disambiguate_overloads(&mut out);
         Ok(out)
+    }
+}
+
+/// Fill in complexity, content_hash, summary, keywords on every symbol.
+///
+/// Kept at module scope instead of on `Walker` so future extractors
+/// (bespoke ones like CSS / JSON) can reuse the same enrichment pass
+/// without going through the spec walker.
+pub fn enrich_symbols(symbols: &mut [Symbol], ctx: &ExtractionContext<'_>) {
+    for sym in symbols.iter_mut() {
+        let start = sym.byte_offset as usize;
+        let end = start.saturating_add(sym.byte_length as usize);
+        let body_bytes = ctx.source_bytes.get(start..end).unwrap_or(&[]);
+        let body_text = std::str::from_utf8(body_bytes).unwrap_or("");
+
+        let metrics = compute_complexity(body_text, ctx.language);
+        sym.cyclomatic = metrics.cyclomatic;
+        sym.max_nesting = metrics.max_nesting;
+        if sym.param_count == 0 {
+            sym.param_count = metrics.param_count;
+        }
+        sym.content_hash = Some(content_hash(body_bytes));
+        let summary = heuristic_summary(sym.docstring.as_deref(), sym.signature.as_deref(), &sym.name);
+        sym.summary = if summary.is_empty() { None } else { Some(summary) };
+        sym.keywords = extract_keywords(&sym.name, sym.docstring.as_deref(), &sym.decorators);
     }
 }
 
@@ -416,18 +446,30 @@ impl<'a> Walker<'a> {
     }
 
     fn build_signature(&self, node: Node<'_>) -> Option<String> {
-        let params_field = self.spec.param_field_for(node.kind())?;
-        let params_node = node.child_by_field_name(params_field)?;
-        let params_text = self.node_text(params_node)?;
-        let mut sig = params_text.trim().to_string();
-        if let Some(ret_field) = self.spec.return_type_field_for(node.kind())
-            && let Some(ret_node) = node.child_by_field_name(ret_field)
-            && let Some(ret_text) = self.node_text(ret_node)
-        {
-            sig.push_str(" -> ");
-            sig.push_str(ret_text.trim());
+        let start = node.start_byte();
+        let end = if let Some(body) = node.child_by_field_name("body") {
+            body.start_byte()
+        } else {
+            let from = start.min(self.source.len());
+            match self.source[from..].iter().position(|b| *b == b'\n') {
+                Some(off) => from + off,
+                None => node.end_byte(),
+            }
+        };
+        if end <= start {
+            return None;
         }
-        Some(sig)
+        let slice = self.source.get(start..end)?;
+        let text = std::str::from_utf8(slice).ok()?;
+        let mut sig = text.trim().to_string();
+        while let Some(c) = sig.chars().last() {
+            if matches!(c, ':' | '{' | ' ' | '\t' | '\n' | '\r') {
+                sig.pop();
+            } else {
+                break;
+            }
+        }
+        if sig.is_empty() { None } else { Some(sig) }
     }
 
     fn collect_decorators(&self, wrapper: Node<'_>) -> Vec<String> {
@@ -438,10 +480,9 @@ impl<'a> Walker<'a> {
                 continue;
             }
             if let Some(text) = self.node_text(child) {
-                let s = text.trim();
-                let stripped = s.strip_prefix('@').unwrap_or(s).trim();
-                if !stripped.is_empty() {
-                    out.push(stripped.to_string());
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    out.push(trimmed.to_string());
                 }
             }
         }

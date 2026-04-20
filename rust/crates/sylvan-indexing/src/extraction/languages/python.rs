@@ -122,8 +122,8 @@ mod tests {
         let src = "def add(a: int, b: int) -> int:\n    return a + b\n";
         let syms = extract(src);
         let sig = syms[0].signature.as_deref().expect("signature");
-        assert!(sig.starts_with("(a: int, b: int)"));
-        assert!(sig.ends_with("-> int"));
+        assert!(sig.contains("(a: int, b: int)"));
+        assert!(sig.contains("-> int"));
         assert_eq!(syms[0].param_count, 2);
     }
 
@@ -133,7 +133,7 @@ mod tests {
         let syms = extract(src);
         assert_eq!(syms.len(), 1);
         let sym = &syms[0];
-        assert_eq!(sym.decorators, vec!["staticmethod", "classmethod"]);
+        assert_eq!(sym.decorators, vec!["@staticmethod", "@classmethod"]);
         assert_eq!(sym.byte_offset, 0, "range should start at first decorator");
         assert_eq!(sym.line_start, Some(1));
     }
@@ -163,7 +163,7 @@ mod tests {
         let src = "@register\nclass Widget:\n    def use(self):\n        pass\n";
         let syms = extract(src);
         let cls = syms.iter().find(|s| s.kind == "class").expect("class");
-        assert_eq!(cls.decorators, vec!["register"]);
+        assert_eq!(cls.decorators, vec!["@register"]);
         assert!(syms.iter().any(|s| s.kind == "method" && s.name == "use"));
     }
 

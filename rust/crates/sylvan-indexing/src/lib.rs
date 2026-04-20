@@ -7,6 +7,7 @@ pub mod call_sites;
 pub mod complexity;
 pub mod discovery;
 pub mod docs;
+pub mod enrichment;
 pub mod extraction;
 pub mod watch;
 
