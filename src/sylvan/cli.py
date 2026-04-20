@@ -406,10 +406,10 @@ async def _async_doctor() -> None:
         _check("Indexed repositories", False, str(exc))
 
     try:
-        from tree_sitter_language_pack import get_parser
+        from sylvan._rust import supported_languages
 
-        get_parser("python")
-        _check("Tree-sitter", True, "language pack available")
+        langs = supported_languages()
+        _check("Tree-sitter", True, f"rust engine, {len(langs)} languages")
     except Exception as exc:
         _check("Tree-sitter", False, str(exc))
 

@@ -173,20 +173,6 @@ def _load_builtin_languages() -> None:
         if _loaded:
             return
 
-        from sylvan.indexing.languages import (  # noqa: F401
-            _tree_sitter_only,
-            blade,
-            c_family,
-            csharp,
-            go,
-            java,
-            javascript,
-            php,
-            python,
-            ruby,
-            rust,
-            stylesheets,
-            swift,
-        )
+        from sylvan.indexing.languages import _builtins  # noqa: F401
 
         _loaded = True

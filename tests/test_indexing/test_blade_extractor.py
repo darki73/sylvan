@@ -315,46 +315,46 @@ class TestBladeImports:
 
 class TestBladeResolution:
     def test_dot_notation_candidates(self):
-        from sylvan.indexing.languages.blade import BladeLanguage
+        from sylvan.indexing.languages import get_import_resolver
 
-        lang = BladeLanguage()
+        lang = get_import_resolver("blade")
         candidates = lang.generate_candidates("layouts.app", "resources/views/home.blade.php", None)
         assert "resources/views/layouts/app.blade.php" in candidates
         assert "resources/views/layouts/app/index.blade.php" in candidates
 
     def test_component_candidates(self):
-        from sylvan.indexing.languages.blade import BladeLanguage
+        from sylvan.indexing.languages import get_import_resolver
 
-        lang = BladeLanguage()
+        lang = get_import_resolver("blade")
         candidates = lang.generate_candidates("components.alert", "resources/views/home.blade.php", None)
         assert "resources/views/components/alert.blade.php" in candidates
 
     def test_livewire_candidates(self):
-        from sylvan.indexing.languages.blade import BladeLanguage
+        from sylvan.indexing.languages import get_import_resolver
 
-        lang = BladeLanguage()
+        lang = get_import_resolver("blade")
         candidates = lang.generate_candidates("livewire.search-users", "resources/views/home.blade.php", None)
         assert "resources/views/livewire/search-users.blade.php" in candidates
         assert "app/Livewire/SearchUsers.php" in candidates
 
     def test_namespaced_view_candidates(self):
-        from sylvan.indexing.languages.blade import BladeLanguage
+        from sylvan.indexing.languages import get_import_resolver
 
-        lang = BladeLanguage()
+        lang = get_import_resolver("blade")
         candidates = lang.generate_candidates("mail::message", "resources/views/emails/welcome.blade.php", None)
         assert "resources/views/vendor/mail/message.blade.php" in candidates
         assert "vendor/mail/resources/views/message.blade.php" in candidates
 
     def test_namespaced_nested_view(self):
-        from sylvan.indexing.languages.blade import BladeLanguage
+        from sylvan.indexing.languages import get_import_resolver
 
-        lang = BladeLanguage()
+        lang = get_import_resolver("blade")
         candidates = lang.generate_candidates("notifications::email", "test.blade.php", None)
         assert "resources/views/vendor/notifications/email.blade.php" in candidates
 
     def test_php_namespace_delegates(self):
-        from sylvan.indexing.languages.blade import BladeLanguage
+        from sylvan.indexing.languages import get_import_resolver
 
-        lang = BladeLanguage()
+        lang = get_import_resolver("blade")
         candidates = lang.generate_candidates("App\\Models\\User", "test.blade.php", None)
         assert not any("resources/views" in c for c in candidates)
