@@ -20,7 +20,7 @@
 use sylvan_core::{
     ExtractionContext, ExtractionError, LanguageExtractor, Symbol, make_symbol_id,
 };
-use tree_sitter::{Language, Node, Parser};
+use tree_sitter::{Language, Node, Parser, Tree};
 
 use crate::complexity::compute_complexity;
 use crate::enrichment::{content_hash, disambiguate_overloads, extract_keywords, heuristic_summary};
@@ -267,6 +267,31 @@ impl SpecExtractor {
             spec,
         }
     }
+
+    /// Parse `ctx.source_bytes` with the configured grammar.
+    ///
+    /// Exposed so per-language extractors can run ancillary walks
+    /// (import extraction, call-site discovery) without rebuilding the
+    /// parser-setup boilerplate.
+    pub fn parse(&self, ctx: &ExtractionContext<'_>) -> Result<Tree, ExtractionError> {
+        if u32::try_from(ctx.source_bytes.len()).is_err() {
+            return Err(ExtractionError::MissingDependency(format!(
+                "{} source exceeds u32::MAX bytes: {}",
+                ctx.language,
+                ctx.source_bytes.len()
+            )));
+        }
+        let mut parser = Parser::new();
+        parser
+            .set_language(&self.ts_language)
+            .map_err(|err| ExtractionError::MissingDependency(err.to_string()))?;
+        parser.parse(ctx.source_bytes, None).ok_or_else(|| {
+            ExtractionError::MissingDependency(format!(
+                "{} parser returned no tree",
+                ctx.language
+            ))
+        })
+    }
 }
 
 impl LanguageExtractor for SpecExtractor {
@@ -275,24 +300,7 @@ impl LanguageExtractor for SpecExtractor {
     }
 
     fn extract(&self, ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError> {
-        if u32::try_from(ctx.source_bytes.len()).is_err() {
-            return Err(ExtractionError::MissingDependency(format!(
-                "{} source exceeds u32::MAX bytes: {}",
-                ctx.language,
-                ctx.source_bytes.len()
-            )));
-        }
-
-        let mut parser = Parser::new();
-        parser
-            .set_language(&self.ts_language)
-            .map_err(|err| ExtractionError::MissingDependency(err.to_string()))?;
-        let Some(tree) = parser.parse(ctx.source_bytes, None) else {
-            return Err(ExtractionError::MissingDependency(format!(
-                "{} parser returned no tree",
-                ctx.language
-            )));
-        };
+        let tree = self.parse(ctx)?;
 
         let mut out = Vec::new();
         let mut walker = Walker {

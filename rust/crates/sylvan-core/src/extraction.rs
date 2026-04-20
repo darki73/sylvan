@@ -11,6 +11,22 @@
 
 use crate::symbol::Symbol;
 
+/// A single import statement extracted from source.
+///
+/// Mirrors the Python plugin's `{"specifier", "names"}` dict. The
+/// resolver pass downstream turns `specifier` into a concrete file id
+/// using language-specific candidate generation; `names` captures the
+/// individual symbols pulled from that specifier so downstream
+/// tooling can pin usages. Plain `import foo` / `require "x"` style
+/// imports leave `names` empty.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Import {
+    /// Raw module/package/file specifier.
+    pub specifier: String,
+    /// Individual names imported from `specifier`, if any.
+    pub names: Vec<String>,
+}
+
 /// Extraction context carrying the shared inputs every language needs.
 ///
 /// Kept as a borrow-heavy struct so implementors can slice into
@@ -79,6 +95,30 @@ pub trait LanguageExtractor: Send + Sync {
     /// an empty or partial list; only environmental issues (grammar
     /// missing, etc.) surface as `Err`.
     fn extract(&self, ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError>;
+
+    /// Extract raw import statements from the context.
+    ///
+    /// The default is an empty list so languages that do not speak
+    /// imports (shell, stylesheets) fall through silently. Languages
+    /// that do implement this override the default and walk the
+    /// grammar. Resolution of specifiers to files happens in a
+    /// later pipeline step, not here.
+    fn extract_imports(
+        &self,
+        _ctx: &ExtractionContext<'_>,
+    ) -> Result<Vec<Import>, ExtractionError> {
+        Ok(Vec::new())
+    }
+
+    /// Whether this extractor implements [`Self::extract_imports`].
+    ///
+    /// The Python proxy uses this to decide whether to route through
+    /// Rust or fall through to the legacy per-language extractor. The
+    /// default is `false` so incremental ports do not silently mask
+    /// Python's import output with an empty Rust result.
+    fn supports_imports(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]

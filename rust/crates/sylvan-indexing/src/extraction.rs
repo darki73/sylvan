@@ -73,6 +73,31 @@ impl Registry {
             None => Ok(Vec::new()),
         }
     }
+
+    /// Sorted list of language identifiers whose extractor advertises
+    /// import support (via `LanguageExtractor::supports_imports`).
+    pub fn import_languages(&self) -> Vec<&'static str> {
+        let mut langs: Vec<&'static str> = self
+            .by_language
+            .iter()
+            .filter(|(_, ex)| ex.supports_imports())
+            .map(|(k, _)| *k)
+            .collect();
+        langs.sort_unstable();
+        langs
+    }
+
+    /// Dispatch import extraction for `ctx.language`. Same silent-skip
+    /// contract as [`Self::extract`].
+    pub fn extract_imports(
+        &self,
+        ctx: &ExtractionContext<'_>,
+    ) -> Result<Vec<sylvan_core::Import>, ExtractionError> {
+        match self.get(ctx.language) {
+            Some(extractor) => extractor.extract_imports(ctx),
+            None => Ok(Vec::new()),
+        }
+    }
 }
 
 #[cfg(test)]

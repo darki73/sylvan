@@ -16,7 +16,7 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 
-use sylvan_core::{ExtractionContext, Symbol};
+use sylvan_core::{ExtractionContext, Import, Symbol};
 use sylvan_indexing::extraction::Registry;
 
 fn registry() -> &'static Registry {
@@ -72,6 +72,37 @@ fn extract_symbols<'py>(
     Ok(list)
 }
 
+fn import_to_dict<'py>(py: Python<'py>, imp: &Import) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    d.set_item("specifier", &imp.specifier)?;
+    d.set_item("names", imp.names.clone())?;
+    Ok(d)
+}
+
+/// Extract raw import statements for `content`. Returns an empty list
+/// when `language` has no Rust extractor or the extractor does not
+/// speak imports.
+#[pyfunction]
+#[pyo3(signature = (content, filename, language))]
+fn extract_imports<'py>(
+    py: Python<'py>,
+    content: &str,
+    filename: &str,
+    language: &str,
+) -> PyResult<Bound<'py, PyList>> {
+    let reg = registry();
+    let ctx = ExtractionContext::new(content, filename, language);
+    let imports = reg
+        .extract_imports(&ctx)
+        .map_err(|e| PyRuntimeError::new_err(format!("{e}")))?;
+
+    let list = PyList::empty(py);
+    for imp in &imports {
+        list.append(import_to_dict(py, imp)?)?;
+    }
+    Ok(list)
+}
+
 /// Sorted list of language identifiers backed by a Rust extractor.
 #[pyfunction]
 fn supported_languages<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
@@ -83,9 +114,25 @@ fn supported_languages<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
     Ok(list)
 }
 
+/// Subset of `supported_languages()` whose extractors also implement
+/// import extraction. Lets the Python proxy delegate per-language
+/// without masking the legacy extractor's output for languages that
+/// haven't been ported yet.
+#[pyfunction]
+fn import_supported_languages<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+    let reg = registry();
+    let list = PyList::empty(py);
+    for lang in reg.import_languages() {
+        list.append(lang)?;
+    }
+    Ok(list)
+}
+
 /// Register extraction functions on the parent module.
 pub fn register(parent: &Bound<'_, PyModule>) -> PyResult<()> {
     parent.add_function(wrap_pyfunction!(extract_symbols, parent)?)?;
+    parent.add_function(wrap_pyfunction!(extract_imports, parent)?)?;
     parent.add_function(wrap_pyfunction!(supported_languages, parent)?)?;
+    parent.add_function(wrap_pyfunction!(import_supported_languages, parent)?)?;
     Ok(())
 }
