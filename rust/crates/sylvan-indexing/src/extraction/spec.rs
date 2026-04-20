@@ -46,11 +46,30 @@ pub struct LanguageSpec {
     /// symbol name. Nodes without an entry rely on the child-scan
     /// fallback and silently skip if that also returns nothing.
     pub name_fields: &'static [(&'static str, &'static str)],
+    /// Map of tree-sitter node type to the field name holding its
+    /// parameter list. Used to stitch the signature slice.
+    pub param_fields: &'static [(&'static str, &'static str)],
+    /// Map of tree-sitter node type to the field name holding its
+    /// return-type annotation.
+    pub return_type_fields: &'static [(&'static str, &'static str)],
     /// Node types whose children should be walked with this node as
     /// the parent symbol (classes, traits, interfaces, etc).
     pub container_node_types: &'static [&'static str],
     /// How to locate the docstring for extracted symbols.
     pub docstring_strategy: DocstringStrategy,
+    /// Tree-sitter node type wrapping a decorated definition, if the
+    /// language exposes one (Python `decorated_definition`). When set,
+    /// the walker promotes such wrappers and captures decorator names.
+    pub decorator_node_type: Option<&'static str>,
+    /// Tree-sitter node types treated as module-level constant
+    /// declarations. Currently used for Python `assignment` / Ruby /
+    /// similar right-hand-side binding nodes.
+    pub constant_patterns: &'static [&'static str],
+    /// Map of container kind (from `symbol_node_types`) to the kind
+    /// that nested `function` symbols should be promoted to. Python
+    /// uses `class` -> `method`; languages without class-method
+    /// distinction leave this empty.
+    pub method_promotion: &'static [(&'static str, &'static str)],
 }
 
 impl LanguageSpec {
@@ -72,6 +91,35 @@ impl LanguageSpec {
     /// this node as their parent symbol.
     pub fn is_container(&self, node_type: &str) -> bool {
         self.container_node_types.contains(&node_type)
+    }
+
+    /// Configured parameter-list field for `node_type`, if any.
+    pub fn param_field_for(&self, node_type: &str) -> Option<&'static str> {
+        self.param_fields
+            .iter()
+            .find_map(|(k, v)| (*k == node_type).then_some(*v))
+    }
+
+    /// Configured return-type field for `node_type`, if any.
+    pub fn return_type_field_for(&self, node_type: &str) -> Option<&'static str> {
+        self.return_type_fields
+            .iter()
+            .find_map(|(k, v)| (*k == node_type).then_some(*v))
+    }
+
+    /// Whether `node_type` is treated as a module-level constant
+    /// declaration.
+    pub fn is_constant_pattern(&self, node_type: &str) -> bool {
+        self.constant_patterns.contains(&node_type)
+    }
+
+    /// Promoted symbol kind when a `function`-kinded symbol is nested
+    /// inside a container of kind `container_kind` (e.g. `class` ->
+    /// `method` in Python).
+    pub fn promoted_kind_for(&self, container_kind: &str) -> Option<&'static str> {
+        self.method_promotion
+            .iter()
+            .find_map(|(k, v)| (*k == container_kind).then_some(*v))
     }
 }
 
@@ -134,7 +182,7 @@ impl LanguageExtractor for SpecExtractor {
             filename: ctx.filename,
             language: ctx.language,
         };
-        walker.walk(tree.root_node(), None, &[], &mut out);
+        walker.walk(tree.root_node(), None, None, &[], &mut out);
         Ok(out)
     }
 }
@@ -151,6 +199,7 @@ impl<'a> Walker<'a> {
         &mut self,
         node: Node<'_>,
         parent_symbol_id: Option<&str>,
+        parent_kind: Option<&str>,
         scope: &[String],
         out: &mut Vec<Symbol>,
     ) {
@@ -158,34 +207,155 @@ impl<'a> Walker<'a> {
             return;
         }
 
-        let kind_str = self.spec.kind_for(node.kind());
-        if let Some(kind) = kind_str
-            && let Some(sym) = self.build_symbol(node, kind, parent_symbol_id, scope)
+        if self
+            .spec
+            .decorator_node_type
+            .is_some_and(|dn| dn == node.kind())
         {
-            let is_container = self.spec.is_container(node.kind());
-            let symbol_id = sym.symbol_id.clone();
-            let name = sym.name.clone();
-            out.push(sym);
-            if is_container {
-                let mut next_scope: Vec<String> = scope.to_vec();
-                next_scope.push(name);
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    self.walk(child, Some(&symbol_id), &next_scope, out);
+            self.handle_decorated(node, parent_symbol_id, parent_kind, scope, out);
+            return;
+        }
+
+        if parent_symbol_id.is_none() && self.spec.is_constant_pattern(node.kind()) {
+            self.try_emit_constant(node, out);
+        }
+
+        let kind_str = self.spec.kind_for(node.kind());
+        if let Some(raw_kind) = kind_str {
+            let kind = self.resolve_kind(raw_kind, parent_kind);
+            if let Some(sym) = self.build_symbol(node, None, kind, parent_symbol_id, scope) {
+                let is_container = self.spec.is_container(node.kind());
+                let symbol_id = sym.symbol_id.clone();
+                let name = sym.name.clone();
+                out.push(sym);
+                if is_container {
+                    let mut next_scope: Vec<String> = scope.to_vec();
+                    next_scope.push(name);
+                    let mut cursor = node.walk();
+                    for child in node.children(&mut cursor) {
+                        self.walk(child, Some(&symbol_id), Some(kind), &next_scope, out);
+                    }
+                    return;
                 }
-                return;
             }
         }
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.walk(child, parent_symbol_id, scope, out);
+            self.walk(child, parent_symbol_id, parent_kind, scope, out);
         }
+    }
+
+    fn resolve_kind(&self, raw_kind: &'static str, parent_kind: Option<&str>) -> &'static str {
+        if raw_kind == "function"
+            && let Some(pk) = parent_kind
+            && let Some(promoted) = self.spec.promoted_kind_for(pk)
+        {
+            return promoted;
+        }
+        raw_kind
+    }
+
+    fn handle_decorated(
+        &mut self,
+        node: Node<'_>,
+        parent_symbol_id: Option<&str>,
+        parent_kind: Option<&str>,
+        scope: &[String],
+        out: &mut Vec<Symbol>,
+    ) {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if let Some(raw_kind) = self.spec.kind_for(child.kind()) {
+                let kind = self.resolve_kind(raw_kind, parent_kind);
+                if let Some(sym) =
+                    self.build_symbol(child, Some(node), kind, parent_symbol_id, scope)
+                {
+                    let is_container = self.spec.is_container(child.kind());
+                    let symbol_id = sym.symbol_id.clone();
+                    let name = sym.name.clone();
+                    out.push(sym);
+                    if is_container {
+                        let mut next_scope: Vec<String> = scope.to_vec();
+                        next_scope.push(name);
+                        let mut inner = child.walk();
+                        for gc in child.children(&mut inner) {
+                            self.walk(gc, Some(&symbol_id), Some(kind), &next_scope, out);
+                        }
+                    }
+                    return;
+                }
+            }
+        }
+        let mut fallback = node.walk();
+        for child in node.children(&mut fallback) {
+            self.walk(child, parent_symbol_id, parent_kind, scope, out);
+        }
+    }
+
+    fn try_emit_constant(&self, node: Node<'_>, out: &mut Vec<Symbol>) {
+        let assignment = if node.kind() == "expression_statement" {
+            let mut cursor = node.walk();
+            node.children(&mut cursor)
+                .find(|c| c.kind() == "assignment")
+        } else if node.kind() == "assignment" {
+            Some(node)
+        } else {
+            None
+        };
+        let Some(assign) = assignment else {
+            return;
+        };
+        let Some(lhs) = assign.child_by_field_name("left") else {
+            return;
+        };
+        if lhs.kind() != "identifier" {
+            return;
+        }
+        let Some(name) = self.node_text(lhs).map(trim_string) else {
+            return;
+        };
+        if name.is_empty() || !is_all_caps_constant(&name) {
+            return;
+        }
+        if out
+            .iter()
+            .any(|s| s.kind == "constant" && s.name == name && s.byte_offset as usize == assign.start_byte())
+        {
+            return;
+        }
+        let start = assign.start_byte();
+        let end = assign.end_byte();
+        let Some(byte_offset) = u32::try_from(start).ok() else {
+            return;
+        };
+        let Some(byte_length) = u32::try_from(end.saturating_sub(start)).ok() else {
+            return;
+        };
+        let Some(line_start) = u32::try_from(assign.start_position().row).ok() else {
+            return;
+        };
+        let Some(line_end) = u32::try_from(assign.end_position().row).ok() else {
+            return;
+        };
+        out.push(Symbol {
+            symbol_id: make_symbol_id(self.filename, &name, "constant"),
+            name: name.clone(),
+            qualified_name: name,
+            kind: "constant".to_string(),
+            language: self.language.to_string(),
+            line_start: Some(line_start.saturating_add(1)),
+            line_end: Some(line_end.saturating_add(1)),
+            byte_offset,
+            byte_length,
+            ..Symbol::default()
+        });
     }
 
     fn build_symbol(
         &self,
         node: Node<'_>,
+        decorator_wrapper: Option<Node<'_>>,
         kind: &str,
         parent_symbol_id: Option<&str>,
         scope: &[String],
@@ -199,17 +369,32 @@ impl<'a> Walker<'a> {
             q.push_str(&name);
             q
         };
-        let start = node.start_byte();
+        let range_start = decorator_wrapper.map_or_else(|| node.start_byte(), |d| d.start_byte());
+        let range_start_row = decorator_wrapper
+            .map_or_else(|| node.start_position().row, |d| d.start_position().row);
         let end = node.end_byte();
-        let byte_offset = u32::try_from(start).ok()?;
-        let byte_length = u32::try_from(end.saturating_sub(start)).ok()?;
-        let line_start = u32::try_from(node.start_position().row).ok()?.saturating_add(1);
-        let line_end = u32::try_from(node.end_position().row).ok()?.saturating_add(1);
+        let byte_offset = u32::try_from(range_start).ok()?;
+        let byte_length = u32::try_from(end.saturating_sub(range_start)).ok()?;
+        let line_start = u32::try_from(range_start_row).ok()?.saturating_add(1);
+        let line_end = u32::try_from(node.end_position().row)
+            .ok()?
+            .saturating_add(1);
 
         let docstring = match self.spec.docstring_strategy {
             DocstringStrategy::PrecedingComment => self.preceding_comment(node),
             DocstringStrategy::NextSiblingString => self.next_sibling_string(node),
         };
+
+        let signature = self.build_signature(node);
+        let decorators = decorator_wrapper
+            .map(|d| self.collect_decorators(d))
+            .unwrap_or_default();
+        let param_count = self
+            .spec
+            .param_field_for(node.kind())
+            .and_then(|f| node.child_by_field_name(f))
+            .map(|n| count_parameters(n))
+            .unwrap_or(0);
 
         Some(Symbol {
             symbol_id: make_symbol_id(self.filename, &qualified_name, kind),
@@ -223,8 +408,44 @@ impl<'a> Walker<'a> {
             byte_offset,
             byte_length,
             docstring,
+            signature,
+            decorators,
+            param_count,
             ..Symbol::default()
         })
+    }
+
+    fn build_signature(&self, node: Node<'_>) -> Option<String> {
+        let params_field = self.spec.param_field_for(node.kind())?;
+        let params_node = node.child_by_field_name(params_field)?;
+        let params_text = self.node_text(params_node)?;
+        let mut sig = params_text.trim().to_string();
+        if let Some(ret_field) = self.spec.return_type_field_for(node.kind())
+            && let Some(ret_node) = node.child_by_field_name(ret_field)
+            && let Some(ret_text) = self.node_text(ret_node)
+        {
+            sig.push_str(" -> ");
+            sig.push_str(ret_text.trim());
+        }
+        Some(sig)
+    }
+
+    fn collect_decorators(&self, wrapper: Node<'_>) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut cursor = wrapper.walk();
+        for child in wrapper.children(&mut cursor) {
+            if child.kind() != "decorator" {
+                continue;
+            }
+            if let Some(text) = self.node_text(child) {
+                let s = text.trim();
+                let stripped = s.strip_prefix('@').unwrap_or(s).trim();
+                if !stripped.is_empty() {
+                    out.push(stripped.to_string());
+                }
+            }
+        }
+        out
     }
 
     fn extract_name(&self, node: Node<'_>) -> Option<String> {
@@ -326,6 +547,45 @@ fn trim_string(s: String) -> String {
     s.trim().to_string()
 }
 
+fn is_all_caps_constant(name: &str) -> bool {
+    let mut has_letter = false;
+    for c in name.chars() {
+        if c.is_ascii_lowercase() {
+            return false;
+        }
+        if c.is_ascii_alphabetic() {
+            has_letter = true;
+        } else if !(c.is_ascii_digit() || c == '_') {
+            return false;
+        }
+    }
+    has_letter
+}
+
+fn count_parameters(params_node: Node<'_>) -> u32 {
+    let mut count: u32 = 0;
+    let mut cursor = params_node.walk();
+    for child in params_node.children(&mut cursor) {
+        if !child.is_named() {
+            continue;
+        }
+        match child.kind() {
+            "identifier"
+            | "typed_parameter"
+            | "default_parameter"
+            | "typed_default_parameter"
+            | "list_splat_pattern"
+            | "dictionary_splat_pattern"
+            | "keyword_separator"
+            | "positional_separator"
+            | "tuple_pattern"
+            | "parameter" => count = count.saturating_add(1),
+            _ => {}
+        }
+    }
+    count
+}
+
 fn is_comment_kind(kind: &str) -> bool {
     matches!(kind, "comment" | "line_comment" | "block_comment")
 }
@@ -422,8 +682,13 @@ mod tests {
         static SPEC: LanguageSpec = LanguageSpec {
             symbol_node_types: &[("function_definition", "function")],
             name_fields: &[("function_definition", "name")],
+            param_fields: &[],
+            return_type_fields: &[],
             container_node_types: &["class_definition"],
             docstring_strategy: DocstringStrategy::PrecedingComment,
+            decorator_node_type: None,
+            constant_patterns: &[],
+            method_promotion: &[],
         };
         assert_eq!(SPEC.kind_for("function_definition"), Some("function"));
         assert_eq!(SPEC.kind_for("nope"), None);

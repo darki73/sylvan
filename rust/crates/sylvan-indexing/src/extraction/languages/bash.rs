@@ -16,8 +16,13 @@ use crate::extraction::spec::{DocstringStrategy, LanguageSpec, SpecExtractor};
 static SPEC: LanguageSpec = LanguageSpec {
     symbol_node_types: &[("function_definition", "function")],
     name_fields: &[("function_definition", "name")],
+    param_fields: &[],
+    return_type_fields: &[],
     container_node_types: &[],
     docstring_strategy: DocstringStrategy::PrecedingComment,
+    decorator_node_type: None,
+    constant_patterns: &[],
+    method_promotion: &[],
 };
 
 /// Built-in Bash extractor.

@@ -177,5 +177,9 @@ mod tests {
             langs.contains(&"bash"),
             "expected bash in builtins, got {langs:?}"
         );
+        assert!(
+            langs.contains(&"python"),
+            "expected python in builtins, got {langs:?}"
+        );
     }
 }

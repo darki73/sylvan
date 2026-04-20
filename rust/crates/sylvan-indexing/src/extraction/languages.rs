@@ -17,6 +17,7 @@ use super::Registry;
 pub mod bash;
 pub mod css;
 pub mod json;
+pub mod python;
 
 /// Populate `reg` with every extractor this crate ships. Safe to call
 /// on a pre-populated registry; later registrations replace earlier
@@ -25,6 +26,7 @@ pub fn register_builtins(reg: &mut Registry) {
     reg.register(Arc::new(bash::BashExtractor::new()));
     reg.register(Arc::new(css::CssExtractor::new()));
     reg.register(Arc::new(json::JsonExtractor::new()));
+    reg.register(Arc::new(python::PythonExtractor::new()));
     // Additional languages land here one file at a time — see the
     // module doc for the three-step addition recipe.
 }
