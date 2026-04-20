@@ -15,18 +15,34 @@ use std::sync::Arc;
 use super::Registry;
 
 pub mod bash;
+pub mod c_family;
+pub mod csharp;
 pub mod css;
+pub mod go;
+pub mod java;
+pub mod javascript;
 pub mod json;
+pub mod php;
 pub mod python;
+pub mod ruby;
+pub mod rust;
+pub mod typescript;
 
 /// Populate `reg` with every extractor this crate ships. Safe to call
 /// on a pre-populated registry; later registrations replace earlier
 /// ones for the same language identifier.
 pub fn register_builtins(reg: &mut Registry) {
     reg.register(Arc::new(bash::BashExtractor::new()));
+    reg.register(Arc::new(c_family::CFamilyExtractor::new()));
+    reg.register(Arc::new(csharp::CSharpExtractor::new()));
     reg.register(Arc::new(css::CssExtractor::new()));
+    reg.register(Arc::new(go::GoExtractor::new()));
+    reg.register(Arc::new(java::JavaExtractor::new()));
+    reg.register(Arc::new(javascript::JavaScriptExtractor::new()));
     reg.register(Arc::new(json::JsonExtractor::new()));
+    reg.register(Arc::new(php::PhpExtractor::new()));
     reg.register(Arc::new(python::PythonExtractor::new()));
-    // Additional languages land here one file at a time — see the
-    // module doc for the three-step addition recipe.
+    reg.register(Arc::new(ruby::RubyExtractor::new()));
+    reg.register(Arc::new(rust::RustExtractor::new()));
+    reg.register(Arc::new(typescript::TypeScriptExtractor::new()));
 }

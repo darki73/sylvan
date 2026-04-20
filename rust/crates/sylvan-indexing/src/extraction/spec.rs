@@ -490,11 +490,46 @@ impl<'a> Walker<'a> {
     }
 
     fn extract_name(&self, node: Node<'_>) -> Option<String> {
-        let field = self.spec.name_field_for(node.kind())?;
-        if let Some(name_node) = node.child_by_field_name(field) {
+        if let Some(field) = self.spec.name_field_for(node.kind())
+            && let Some(name_node) = node.child_by_field_name(field)
+        {
             return self.node_text(name_node).map(trim_string);
         }
-        self.scan_children_for_name(node)
+        if let Some(name) = self.scan_children_for_name(node) {
+            return Some(name);
+        }
+        if let Some(decl) = node.child_by_field_name("declarator")
+            && let Some(name) = self.declarator_identifier(decl)
+        {
+            return Some(name);
+        }
+        None
+    }
+
+    fn declarator_identifier(&self, node: Node<'_>) -> Option<String> {
+        match node.kind() {
+            "identifier" | "type_identifier" | "field_identifier" => {
+                self.node_text(node).map(trim_string)
+            }
+            "function_declarator"
+            | "pointer_declarator"
+            | "reference_declarator"
+            | "parenthesized_declarator"
+            | "array_declarator"
+            | "init_declarator" => {
+                if let Some(inner) = node.child_by_field_name("declarator") {
+                    return self.declarator_identifier(inner);
+                }
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if let Some(found) = self.declarator_identifier(child) {
+                        return Some(found);
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
     }
 
     fn scan_children_for_name(&self, node: Node<'_>) -> Option<String> {
