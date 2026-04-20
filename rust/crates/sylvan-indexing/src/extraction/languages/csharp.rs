@@ -7,12 +7,22 @@
 //! and `field_declaration` / `property_declaration` treated as
 //! constant-like top-level patterns.
 //!
-//! Import extraction, PSR-style candidate generation, and complexity
-//! scoring live outside this walker and are not ported here.
+//! Import extraction walks the parsed tree for `using_directive` nodes.
+//! The dotted namespace lives in a `qualified_name` or `identifier`
+//! child. Matching the legacy Python regex, the full dotted path becomes
+//! the specifier and `names` is always empty, covering plain
+//! `using System;`, dotted `using System.Collections.Generic;`, and
+//! `using static System.Math;`. Aliased directives
+//! (`using X = System.Collections.Generic.List;`) record the right-hand
+//! namespace as the specifier, which the legacy regex misses.
+//!
+//! Features left for later migration stages: PSR-style candidate
+//! generation and complexity scoring.
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, LanguageExtractor, Symbol};
+use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use tree_sitter::Node;
 
 use crate::extraction::spec::{
     ConstantStrategy, DecoratorStrategy, DocstringStrategy, LanguageSpec, ModifierLocation,
@@ -92,6 +102,66 @@ impl LanguageExtractor for CSharpExtractor {
     fn extract(&self, ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError> {
         self.delegate().extract(ctx)
     }
+
+    fn supports_imports(&self) -> bool {
+        true
+    }
+
+    fn extract_imports(
+        &self,
+        ctx: &ExtractionContext<'_>,
+    ) -> Result<Vec<Import>, ExtractionError> {
+        let tree = self.delegate().parse(ctx)?;
+        let mut out = Vec::new();
+        walk_imports(tree.root_node(), ctx.source_bytes, &mut out);
+        Ok(out)
+    }
+}
+
+fn walk_imports(node: Node<'_>, source: &[u8], out: &mut Vec<Import>) {
+    if node.kind() == "using_directive" {
+        if let Some(imp) = collect_using(node, source) {
+            out.push(imp);
+        }
+        return;
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_imports(child, source, out);
+    }
+}
+
+fn collect_using(node: Node<'_>, source: &[u8]) -> Option<Import> {
+    let mut cursor = node.walk();
+    let mut best: Option<String> = None;
+    for child in node.children(&mut cursor) {
+        match child.kind() {
+            "qualified_name" | "identifier" => {
+                if let Some(text) = node_text(child, source) {
+                    best = Some(text);
+                }
+            }
+            "name_equals" => {
+                // Skip the alias left-hand side; keep scanning for the
+                // right-hand namespace node that follows it.
+            }
+            _ => {}
+        }
+    }
+    let specifier = best?;
+    if specifier.is_empty() {
+        return None;
+    }
+    Some(Import {
+        specifier,
+        names: Vec::new(),
+    })
+}
+
+fn node_text(node: Node<'_>, source: &[u8]) -> Option<String> {
+    std::str::from_utf8(&source[node.byte_range()])
+        .ok()
+        .map(|s| s.to_string())
 }
 
 #[cfg(test)]
@@ -102,6 +172,12 @@ mod tests {
         CSharpExtractor::new()
             .extract(&ExtractionContext::new(source, "mod.cs", "csharp"))
             .expect("csharp extraction")
+    }
+
+    fn imports(src: &str) -> Vec<Import> {
+        CSharpExtractor::new()
+            .extract_imports(&ExtractionContext::new(src, "mod.cs", "csharp"))
+            .expect("csharp imports")
     }
 
     #[test]
@@ -162,5 +238,46 @@ mod tests {
         let src = "class C { public int Mutable = 0; }";
         let syms = extract(src);
         assert!(syms.iter().all(|s| s.kind != "constant"));
+    }
+
+    #[test]
+    fn plain_using_records_single_identifier() {
+        let imps = imports("using System;\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "System");
+        assert!(imps[0].names.is_empty());
+    }
+
+    #[test]
+    fn dotted_using_keeps_full_namespace() {
+        let imps = imports("using System.Collections.Generic;\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "System.Collections.Generic");
+        assert!(imps[0].names.is_empty());
+    }
+
+    #[test]
+    fn static_using_keeps_full_namespace() {
+        let imps = imports("using static System.Math;\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "System.Math");
+        assert!(imps[0].names.is_empty());
+    }
+
+    #[test]
+    fn aliased_using_records_right_hand_namespace() {
+        let imps = imports("using Foo = System.Collections.Generic.List;\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "System.Collections.Generic.List");
+        assert!(imps[0].names.is_empty());
+    }
+
+    #[test]
+    fn multiple_usings_produce_multiple_records() {
+        let src = "using System;\nusing System.IO;\n";
+        let imps = imports(src);
+        assert_eq!(imps.len(), 2);
+        assert_eq!(imps[0].specifier, "System");
+        assert_eq!(imps[1].specifier, "System.IO");
     }
 }

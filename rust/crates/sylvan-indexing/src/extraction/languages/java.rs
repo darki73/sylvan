@@ -8,15 +8,21 @@
 //! declaration rather than a wrapper, so the spec uses
 //! [`DecoratorStrategy::InnerModifiers`] to reach them.
 //!
-//! Features left for later migration stages: import extraction,
-//! candidate path resolution against `src/main/java/`, complexity
-//! tuning, and `field_declaration` constant emission (the current
-//! walker's constant path is hard-coded around Python's
-//! `expression_statement`/`assignment` shape).
+//! Import extraction walks the parsed tree for `import_declaration`
+//! nodes. The dotted path lives in a `scoped_identifier` /
+//! `identifier` child and `.*` wildcards surface as an `asterisk`
+//! child. Matching the legacy Python plugin's split behaviour, the
+//! trailing identifier becomes the sole `names` entry when present,
+//! while wildcard (`package.*`) and static wildcard imports keep the
+//! dotted package as specifier and place `*` in the `names` list.
+//!
+//! Features left for later migration stages: candidate path resolution
+//! against `src/main/java/` and complexity tuning.
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, LanguageExtractor, Symbol};
+use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use tree_sitter::Node;
 
 use crate::extraction::spec::{
     ConstantStrategy, DecoratorStrategy, DocstringStrategy, LanguageSpec, ModifierLocation,
@@ -99,6 +105,79 @@ impl LanguageExtractor for JavaExtractor {
     fn extract(&self, ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError> {
         self.delegate().extract(ctx)
     }
+
+    fn supports_imports(&self) -> bool {
+        true
+    }
+
+    fn extract_imports(
+        &self,
+        ctx: &ExtractionContext<'_>,
+    ) -> Result<Vec<Import>, ExtractionError> {
+        let tree = self.delegate().parse(ctx)?;
+        let mut out = Vec::new();
+        walk_imports(tree.root_node(), ctx.source_bytes, &mut out);
+        Ok(out)
+    }
+}
+
+fn walk_imports(node: Node<'_>, source: &[u8], out: &mut Vec<Import>) {
+    if node.kind() == "import_declaration" {
+        if let Some(imp) = collect_import(node, source) {
+            out.push(imp);
+        }
+        return;
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_imports(child, source, out);
+    }
+}
+
+fn collect_import(node: Node<'_>, source: &[u8]) -> Option<Import> {
+    let mut path: Option<String> = None;
+    let mut wildcard = false;
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        match child.kind() {
+            "scoped_identifier" | "identifier" => {
+                if path.is_none() {
+                    path = node_text(child, source);
+                }
+            }
+            "asterisk" => wildcard = true,
+            _ => {}
+        }
+    }
+
+    let dotted = path?;
+    if dotted.is_empty() {
+        return None;
+    }
+
+    if wildcard {
+        return Some(Import {
+            specifier: dotted,
+            names: vec!["*".to_string()],
+        });
+    }
+
+    match dotted.rsplit_once('.') {
+        Some((base, tail)) if !base.is_empty() && !tail.is_empty() => Some(Import {
+            specifier: base.to_string(),
+            names: vec![tail.to_string()],
+        }),
+        _ => Some(Import {
+            specifier: dotted,
+            names: Vec::new(),
+        }),
+    }
+}
+
+fn node_text(node: Node<'_>, source: &[u8]) -> Option<String> {
+    std::str::from_utf8(&source[node.byte_range()])
+        .ok()
+        .map(|s| s.to_string())
 }
 
 #[cfg(test)]
@@ -109,6 +188,12 @@ mod tests {
         JavaExtractor::new()
             .extract(&ExtractionContext::new(source, "Mod.java", "java"))
             .expect("java extraction")
+    }
+
+    fn imports(src: &str) -> Vec<Import> {
+        JavaExtractor::new()
+            .extract_imports(&ExtractionContext::new(src, "Mod.java", "java"))
+            .expect("java imports")
     }
 
     #[test]
@@ -192,5 +277,48 @@ mod tests {
         let src = "class C { public static int mutable = 0; }";
         let syms = extract(src);
         assert!(syms.iter().all(|s| s.kind != "constant"));
+    }
+
+    #[test]
+    fn plain_import_splits_package_and_trailing_name() {
+        let imps = imports("import java.util.List;\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "java.util");
+        assert_eq!(imps[0].names, vec!["List"]);
+    }
+
+    #[test]
+    fn wildcard_import_records_star_as_name() {
+        let imps = imports("import java.util.*;\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "java.util");
+        assert_eq!(imps[0].names, vec!["*"]);
+    }
+
+    #[test]
+    fn static_import_splits_class_and_member() {
+        let imps = imports("import static java.lang.Math.PI;\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "java.lang.Math");
+        assert_eq!(imps[0].names, vec!["PI"]);
+    }
+
+    #[test]
+    fn static_wildcard_import_records_star() {
+        let imps = imports("import static java.lang.Math.*;\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "java.lang.Math");
+        assert_eq!(imps[0].names, vec!["*"]);
+    }
+
+    #[test]
+    fn multiple_imports_produce_multiple_records() {
+        let src = "import java.util.List;\nimport java.io.File;\n";
+        let imps = imports(src);
+        assert_eq!(imps.len(), 2);
+        assert_eq!(imps[0].specifier, "java.util");
+        assert_eq!(imps[0].names, vec!["List"]);
+        assert_eq!(imps[1].specifier, "java.io");
+        assert_eq!(imps[1].names, vec!["File"]);
     }
 }

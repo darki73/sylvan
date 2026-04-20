@@ -8,10 +8,18 @@
 //! The spec mirrors the Python JavaScript plugin: function / class /
 //! method symbols with preceding-comment docstrings, class containers
 //! for method scoping, no decorator wrapper, no constant extraction.
+//!
+//! Import extraction walks the parsed tree for `import_statement` and
+//! `export_statement` source clauses, `require(...)` calls, dynamic
+//! `import(...)` calls, and the TS-only `import foo = require("bar")`
+//! syntax (`import_require_clause`). Each record carries the bare
+//! specifier and the list of bound names with aliases collapsed to the
+//! pre-`as` identifier.
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, LanguageExtractor, Symbol};
+use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use tree_sitter::Node;
 
 use crate::extraction::spec::{
     ConstantStrategy, DecoratorStrategy, DocstringStrategy, LanguageSpec, SpecExtractor,
@@ -92,6 +100,14 @@ impl TypeScriptExtractor {
             )
         })
     }
+
+    fn delegate_for(&self, language: &str) -> Option<&SpecExtractor> {
+        match language {
+            "typescript" => Some(self.ts_delegate()),
+            "tsx" => Some(self.tsx_delegate()),
+            _ => None,
+        }
+    }
 }
 
 impl Default for TypeScriptExtractor {
@@ -106,12 +122,246 @@ impl LanguageExtractor for TypeScriptExtractor {
     }
 
     fn extract(&self, ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError> {
-        match ctx.language {
-            "typescript" => self.ts_delegate().extract(ctx),
-            "tsx" => self.tsx_delegate().extract(ctx),
-            _ => Ok(Vec::new()),
+        match self.delegate_for(ctx.language) {
+            Some(delegate) => delegate.extract(ctx),
+            None => Ok(Vec::new()),
         }
     }
+
+    fn supports_imports(&self) -> bool {
+        true
+    }
+
+    fn extract_imports(
+        &self,
+        ctx: &ExtractionContext<'_>,
+    ) -> Result<Vec<Import>, ExtractionError> {
+        let Some(delegate) = self.delegate_for(ctx.language) else {
+            return Ok(Vec::new());
+        };
+        let tree = delegate.parse(ctx)?;
+        let mut out = Vec::new();
+        let mut seen = Vec::new();
+        walk_imports(tree.root_node(), ctx.source_bytes, &mut out, &mut seen);
+        Ok(out)
+    }
+}
+
+fn walk_imports(node: Node<'_>, source: &[u8], out: &mut Vec<Import>, seen: &mut Vec<String>) {
+    match node.kind() {
+        "import_statement" => {
+            collect_import_statement(node, source, out, seen);
+            return;
+        }
+        "export_statement" => {
+            if collect_export_statement(node, source, out, seen) {
+                return;
+            }
+        }
+        "call_expression" => {
+            if collect_call_expression(node, source, out, seen) {
+                return;
+            }
+        }
+        _ => {}
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_imports(child, source, out, seen);
+    }
+}
+
+fn collect_import_statement(
+    node: Node<'_>,
+    source: &[u8],
+    out: &mut Vec<Import>,
+    seen: &mut Vec<String>,
+) {
+    let mut names = Vec::new();
+    let mut require_specifier: Option<String> = None;
+
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        match child.kind() {
+            "import_clause" => collect_clause_names(child, source, &mut names),
+            "import_require_clause" => {
+                if let Some(id) = first_identifier(child, source) {
+                    names.push(id);
+                }
+                require_specifier = require_clause_specifier(child, source);
+            }
+            _ => {}
+        }
+    }
+
+    let specifier = require_specifier.or_else(|| source_specifier(node, source));
+    let Some(specifier) = specifier else {
+        return;
+    };
+    seen.push(specifier.clone());
+    out.push(Import { specifier, names });
+}
+
+fn collect_export_statement(
+    node: Node<'_>,
+    source: &[u8],
+    out: &mut Vec<Import>,
+    seen: &mut Vec<String>,
+) -> bool {
+    let Some(specifier) = source_specifier(node, source) else {
+        return false;
+    };
+
+    let mut names = Vec::new();
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "export_clause" {
+            collect_export_clause_names(child, source, &mut names);
+        }
+    }
+    seen.push(specifier.clone());
+    out.push(Import { specifier, names });
+    true
+}
+
+fn collect_call_expression(
+    node: Node<'_>,
+    source: &[u8],
+    out: &mut Vec<Import>,
+    seen: &mut Vec<String>,
+) -> bool {
+    let Some(func) = node.child_by_field_name("function") else {
+        return false;
+    };
+    let is_call = match func.kind() {
+        "identifier" => node_text(func, source).as_deref() == Some("require"),
+        "import" => true,
+        _ => false,
+    };
+    if !is_call {
+        return false;
+    }
+
+    let Some(args) = node.child_by_field_name("arguments") else {
+        return false;
+    };
+    let mut cursor = args.walk();
+    let specifier = args
+        .children(&mut cursor)
+        .find_map(|child| literal_string(child, source));
+    let Some(specifier) = specifier else {
+        return false;
+    };
+    if seen.iter().any(|s| s == &specifier) {
+        return true;
+    }
+    seen.push(specifier.clone());
+    out.push(Import {
+        specifier,
+        names: Vec::new(),
+    });
+    true
+}
+
+fn collect_clause_names(clause: Node<'_>, source: &[u8], names: &mut Vec<String>) {
+    let mut cursor = clause.walk();
+    for child in clause.children(&mut cursor) {
+        match child.kind() {
+            "identifier" => {
+                if let Some(n) = node_text(child, source) {
+                    names.push(n);
+                }
+            }
+            "namespace_import" => {
+                if let Some(id) = first_identifier(child, source) {
+                    names.push(id);
+                }
+            }
+            "named_imports" => collect_named_imports(child, source, names),
+            _ => {}
+        }
+    }
+}
+
+fn collect_named_imports(node: Node<'_>, source: &[u8], names: &mut Vec<String>) {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "import_specifier" {
+            if let Some(name_node) = child.child_by_field_name("name") {
+                if let Some(n) = node_text(name_node, source) {
+                    names.push(n);
+                }
+            }
+        }
+    }
+}
+
+fn collect_export_clause_names(node: Node<'_>, source: &[u8], names: &mut Vec<String>) {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "export_specifier" {
+            if let Some(name_node) = child.child_by_field_name("name") {
+                if let Some(n) = node_text(name_node, source) {
+                    names.push(n);
+                }
+            }
+        }
+    }
+}
+
+fn require_clause_specifier(node: Node<'_>, source: &[u8]) -> Option<String> {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if let Some(spec) = literal_string(child, source) {
+            return Some(spec);
+        }
+    }
+    None
+}
+
+fn first_identifier(node: Node<'_>, source: &[u8]) -> Option<String> {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == "identifier" {
+            return node_text(child, source);
+        }
+    }
+    None
+}
+
+fn source_specifier(node: Node<'_>, source: &[u8]) -> Option<String> {
+    let src_node = node.child_by_field_name("source")?;
+    literal_string(src_node, source)
+}
+
+fn literal_string(node: Node<'_>, source: &[u8]) -> Option<String> {
+    if node.kind() != "string" {
+        return None;
+    }
+    let raw = node_text(node, source)?;
+    Some(strip_quotes(&raw))
+}
+
+fn strip_quotes(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let bytes = trimmed.as_bytes();
+    if bytes.len() >= 2 {
+        let first = bytes[0];
+        let last = bytes[bytes.len() - 1];
+        if (first == b'"' && last == b'"')
+            || (first == b'\'' && last == b'\'')
+            || (first == b'`' && last == b'`')
+        {
+            return trimmed[1..trimmed.len() - 1].to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
+fn node_text(node: Node<'_>, source: &[u8]) -> Option<String> {
+    std::str::from_utf8(&source[node.byte_range()])
+        .ok()
+        .map(|s| s.to_string())
 }
 
 #[cfg(test)]
@@ -128,6 +378,18 @@ mod tests {
         TypeScriptExtractor::new()
             .extract(&ExtractionContext::new(source, filename, "tsx"))
             .expect("tsx extraction")
+    }
+
+    fn imports_ts(src: &str) -> Vec<Import> {
+        TypeScriptExtractor::new()
+            .extract_imports(&ExtractionContext::new(src, "mod.ts", "typescript"))
+            .expect("typescript imports")
+    }
+
+    fn imports_tsx(src: &str) -> Vec<Import> {
+        TypeScriptExtractor::new()
+            .extract_imports(&ExtractionContext::new(src, "mod.tsx", "tsx"))
+            .expect("tsx imports")
     }
 
     #[test]
@@ -176,5 +438,83 @@ mod tests {
             TypeScriptExtractor::new().languages(),
             &["typescript", "tsx"]
         );
+    }
+
+    #[test]
+    fn default_import_records_binding_name() {
+        let imps = imports_ts("import foo from \"./foo\";\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "./foo");
+        assert_eq!(imps[0].names, vec!["foo"]);
+    }
+
+    #[test]
+    fn named_imports_split_and_aliases_collapse() {
+        let imps = imports_ts("import { a, b as c } from \"lib\";\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "lib");
+        assert_eq!(imps[0].names, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn namespace_import_records_identifier() {
+        let imps = imports_ts("import * as NS from \"ns\";\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "ns");
+        assert_eq!(imps[0].names, vec!["NS"]);
+    }
+
+    #[test]
+    fn side_effect_import_has_no_names() {
+        let imps = imports_ts("import \"./side\";\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "./side");
+        assert!(imps[0].names.is_empty());
+    }
+
+    #[test]
+    fn type_only_import_records_like_regular_named() {
+        let imps = imports_ts("import type { Foo } from \"mod\";\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "mod");
+        assert_eq!(imps[0].names, vec!["Foo"]);
+    }
+
+    #[test]
+    fn ts_import_require_records_specifier_and_binding() {
+        let imps = imports_ts("import foo = require(\"bar\");\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "bar");
+        assert_eq!(imps[0].names, vec!["foo"]);
+    }
+
+    #[test]
+    fn require_call_records_specifier() {
+        let imps = imports_ts("const x = require('pkg');\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "pkg");
+    }
+
+    #[test]
+    fn dynamic_import_records_specifier() {
+        let imps = imports_ts("const m = import('./dyn');\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "./dyn");
+    }
+
+    #[test]
+    fn re_export_from_source_is_recorded_as_import() {
+        let imps = imports_ts("export { a, b } from \"src\";\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "src");
+        assert_eq!(imps[0].names, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn tsx_imports_are_also_extracted() {
+        let imps = imports_tsx("import React from \"react\";\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "react");
+        assert_eq!(imps[0].names, vec!["React"]);
     }
 }

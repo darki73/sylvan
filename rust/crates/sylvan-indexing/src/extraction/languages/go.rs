@@ -7,12 +7,20 @@
 //! distinction, so `decorator_strategy`, `constant_strategy`, and
 //! `method_promotion` all stay at their `None` / empty defaults.
 //!
-//! Features left for later migration stages: import extraction,
-//! candidate path resolution against stdlib, and complexity tuning.
+//! Import extraction walks the parsed tree for `import_declaration`
+//! nodes and pulls each `import_spec`'s `path` field, unquoting the
+//! interpreted string literal so the specifier matches the Python
+//! plugin's output. Aliased forms (`alias "path"`) and `_`/`.` side
+//! imports collapse to a bare specifier since names carry no value
+//! for Go imports.
+//!
+//! Features left for later migration stages: candidate path resolution
+//! against stdlib and complexity tuning.
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, LanguageExtractor, Symbol};
+use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use tree_sitter::Node;
 
 use crate::extraction::spec::{
     ConstantStrategy, DecoratorStrategy, DocstringStrategy, LanguageSpec, SpecExtractor,
@@ -84,6 +92,84 @@ impl LanguageExtractor for GoExtractor {
     fn extract(&self, ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError> {
         self.delegate().extract(ctx)
     }
+
+    fn supports_imports(&self) -> bool {
+        true
+    }
+
+    fn extract_imports(
+        &self,
+        ctx: &ExtractionContext<'_>,
+    ) -> Result<Vec<Import>, ExtractionError> {
+        let tree = self.delegate().parse(ctx)?;
+        let mut out = Vec::new();
+        walk_imports(tree.root_node(), ctx.source_bytes, &mut out);
+        Ok(out)
+    }
+}
+
+fn walk_imports(node: Node<'_>, source: &[u8], out: &mut Vec<Import>) {
+    if node.kind() == "import_declaration" {
+        collect_import_declaration(node, source, out);
+        return;
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_imports(child, source, out);
+    }
+}
+
+fn collect_import_declaration(node: Node<'_>, source: &[u8], out: &mut Vec<Import>) {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        match child.kind() {
+            "import_spec" => collect_import_spec(child, source, out),
+            "import_spec_list" => {
+                let mut c = child.walk();
+                for spec in child.children(&mut c) {
+                    if spec.kind() == "import_spec" {
+                        collect_import_spec(spec, source, out);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_import_spec(node: Node<'_>, source: &[u8], out: &mut Vec<Import>) {
+    let Some(path_node) = node.child_by_field_name("path") else {
+        return;
+    };
+    let Some(raw) = node_text(path_node, source) else {
+        return;
+    };
+    let specifier = unquote(&raw);
+    if specifier.is_empty() {
+        return;
+    }
+    out.push(Import {
+        specifier,
+        names: Vec::new(),
+    });
+}
+
+fn unquote(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.len() >= 2 {
+        let first = trimmed.chars().next().unwrap();
+        let last = trimmed.chars().last().unwrap();
+        if (first == '"' && last == '"') || (first == '`' && last == '`') {
+            return trimmed[1..trimmed.len() - 1].to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
+fn node_text(node: Node<'_>, source: &[u8]) -> Option<String> {
+    std::str::from_utf8(&source[node.byte_range()])
+        .ok()
+        .map(|s| s.to_string())
 }
 
 #[cfg(test)]
@@ -94,6 +180,12 @@ mod tests {
         GoExtractor::new()
             .extract(&ExtractionContext::new(source, "main.go", "go"))
             .expect("go extraction")
+    }
+
+    fn imports(src: &str) -> Vec<Import> {
+        GoExtractor::new()
+            .extract_imports(&ExtractionContext::new(src, "main.go", "go"))
+            .expect("go imports")
     }
 
     #[test]
@@ -170,5 +262,37 @@ mod tests {
             .map(|s| s.name.as_str())
             .collect();
         assert_eq!(names, vec!["FOO", "BAZ"]);
+    }
+
+    #[test]
+    fn single_line_import_yields_specifier() {
+        let imps = imports("package main\n\nimport \"fmt\"\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "fmt");
+        assert!(imps[0].names.is_empty());
+    }
+
+    #[test]
+    fn grouped_import_block_splits_each_path() {
+        let src = "package main\n\nimport (\n    \"fmt\"\n    \"os\"\n    \"net/http\"\n)\n";
+        let imps = imports(src);
+        let specs: Vec<&str> = imps.iter().map(|i| i.specifier.as_str()).collect();
+        assert_eq!(specs, vec!["fmt", "os", "net/http"]);
+    }
+
+    #[test]
+    fn aliased_import_uses_path_as_specifier() {
+        let src = "package main\n\nimport f \"fmt\"\n";
+        let imps = imports(src);
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "fmt");
+    }
+
+    #[test]
+    fn blank_and_dot_side_imports_collapse_to_path() {
+        let src = "package main\n\nimport (\n    _ \"database/sql\"\n    . \"math\"\n)\n";
+        let imps = imports(src);
+        let specs: Vec<&str> = imps.iter().map(|i| i.specifier.as_str()).collect();
+        assert_eq!(specs, vec!["database/sql", "math"]);
     }
 }

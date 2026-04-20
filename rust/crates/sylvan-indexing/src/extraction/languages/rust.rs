@@ -9,12 +9,24 @@
 //! only acts on patterns that resolve through `try_emit_constant`'s
 //! assignment shape, so they pass through as non-symbol nodes here).
 //!
-//! Features left for later migration stages: import extraction, use
-//! resolution, self-receiver stripping, Rust-specific complexity.
+//! Import extraction walks the parsed tree for `use_declaration`
+//! nodes and traverses the `argument` subtree. Plain
+//! `use a::b::c;` paths collapse to a single record with the leaf as
+//! the lone name, matching the legacy Python regex split. Group use
+//! (`use a::b::{c, d};`) produces a single record with the base path
+//! as specifier and the leaf identifiers as names; nested groups are
+//! flattened so every leaf surfaces in `names`. `use_as_clause` keeps
+//! the aliased leaf (not the original) to reflect the name actually
+//! bound in the module. Wildcard imports (`use a::b::*;`) emit `*`
+//! as the lone name.
+//!
+//! Features left for later migration stages: use resolution,
+//! self-receiver stripping, and Rust-specific complexity.
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, LanguageExtractor, Symbol};
+use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use tree_sitter::Node;
 
 use crate::extraction::spec::{
     ConstantStrategy, DecoratorStrategy, DocstringStrategy, LanguageSpec, SpecExtractor,
@@ -87,6 +99,206 @@ impl LanguageExtractor for RustExtractor {
     fn extract(&self, ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError> {
         self.delegate().extract(ctx)
     }
+
+    fn supports_imports(&self) -> bool {
+        true
+    }
+
+    fn extract_imports(
+        &self,
+        ctx: &ExtractionContext<'_>,
+    ) -> Result<Vec<Import>, ExtractionError> {
+        let tree = self.delegate().parse(ctx)?;
+        let mut out = Vec::new();
+        walk_imports(tree.root_node(), ctx.source_bytes, &mut out);
+        Ok(out)
+    }
+}
+
+fn walk_imports(node: Node<'_>, source: &[u8], out: &mut Vec<Import>) {
+    if node.kind() == "use_declaration" {
+        if let Some(imp) = collect_use(node, source) {
+            out.push(imp);
+        }
+        return;
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        walk_imports(child, source, out);
+    }
+}
+
+fn collect_use(node: Node<'_>, source: &[u8]) -> Option<Import> {
+    let argument = node.child_by_field_name("argument")?;
+    let mut names = Vec::new();
+    let specifier = resolve_use_tree(argument, source, "", &mut names)?;
+    Some(Import { specifier, names })
+}
+
+fn resolve_use_tree(
+    node: Node<'_>,
+    source: &[u8],
+    base: &str,
+    names: &mut Vec<String>,
+) -> Option<String> {
+    match node.kind() {
+        "scoped_identifier" => {
+            let full = node_text(node, source)?;
+            let full = full.trim().to_string();
+            if let Some(name) = node
+                .child_by_field_name("name")
+                .and_then(|n| node_text(n, source))
+            {
+                names.push(name);
+            }
+            Some(join_path(base, &full))
+        }
+        "identifier" | "self" | "super" | "crate" | "metavariable" => {
+            let leaf = node_text(node, source)?;
+            names.push(leaf.clone());
+            Some(join_path(base, &leaf))
+        }
+        "use_wildcard" => {
+            names.push("*".to_string());
+            let path = node
+                .child_by_field_name("path")
+                .and_then(|p| node_text(p, source));
+            match path {
+                Some(p) => Some(join_path(base, p.trim())),
+                None => {
+                    let raw = node_text(node, source)?;
+                    let trimmed = raw.trim().trim_end_matches("::*").trim_end_matches('*');
+                    Some(join_path(base, trimmed.trim_end_matches("::")))
+                }
+            }
+        }
+        "use_as_clause" => {
+            let alias = node
+                .child_by_field_name("alias")
+                .and_then(|a| node_text(a, source));
+            let path_node = node.child_by_field_name("path")?;
+            let path_text = node_text(path_node, source)?;
+            if let Some(alias) = alias {
+                names.push(alias);
+            } else if let Some(leaf) = leaf_name(path_node, source) {
+                names.push(leaf);
+            }
+            Some(join_path(base, path_text.trim()))
+        }
+        "scoped_use_list" => {
+            let path_text = node
+                .child_by_field_name("path")
+                .and_then(|p| node_text(p, source))
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
+            let combined = join_path(base, &path_text);
+            if let Some(list) = node.child_by_field_name("list") {
+                expand_use_list(list, source, &combined, names);
+            }
+            Some(combined)
+        }
+        "use_list" => {
+            expand_use_list(node, source, base, names);
+            Some(base.to_string())
+        }
+        _ => {
+            let text = node_text(node, source)?;
+            Some(join_path(base, text.trim()))
+        }
+    }
+}
+
+fn expand_use_list(list: Node<'_>, source: &[u8], base: &str, names: &mut Vec<String>) {
+    let mut cursor = list.walk();
+    for child in list.children(&mut cursor) {
+        match child.kind() {
+            "," | "{" | "}" => continue,
+            _ => {
+                let mut discard = String::new();
+                collect_list_item(child, source, base, names, &mut discard);
+            }
+        }
+    }
+}
+
+fn collect_list_item(
+    node: Node<'_>,
+    source: &[u8],
+    base: &str,
+    names: &mut Vec<String>,
+    _specifier: &mut String,
+) {
+    match node.kind() {
+        "identifier" | "self" | "super" | "crate" => {
+            if let Some(text) = node_text(node, source) {
+                names.push(text);
+            }
+        }
+        "scoped_identifier" => {
+            if let Some(name) = node
+                .child_by_field_name("name")
+                .and_then(|n| node_text(n, source))
+            {
+                names.push(name);
+            }
+        }
+        "use_as_clause" => {
+            if let Some(alias) = node
+                .child_by_field_name("alias")
+                .and_then(|a| node_text(a, source))
+            {
+                names.push(alias);
+            } else if let Some(path) = node.child_by_field_name("path") {
+                if let Some(leaf) = leaf_name(path, source) {
+                    names.push(leaf);
+                }
+            }
+        }
+        "use_wildcard" => {
+            names.push("*".to_string());
+        }
+        "scoped_use_list" => {
+            let path_text = node
+                .child_by_field_name("path")
+                .and_then(|p| node_text(p, source))
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
+            let combined = join_path(base, &path_text);
+            if let Some(list) = node.child_by_field_name("list") {
+                expand_use_list(list, source, &combined, names);
+            }
+        }
+        "use_list" => {
+            expand_use_list(node, source, base, names);
+        }
+        _ => {}
+    }
+}
+
+fn leaf_name(node: Node<'_>, source: &[u8]) -> Option<String> {
+    match node.kind() {
+        "scoped_identifier" => node
+            .child_by_field_name("name")
+            .and_then(|n| node_text(n, source)),
+        _ => node_text(node, source),
+    }
+}
+
+fn join_path(base: &str, addition: &str) -> String {
+    let a = addition.trim();
+    if base.is_empty() {
+        return a.to_string();
+    }
+    if a.is_empty() {
+        return base.to_string();
+    }
+    format!("{base}::{a}")
+}
+
+fn node_text(node: Node<'_>, source: &[u8]) -> Option<String> {
+    std::str::from_utf8(&source[node.byte_range()])
+        .ok()
+        .map(|s| s.to_string())
 }
 
 #[cfg(test)]
@@ -97,6 +309,12 @@ mod tests {
         RustExtractor::new()
             .extract(&ExtractionContext::new(source, "lib.rs", "rust"))
             .expect("rust extraction")
+    }
+
+    fn imports(src: &str) -> Vec<Import> {
+        RustExtractor::new()
+            .extract_imports(&ExtractionContext::new(src, "lib.rs", "rust"))
+            .expect("rust imports")
     }
 
     #[test]
@@ -171,5 +389,64 @@ mod tests {
         let syms = extract("static TABLE: &[u8] = &[];\n");
         let c = syms.iter().find(|s| s.kind == "constant").expect("constant");
         assert_eq!(c.name, "TABLE");
+    }
+
+    #[test]
+    fn plain_use_records_path_and_leaf_name() {
+        let imps = imports("use std::collections::HashMap;\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "std::collections::HashMap");
+        assert_eq!(imps[0].names, vec!["HashMap"]);
+    }
+
+    #[test]
+    fn group_use_flattens_into_names() {
+        let imps = imports("use std::io::{Read, Write};\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "std::io");
+        assert_eq!(imps[0].names, vec!["Read", "Write"]);
+    }
+
+    #[test]
+    fn nested_group_use_flattens_leaf_names() {
+        let imps = imports("use a::{b::{c, d}, e};\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "a");
+        assert_eq!(imps[0].names, vec!["c", "d", "e"]);
+    }
+
+    #[test]
+    fn aliased_use_keeps_alias_as_bound_name() {
+        let imps = imports("use std::io::Result as IoResult;\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "std::io::Result");
+        assert_eq!(imps[0].names, vec!["IoResult"]);
+    }
+
+    #[test]
+    fn wildcard_use_records_star_name() {
+        let imps = imports("use std::prelude::*;\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "std::prelude");
+        assert_eq!(imps[0].names, vec!["*"]);
+    }
+
+    #[test]
+    fn multiple_use_declarations_produce_multiple_records() {
+        let src = "use std::io;\nuse std::fmt::Debug;\n";
+        let imps = imports(src);
+        assert_eq!(imps.len(), 2);
+        assert_eq!(imps[0].specifier, "std::io");
+        assert_eq!(imps[0].names, vec!["io"]);
+        assert_eq!(imps[1].specifier, "std::fmt::Debug");
+        assert_eq!(imps[1].names, vec!["Debug"]);
+    }
+
+    #[test]
+    fn crate_relative_use_keeps_crate_prefix() {
+        let imps = imports("use crate::module::Thing;\n");
+        assert_eq!(imps.len(), 1);
+        assert_eq!(imps[0].specifier, "crate::module::Thing");
+        assert_eq!(imps[0].names, vec!["Thing"]);
     }
 }
