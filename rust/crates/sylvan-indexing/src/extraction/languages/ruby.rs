@@ -15,7 +15,9 @@ use std::sync::OnceLock;
 
 use sylvan_core::{ExtractionContext, ExtractionError, LanguageExtractor, Symbol};
 
-use crate::extraction::spec::{DocstringStrategy, LanguageSpec, SpecExtractor};
+use crate::extraction::spec::{
+    ConstantStrategy, DecoratorStrategy, DocstringStrategy, LanguageSpec, SpecExtractor,
+};
 
 static SPEC: LanguageSpec = LanguageSpec {
     symbol_node_types: &[
@@ -37,8 +39,16 @@ static SPEC: LanguageSpec = LanguageSpec {
     return_type_fields: &[],
     container_node_types: &["class", "module"],
     docstring_strategy: DocstringStrategy::PrecedingComment,
-    decorator_node_type: None,
-    constant_patterns: &["assignment"],
+    decorator_strategy: DecoratorStrategy::None,
+    constant_strategy: ConstantStrategy::None,
+    parameter_kinds: &[
+        "identifier",
+        "optional_parameter",
+        "keyword_parameter",
+        "hash_splat_parameter",
+        "splat_parameter",
+        "block_parameter",
+    ],
     method_promotion: &[],
 };
 

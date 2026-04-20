@@ -14,7 +14,11 @@ use std::sync::OnceLock;
 
 use sylvan_core::{ExtractionContext, ExtractionError, LanguageExtractor, Symbol};
 
-use crate::extraction::spec::{DocstringStrategy, LanguageSpec, SpecExtractor};
+use crate::extraction::spec::{
+    ConstantStrategy, DecoratorStrategy, DocstringStrategy, LanguageSpec, SpecExtractor,
+};
+
+const C_PARAMETER_KINDS: &[&str] = &["parameter_declaration", "variadic_parameter"];
 
 static C_SPEC: LanguageSpec = LanguageSpec {
     symbol_node_types: &[
@@ -31,8 +35,9 @@ static C_SPEC: LanguageSpec = LanguageSpec {
     return_type_fields: &[("function_definition", "type")],
     container_node_types: &[],
     docstring_strategy: DocstringStrategy::PrecedingComment,
-    decorator_node_type: None,
-    constant_patterns: &["declaration"],
+    decorator_strategy: DecoratorStrategy::None,
+    constant_strategy: ConstantStrategy::None,
+    parameter_kinds: C_PARAMETER_KINDS,
     method_promotion: &[],
 };
 
@@ -59,8 +64,9 @@ static CPP_SPEC: LanguageSpec = LanguageSpec {
         "namespace_definition",
     ],
     docstring_strategy: DocstringStrategy::PrecedingComment,
-    decorator_node_type: None,
-    constant_patterns: &[],
+    decorator_strategy: DecoratorStrategy::None,
+    constant_strategy: ConstantStrategy::None,
+    parameter_kinds: C_PARAMETER_KINDS,
     method_promotion: &[],
 };
 

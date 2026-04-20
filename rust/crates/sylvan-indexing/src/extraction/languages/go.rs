@@ -4,8 +4,8 @@
 //! spec declared in the legacy Python plugin: top-level functions,
 //! receiver methods, and type declarations. Docstrings come from
 //! preceding `//` comments. Go has no decorators and no class-method
-//! distinction, so `decorator_node_type` and `method_promotion` are
-//! unused.
+//! distinction, so `decorator_strategy`, `constant_strategy`, and
+//! `method_promotion` all stay at their `None` / empty defaults.
 //!
 //! Features left for later migration stages: import extraction,
 //! candidate path resolution against stdlib, and complexity tuning.
@@ -14,7 +14,9 @@ use std::sync::OnceLock;
 
 use sylvan_core::{ExtractionContext, ExtractionError, LanguageExtractor, Symbol};
 
-use crate::extraction::spec::{DocstringStrategy, LanguageSpec, SpecExtractor};
+use crate::extraction::spec::{
+    ConstantStrategy, DecoratorStrategy, DocstringStrategy, LanguageSpec, SpecExtractor,
+};
 
 static SPEC: LanguageSpec = LanguageSpec {
     symbol_node_types: &[
@@ -37,8 +39,9 @@ static SPEC: LanguageSpec = LanguageSpec {
     ],
     container_node_types: &[],
     docstring_strategy: DocstringStrategy::PrecedingComment,
-    decorator_node_type: None,
-    constant_patterns: &[],
+    decorator_strategy: DecoratorStrategy::None,
+    constant_strategy: ConstantStrategy::None,
+    parameter_kinds: &["parameter_declaration", "variadic_parameter_declaration"],
     method_promotion: &[],
 };
 

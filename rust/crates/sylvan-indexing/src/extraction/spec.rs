@@ -36,6 +36,55 @@ pub enum DocstringStrategy {
     NextSiblingString,
 }
 
+/// How a language attaches decorators/annotations/attributes to a
+/// symbol declaration. Each variant is fully declarative so the walker
+/// can discover decorators without per-language branching.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecoratorStrategy {
+    /// No decorator concept in the language.
+    None,
+    /// Decorators live inside an outer wrapper node that contains both
+    /// the decorator children and the inner symbol (Python's
+    /// `decorated_definition` holds `decorator` children plus a
+    /// `function_definition` or `class_definition`).
+    Wrapper {
+        /// Wrapper node kind (e.g. `decorated_definition`).
+        wrapper: &'static str,
+        /// Child node kind that carries each decorator
+        /// (e.g. `decorator`).
+        child: &'static str,
+    },
+    /// Decorators appear as siblings immediately preceding the symbol
+    /// inside the same parent block (TypeScript `decorator`,
+    /// C# `attribute_list`).
+    PrecedingSiblings {
+        /// Sibling node kinds considered decorator-bearing.
+        kinds: &'static [&'static str],
+    },
+    /// Decorators live inside a child of the symbol itself, typically
+    /// a `modifiers` node that wraps `annotation` / `marker_annotation`
+    /// (Java).
+    InnerModifiers {
+        /// Child node kind inside the symbol that holds the modifier
+        /// list (e.g. `modifiers`).
+        container: &'static str,
+        /// Node kinds inside `container` treated as annotations.
+        kinds: &'static [&'static str],
+    },
+}
+
+/// How a language flags module-level named constants. Strategies name
+/// the grammar shape explicitly so the walker never has to guess which
+/// node layout a language uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConstantStrategy {
+    /// Language does not emit module-level constants from the walker.
+    None,
+    /// Python: `expression_statement` containing an `assignment` whose
+    /// left-hand identifier matches `UPPER_SNAKE_CASE`.
+    PythonAssignment,
+}
+
 /// Per-language extraction configuration.
 ///
 /// Fields are `&'static` slices so every spec is a const. Lookups are
@@ -60,14 +109,16 @@ pub struct LanguageSpec {
     pub container_node_types: &'static [&'static str],
     /// How to locate the docstring for extracted symbols.
     pub docstring_strategy: DocstringStrategy,
-    /// Tree-sitter node type wrapping a decorated definition, if the
-    /// language exposes one (Python `decorated_definition`). When set,
-    /// the walker promotes such wrappers and captures decorator names.
-    pub decorator_node_type: Option<&'static str>,
-    /// Tree-sitter node types treated as module-level constant
-    /// declarations. Currently used for Python `assignment` / Ruby /
-    /// similar right-hand-side binding nodes.
-    pub constant_patterns: &'static [&'static str],
+    /// How the language attaches decorators/annotations/attributes.
+    pub decorator_strategy: DecoratorStrategy,
+    /// How the language emits module-level constants, if at all.
+    pub constant_strategy: ConstantStrategy,
+    /// Tree-sitter node kinds considered a parameter when counting
+    /// formal parameters under a `param_fields` node. Languages vary
+    /// (Python: `typed_parameter`, Rust: `parameter`, Go:
+    /// `parameter_declaration`, etc) so this is data rather than a
+    /// hardcoded list on the walker.
+    pub parameter_kinds: &'static [&'static str],
     /// Map of container kind (from `symbol_node_types`) to the kind
     /// that nested `function` symbols should be promoted to. Python
     /// uses `class` -> `method`; languages without class-method
@@ -110,10 +161,9 @@ impl LanguageSpec {
             .find_map(|(k, v)| (*k == node_type).then_some(*v))
     }
 
-    /// Whether `node_type` is treated as a module-level constant
-    /// declaration.
-    pub fn is_constant_pattern(&self, node_type: &str) -> bool {
-        self.constant_patterns.contains(&node_type)
+    /// Whether `kind` is one of the configured parameter node kinds.
+    pub fn is_parameter_kind(&self, kind: &str) -> bool {
+        self.parameter_kinds.contains(&kind)
     }
 
     /// Promoted symbol kind when a `function`-kinded symbol is nested
@@ -217,6 +267,29 @@ pub fn enrich_symbols(symbols: &mut [Symbol], ctx: &ExtractionContext<'_>) {
     }
 }
 
+/// Internal view of a collected decorator before it is flattened into
+/// the `Symbol.decorators: Vec<String>`. Carries byte/row positions so
+/// the symbol range can expand to include decorators that precede the
+/// declaration (mirrors Python's `decorator_node_start` expansion).
+#[derive(Debug, Clone)]
+struct Decorator {
+    text: String,
+    start_byte: usize,
+    start_row: usize,
+}
+
+/// Where the walker should look for decorators when building a symbol.
+///
+/// For `Wrapper` languages (Python `decorated_definition`) the wrapper
+/// node is the range anchor. For `PrecedingSiblings` / `InnerModifiers`
+/// languages the symbol node itself is the anchor, and decorators are
+/// discovered relative to it.
+#[derive(Debug, Clone, Copy)]
+enum DecoratorContext<'tree> {
+    Wrapper(Node<'tree>),
+    Symbol(Node<'tree>),
+}
+
 struct Walker<'a> {
     spec: &'a LanguageSpec,
     source: &'a [u8],
@@ -237,23 +310,27 @@ impl<'a> Walker<'a> {
             return;
         }
 
-        if self
-            .spec
-            .decorator_node_type
-            .is_some_and(|dn| dn == node.kind())
+        if let DecoratorStrategy::Wrapper { wrapper, .. } = self.spec.decorator_strategy
+            && wrapper == node.kind()
         {
-            self.handle_decorated(node, parent_symbol_id, parent_kind, scope, out);
+            self.handle_decorated_wrapper(node, parent_symbol_id, parent_kind, scope, out);
             return;
         }
 
-        if parent_symbol_id.is_none() && self.spec.is_constant_pattern(node.kind()) {
+        if parent_symbol_id.is_none() {
             self.try_emit_constant(node, out);
         }
 
         let kind_str = self.spec.kind_for(node.kind());
         if let Some(raw_kind) = kind_str {
             let kind = self.resolve_kind(raw_kind, parent_kind);
-            if let Some(sym) = self.build_symbol(node, None, kind, parent_symbol_id, scope) {
+            if let Some(sym) = self.build_symbol(
+                node,
+                DecoratorContext::Symbol(node),
+                kind,
+                parent_symbol_id,
+                scope,
+            ) {
                 let is_container = self.spec.is_container(node.kind());
                 let symbol_id = sym.symbol_id.clone();
                 let name = sym.name.clone();
@@ -286,7 +363,7 @@ impl<'a> Walker<'a> {
         raw_kind
     }
 
-    fn handle_decorated(
+    fn handle_decorated_wrapper(
         &mut self,
         node: Node<'_>,
         parent_symbol_id: Option<&str>,
@@ -298,9 +375,13 @@ impl<'a> Walker<'a> {
         for child in node.children(&mut cursor) {
             if let Some(raw_kind) = self.spec.kind_for(child.kind()) {
                 let kind = self.resolve_kind(raw_kind, parent_kind);
-                if let Some(sym) =
-                    self.build_symbol(child, Some(node), kind, parent_symbol_id, scope)
-                {
+                if let Some(sym) = self.build_symbol(
+                    child,
+                    DecoratorContext::Wrapper(node),
+                    kind,
+                    parent_symbol_id,
+                    scope,
+                ) {
                     let is_container = self.spec.is_container(child.kind());
                     let symbol_id = sym.symbol_id.clone();
                     let name = sym.name.clone();
@@ -324,16 +405,23 @@ impl<'a> Walker<'a> {
     }
 
     fn try_emit_constant(&self, node: Node<'_>, out: &mut Vec<Symbol>) {
-        let assignment = if node.kind() == "expression_statement" {
-            let mut cursor = node.walk();
-            node.children(&mut cursor)
-                .find(|c| c.kind() == "assignment")
-        } else if node.kind() == "assignment" {
-            Some(node)
-        } else {
-            None
+        match self.spec.constant_strategy {
+            ConstantStrategy::None => {}
+            ConstantStrategy::PythonAssignment => self.emit_python_constant(node, out),
+        }
+    }
+
+    fn emit_python_constant(&self, node: Node<'_>, out: &mut Vec<Symbol>) {
+        let assign = match node.kind() {
+            "expression_statement" => {
+                let mut cursor = node.walk();
+                node.children(&mut cursor)
+                    .find(|c| c.kind() == "assignment")
+            }
+            "assignment" => Some(node),
+            _ => None,
         };
-        let Some(assign) = assignment else {
+        let Some(assign) = assign else {
             return;
         };
         let Some(lhs) = assign.child_by_field_name("left") else {
@@ -348,14 +436,14 @@ impl<'a> Walker<'a> {
         if name.is_empty() || !is_all_caps_constant(&name) {
             return;
         }
+        let start = assign.start_byte();
+        let end = assign.end_byte();
         if out
             .iter()
-            .any(|s| s.kind == "constant" && s.name == name && s.byte_offset as usize == assign.start_byte())
+            .any(|s| s.kind == "constant" && s.name == name && s.byte_offset as usize == start)
         {
             return;
         }
-        let start = assign.start_byte();
-        let end = assign.end_byte();
         let Some(byte_offset) = u32::try_from(start).ok() else {
             return;
         };
@@ -385,7 +473,7 @@ impl<'a> Walker<'a> {
     fn build_symbol(
         &self,
         node: Node<'_>,
-        decorator_wrapper: Option<Node<'_>>,
+        decorator_ctx: DecoratorContext<'_>,
         kind: &str,
         parent_symbol_id: Option<&str>,
         scope: &[String],
@@ -399,13 +487,23 @@ impl<'a> Walker<'a> {
             q.push_str(&name);
             q
         };
-        let range_start = decorator_wrapper.map_or_else(|| node.start_byte(), |d| d.start_byte());
-        let range_start_row = decorator_wrapper
-            .map_or_else(|| node.start_position().row, |d| d.start_position().row);
+
+        let decorators_full = self.collect_decorators(decorator_ctx);
+        let (range_start, range_start_row) = match decorator_ctx {
+            DecoratorContext::Wrapper(w) => (w.start_byte(), w.start_position().row),
+            DecoratorContext::Symbol(_) => decorators_full
+                .first()
+                .map(|d| (d.start_byte, d.start_row))
+                .unwrap_or_else(|| (node.start_byte(), node.start_position().row)),
+        };
         let end = node.end_byte();
         let byte_offset = u32::try_from(range_start).ok()?;
         let byte_length = u32::try_from(end.saturating_sub(range_start)).ok()?;
-        let line_start = u32::try_from(range_start_row).ok()?.saturating_add(1);
+        let line_start = u32::try_from(range_start_row)
+            .ok()?
+            .saturating_add(1);
+        let decorators: Vec<String> =
+            decorators_full.into_iter().map(|d| d.text).collect();
         let line_end = u32::try_from(node.end_position().row)
             .ok()?
             .saturating_add(1);
@@ -416,14 +514,11 @@ impl<'a> Walker<'a> {
         };
 
         let signature = self.build_signature(node);
-        let decorators = decorator_wrapper
-            .map(|d| self.collect_decorators(d))
-            .unwrap_or_default();
         let param_count = self
             .spec
             .param_field_for(node.kind())
             .and_then(|f| node.child_by_field_name(f))
-            .map(|n| count_parameters(n))
+            .map(|n| self.count_parameters(n))
             .unwrap_or(0);
 
         Some(Symbol {
@@ -443,6 +538,20 @@ impl<'a> Walker<'a> {
             param_count,
             ..Symbol::default()
         })
+    }
+
+    fn count_parameters(&self, params_node: Node<'_>) -> u32 {
+        let mut count: u32 = 0;
+        let mut cursor = params_node.walk();
+        for child in params_node.children(&mut cursor) {
+            if !child.is_named() {
+                continue;
+            }
+            if self.spec.is_parameter_kind(child.kind()) {
+                count = count.saturating_add(1);
+            }
+        }
+        count
     }
 
     fn build_signature(&self, node: Node<'_>) -> Option<String> {
@@ -472,21 +581,90 @@ impl<'a> Walker<'a> {
         if sig.is_empty() { None } else { Some(sig) }
     }
 
-    fn collect_decorators(&self, wrapper: Node<'_>) -> Vec<String> {
+    fn collect_decorators(&self, ctx: DecoratorContext<'_>) -> Vec<Decorator> {
+        match (self.spec.decorator_strategy, ctx) {
+            (DecoratorStrategy::None, _) => Vec::new(),
+            (
+                DecoratorStrategy::Wrapper { child, .. },
+                DecoratorContext::Wrapper(wrapper),
+            ) => self.decorators_from_children(wrapper, &[child]),
+            (
+                DecoratorStrategy::PrecedingSiblings { kinds },
+                DecoratorContext::Symbol(node),
+            ) => self.decorators_from_preceding_siblings(node, kinds),
+            (
+                DecoratorStrategy::InnerModifiers { container, kinds },
+                DecoratorContext::Symbol(node),
+            ) => self.decorators_from_inner(node, container, kinds),
+            _ => Vec::new(),
+        }
+    }
+
+    fn decorators_from_children(
+        &self,
+        parent: Node<'_>,
+        kinds: &[&str],
+    ) -> Vec<Decorator> {
         let mut out = Vec::new();
-        let mut cursor = wrapper.walk();
-        for child in wrapper.children(&mut cursor) {
-            if child.kind() != "decorator" {
+        let mut cursor = parent.walk();
+        for child in parent.children(&mut cursor) {
+            if !kinds.contains(&child.kind()) {
                 continue;
             }
-            if let Some(text) = self.node_text(child) {
-                let trimmed = text.trim();
-                if !trimmed.is_empty() {
-                    out.push(trimmed.to_string());
-                }
+            if let Some(decorator) = self.decorator_from_node(child) {
+                out.push(decorator);
             }
         }
         out
+    }
+
+    fn decorators_from_preceding_siblings(
+        &self,
+        node: Node<'_>,
+        kinds: &[&str],
+    ) -> Vec<Decorator> {
+        let mut collected: Vec<Decorator> = Vec::new();
+        let mut sibling = node.prev_sibling();
+        while let Some(s) = sibling {
+            if !kinds.contains(&s.kind()) {
+                break;
+            }
+            if let Some(decorator) = self.decorator_from_node(s) {
+                collected.push(decorator);
+            }
+            sibling = s.prev_sibling();
+        }
+        collected.reverse();
+        collected
+    }
+
+    fn decorators_from_inner(
+        &self,
+        node: Node<'_>,
+        container: &str,
+        kinds: &[&str],
+    ) -> Vec<Decorator> {
+        let mut cursor = node.walk();
+        let Some(modifier_node) = node
+            .children(&mut cursor)
+            .find(|c| c.kind() == container)
+        else {
+            return Vec::new();
+        };
+        self.decorators_from_children(modifier_node, kinds)
+    }
+
+    fn decorator_from_node(&self, node: Node<'_>) -> Option<Decorator> {
+        let text = self.node_text(node)?;
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        Some(Decorator {
+            text: trimmed.to_string(),
+            start_byte: node.start_byte(),
+            start_row: node.start_position().row,
+        })
     }
 
     fn extract_name(&self, node: Node<'_>) -> Option<String> {
@@ -638,30 +816,6 @@ fn is_all_caps_constant(name: &str) -> bool {
     has_letter
 }
 
-fn count_parameters(params_node: Node<'_>) -> u32 {
-    let mut count: u32 = 0;
-    let mut cursor = params_node.walk();
-    for child in params_node.children(&mut cursor) {
-        if !child.is_named() {
-            continue;
-        }
-        match child.kind() {
-            "identifier"
-            | "typed_parameter"
-            | "default_parameter"
-            | "typed_default_parameter"
-            | "list_splat_pattern"
-            | "dictionary_splat_pattern"
-            | "keyword_separator"
-            | "positional_separator"
-            | "tuple_pattern"
-            | "parameter" => count = count.saturating_add(1),
-            _ => {}
-        }
-    }
-    count
-}
-
 fn is_comment_kind(kind: &str) -> bool {
     matches!(kind, "comment" | "line_comment" | "block_comment")
 }
@@ -762,8 +916,9 @@ mod tests {
             return_type_fields: &[],
             container_node_types: &["class_definition"],
             docstring_strategy: DocstringStrategy::PrecedingComment,
-            decorator_node_type: None,
-            constant_patterns: &[],
+            decorator_strategy: DecoratorStrategy::None,
+            constant_strategy: ConstantStrategy::None,
+            parameter_kinds: &[],
             method_promotion: &[],
         };
         assert_eq!(SPEC.kind_for("function_definition"), Some("function"));

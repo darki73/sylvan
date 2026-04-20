@@ -102,13 +102,8 @@ def parse_file(content: str, filename: str, language: str) -> list[Symbol]:
     Returns:
         List of Symbol objects extracted from the file.
     """
-    if language in _RUST_LANGUAGES and language not in ("json", "css"):
+    if language in _RUST_LANGUAGES:
         return [Symbol(**d) for d in _rust_extract_symbols(content, filename, language)]
-
-    if language == "json":
-        from sylvan.indexing.source_code.json_extractor import extract_json_symbols
-
-        return extract_json_symbols(content, filename)
 
     if language == "blade":
         from sylvan.indexing.source_code.blade_extractor import extract_blade_symbols

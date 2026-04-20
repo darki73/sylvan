@@ -15,7 +15,9 @@ use std::sync::OnceLock;
 
 use sylvan_core::{ExtractionContext, ExtractionError, LanguageExtractor, Symbol};
 
-use crate::extraction::spec::{DocstringStrategy, LanguageSpec, SpecExtractor};
+use crate::extraction::spec::{
+    ConstantStrategy, DecoratorStrategy, DocstringStrategy, LanguageSpec, SpecExtractor,
+};
 
 static SPEC: LanguageSpec = LanguageSpec {
     symbol_node_types: &[
@@ -30,8 +32,23 @@ static SPEC: LanguageSpec = LanguageSpec {
     return_type_fields: &[("function_definition", "return_type")],
     container_node_types: &["class_definition"],
     docstring_strategy: DocstringStrategy::NextSiblingString,
-    decorator_node_type: Some("decorated_definition"),
-    constant_patterns: &["expression_statement", "assignment"],
+    decorator_strategy: DecoratorStrategy::Wrapper {
+        wrapper: "decorated_definition",
+        child: "decorator",
+    },
+    constant_strategy: ConstantStrategy::PythonAssignment,
+    parameter_kinds: &[
+        "identifier",
+        "typed_parameter",
+        "default_parameter",
+        "typed_default_parameter",
+        "list_splat_pattern",
+        "dictionary_splat_pattern",
+        "keyword_separator",
+        "positional_separator",
+        "tuple_pattern",
+        "parameter",
+    ],
     method_promotion: &[("class", "method")],
 };
 

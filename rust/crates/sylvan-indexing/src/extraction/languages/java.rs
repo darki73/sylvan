@@ -4,10 +4,9 @@
 //! the spec declared in the legacy Python plugin: class, interface,
 //! enum, method, and constructor declarations. Docstrings come from
 //! preceding `//` or `/** ... */` comments. Java annotations
-//! (`@Override`, `@Deprecated`) are not wrappers around their target
-//! method in the tree-sitter grammar, so `decorator_node_type` stays
-//! `None`; annotation capture falls through to the legacy Python path
-//! until the walker grows a sibling-based decorator rule.
+//! (`@Override`, `@Deprecated`) live inside a `modifiers` child of the
+//! declaration rather than a wrapper, so the spec uses
+//! [`DecoratorStrategy::InnerModifiers`] to reach them.
 //!
 //! Features left for later migration stages: import extraction,
 //! candidate path resolution against `src/main/java/`, complexity
@@ -19,7 +18,9 @@ use std::sync::OnceLock;
 
 use sylvan_core::{ExtractionContext, ExtractionError, LanguageExtractor, Symbol};
 
-use crate::extraction::spec::{DocstringStrategy, LanguageSpec, SpecExtractor};
+use crate::extraction::spec::{
+    ConstantStrategy, DecoratorStrategy, DocstringStrategy, LanguageSpec, SpecExtractor,
+};
 
 static SPEC: LanguageSpec = LanguageSpec {
     symbol_node_types: &[
@@ -47,8 +48,12 @@ static SPEC: LanguageSpec = LanguageSpec {
         "enum_declaration",
     ],
     docstring_strategy: DocstringStrategy::PrecedingComment,
-    decorator_node_type: None,
-    constant_patterns: &["field_declaration"],
+    decorator_strategy: DecoratorStrategy::InnerModifiers {
+        container: "modifiers",
+        kinds: &["annotation", "marker_annotation"],
+    },
+    constant_strategy: ConstantStrategy::None,
+    parameter_kinds: &["formal_parameter", "spread_parameter"],
     method_promotion: &[],
 };
 
