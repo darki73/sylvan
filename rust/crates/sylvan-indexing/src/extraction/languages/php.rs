@@ -16,10 +16,17 @@
 //! to each leaf `namespace_use_group_clause`, yielding one record per
 //! leaf. `use function` and `use const` produce identical records to
 //! plain `use`, again matching the Python plugin.
+//!
+//! Import resolution applies PSR-4 autoload mappings from the resolver
+//! context (longest namespace prefix wins) and always appends the naive
+//! `src/` and `app/` fallbacks so Laravel / Symfony projects without a
+//! parsed composer.json still produce useful candidates.
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use sylvan_core::{
+    ExtractionContext, ExtractionError, Import, LanguageExtractor, ResolverContext, Symbol,
+};
 use tree_sitter::Node;
 
 use crate::extraction::spec::{
@@ -114,6 +121,55 @@ impl LanguageExtractor for PhpExtractor {
         walk_imports(tree.root_node(), ctx.source_bytes, &mut out);
         Ok(out)
     }
+
+    fn supports_resolution(&self) -> bool {
+        true
+    }
+
+    fn generate_candidates(
+        &self,
+        specifier: &str,
+        _source_path: &str,
+        context: &ResolverContext,
+    ) -> Vec<String> {
+        generate_php_candidates(specifier, context)
+    }
+}
+
+fn generate_php_candidates(specifier: &str, context: &ResolverContext) -> Vec<String> {
+    let mut candidates: Vec<String> = Vec::new();
+
+    if !context.psr4_mappings.is_empty() {
+        let mut keys: Vec<&String> = context.psr4_mappings.keys().collect();
+        keys.sort_by(|a, b| b.len().cmp(&a.len()));
+        for prefix in keys {
+            let ns_prefix = prefix.trim_end_matches('\\');
+            let with_sep = format!("{ns_prefix}\\");
+            if specifier == ns_prefix || specifier.starts_with(&with_sep) {
+                let relative = specifier[ns_prefix.len()..].trim_start_matches('\\');
+                let relative_path = relative.replace('\\', "/");
+                if let Some(bases) = context.psr4_mappings.get(prefix) {
+                    for base_dir in bases {
+                        if relative_path.is_empty() {
+                            candidates.push(format!("{base_dir}.php"));
+                        } else {
+                            candidates.push(format!("{base_dir}{relative_path}.php"));
+                        }
+                    }
+                }
+                if !candidates.is_empty() {
+                    break;
+                }
+            }
+        }
+    }
+
+    let path_base = specifier.replace('\\', "/");
+    candidates.push(format!("{path_base}.php"));
+    candidates.push(format!("src/{path_base}.php"));
+    candidates.push(format!("app/{path_base}.php"));
+
+    candidates
 }
 
 fn walk_imports(node: Node<'_>, source: &[u8], out: &mut Vec<Import>) {
@@ -361,5 +417,84 @@ mod tests {
         assert_eq!(imps.len(), 2);
         assert_eq!(imps[0].specifier, "Foo\\Bar");
         assert_eq!(imps[1].specifier, "Baz\\Qux");
+    }
+
+    fn candidates(specifier: &str, ctx: &ResolverContext) -> Vec<String> {
+        PhpExtractor::new().generate_candidates(specifier, "does/not/matter.php", ctx)
+    }
+
+    fn psr4_ctx(entries: &[(&str, &[&str])]) -> ResolverContext {
+        let mut ctx = ResolverContext::default();
+        for (prefix, dirs) in entries {
+            ctx.psr4_mappings.insert(
+                (*prefix).to_string(),
+                dirs.iter().map(|d| (*d).to_string()).collect(),
+            );
+        }
+        ctx
+    }
+
+    #[test]
+    fn plain_namespace_without_psr4_falls_back_to_naive_conversion() {
+        let ctx = ResolverContext::default();
+        let c = candidates("App\\Models\\User", &ctx);
+        assert_eq!(
+            c,
+            vec![
+                "App/Models/User.php",
+                "src/App/Models/User.php",
+                "app/App/Models/User.php",
+            ]
+        );
+    }
+
+    #[test]
+    fn psr4_mapping_expands_prefix_to_base_dir() {
+        let ctx = psr4_ctx(&[("App\\", &["src/"])]);
+        let c = candidates("App\\Models\\User", &ctx);
+        assert!(c.contains(&"src/Models/User.php".into()));
+        assert!(c.contains(&"App/Models/User.php".into()));
+    }
+
+    #[test]
+    fn psr4_longest_prefix_wins() {
+        let ctx = psr4_ctx(&[
+            ("App\\", &["src/"]),
+            ("App\\Http\\", &["app/http/"]),
+        ]);
+        let c = candidates("App\\Http\\Controllers\\UserController", &ctx);
+        assert!(c.contains(&"app/http/Controllers/UserController.php".into()));
+        assert!(!c.contains(&"src/Http/Controllers/UserController.php".into()));
+    }
+
+    #[test]
+    fn psr4_multiple_directories_emit_multiple_candidates() {
+        let ctx = psr4_ctx(&[("App\\", &["src/", "lib/"])]);
+        let c = candidates("App\\Foo", &ctx);
+        assert!(c.contains(&"src/Foo.php".into()));
+        assert!(c.contains(&"lib/Foo.php".into()));
+    }
+
+    #[test]
+    fn psr4_prefix_without_trailing_backslash_matches_same() {
+        let ctx = psr4_ctx(&[("App", &["src/"])]);
+        let c = candidates("App\\Models\\User", &ctx);
+        assert!(c.contains(&"src/Models/User.php".into()));
+    }
+
+    #[test]
+    fn psr4_exact_namespace_match_emits_base_file() {
+        let ctx = psr4_ctx(&[("App\\", &["src/App/"])]);
+        let c = candidates("App", &ctx);
+        assert!(c.contains(&"src/App/.php".into()));
+    }
+
+    #[test]
+    fn non_matching_psr4_prefix_falls_back_to_naive() {
+        let ctx = psr4_ctx(&[("Vendor\\", &["vendor/"])]);
+        let c = candidates("App\\Models\\User", &ctx);
+        assert!(!c.iter().any(|p| p.starts_with("vendor/")));
+        assert!(c.contains(&"App/Models/User.php".into()));
+        assert!(c.contains(&"src/App/Models/User.php".into()));
     }
 }

@@ -15,10 +15,19 @@
 //! syntax (`import_require_clause`). Each record carries the bare
 //! specifier and the list of bound names with aliases collapsed to the
 //! pre-`as` identifier.
+//!
+//! Import resolution mirrors the JavaScript plugin: relative specifiers
+//! resolve against the source directory and produce extension variants
+//! for `.js`, `.ts`, `.tsx`, `.jsx`, `.mjs`, `.vue`, plus `/index.*`
+//! variants. Bare specifiers that match a configured tsconfig alias
+//! expand against the alias's first target; anything else returns
+//! empty for the orchestrator to route elsewhere.
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use sylvan_core::{
+    ExtractionContext, ExtractionError, Import, LanguageExtractor, ResolverContext, Symbol,
+};
 use tree_sitter::Node;
 
 use crate::extraction::spec::{
@@ -144,6 +153,113 @@ impl LanguageExtractor for TypeScriptExtractor {
         let mut seen = Vec::new();
         walk_imports(tree.root_node(), ctx.source_bytes, &mut out, &mut seen);
         Ok(out)
+    }
+
+    fn supports_resolution(&self) -> bool {
+        true
+    }
+
+    fn generate_candidates(
+        &self,
+        specifier: &str,
+        source_path: &str,
+        context: &ResolverContext,
+    ) -> Vec<String> {
+        generate_ts_candidates(specifier, source_path, context)
+    }
+}
+
+const JS_EXTENSIONS: &[&str] = &[".js", ".ts", ".tsx", ".jsx", ".mjs", ".vue", ".svelte"];
+
+fn generate_ts_candidates(
+    specifier: &str,
+    source_path: &str,
+    context: &ResolverContext,
+) -> Vec<String> {
+    if !context.tsconfig_aliases.is_empty() && !specifier.starts_with('.') {
+        if let Some(expanded) = expand_ts_alias(specifier, &context.tsconfig_aliases) {
+            return extension_candidates(&expanded);
+        }
+    }
+
+    if !specifier.starts_with('.') && !specifier.starts_with('/') {
+        return Vec::new();
+    }
+
+    let source_dir = parent_dir(source_path);
+    let joined = join_posix(source_dir, specifier);
+    let resolved = normalize(&joined);
+
+    extension_candidates(&resolved)
+}
+
+fn expand_ts_alias(
+    specifier: &str,
+    aliases: &std::collections::BTreeMap<String, Vec<String>>,
+) -> Option<String> {
+    let mut keys: Vec<&String> = aliases.keys().collect();
+    keys.sort_by(|a, b| b.len().cmp(&a.len()));
+    for alias in keys {
+        let with_slash = format!("{alias}/");
+        if specifier == alias.as_str() || specifier.starts_with(&with_slash) {
+            let remainder = specifier[alias.len()..].trim_start_matches('/');
+            if let Some(targets) = aliases.get(alias) {
+                if let Some(target) = targets.first() {
+                    if remainder.is_empty() {
+                        return Some(target.clone());
+                    }
+                    return Some(format!("{target}/{remainder}"));
+                }
+            }
+        }
+    }
+    None
+}
+
+fn extension_candidates(resolved: &str) -> Vec<String> {
+    let mut candidates = vec![resolved.to_string()];
+    if JS_EXTENSIONS.iter().any(|ext| resolved.ends_with(ext)) {
+        return candidates;
+    }
+    for ext in [".js", ".ts", ".tsx", ".jsx", ".mjs", ".vue"] {
+        candidates.push(format!("{resolved}{ext}"));
+    }
+    for index in ["/index.js", "/index.ts", "/index.tsx"] {
+        candidates.push(format!("{resolved}{index}"));
+    }
+    candidates
+}
+
+fn parent_dir(path: &str) -> &str {
+    match path.rfind('/') {
+        Some(idx) => &path[..idx],
+        None => "",
+    }
+}
+
+fn join_posix(left: &str, right: &str) -> String {
+    if left.is_empty() {
+        right.to_string()
+    } else {
+        format!("{left}/{right}")
+    }
+}
+
+fn normalize(path: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for segment in path.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            other => parts.push(other),
+        }
+    }
+    if parts.is_empty() {
+        ".".to_string()
+    } else {
+        parts.join("/")
     }
 }
 
@@ -516,5 +632,82 @@ mod tests {
         assert_eq!(imps.len(), 1);
         assert_eq!(imps[0].specifier, "react");
         assert_eq!(imps[0].names, vec!["React"]);
+    }
+
+    fn candidates(specifier: &str, source: &str, ctx: &ResolverContext) -> Vec<String> {
+        TypeScriptExtractor::new().generate_candidates(specifier, source, ctx)
+    }
+
+    fn alias_ctx(entries: &[(&str, &[&str])]) -> ResolverContext {
+        let mut ctx = ResolverContext::default();
+        for (alias, targets) in entries {
+            ctx.tsconfig_aliases.insert(
+                (*alias).to_string(),
+                targets.iter().map(|t| (*t).to_string()).collect(),
+            );
+        }
+        ctx
+    }
+
+    #[test]
+    fn relative_specifier_expands_sibling_extensions() {
+        let ctx = ResolverContext::default();
+        let c = candidates("./utils", "src/a.ts", &ctx);
+        assert!(c.contains(&"src/utils".into()));
+        assert!(c.contains(&"src/utils.ts".into()));
+        assert!(c.contains(&"src/utils.tsx".into()));
+        assert!(c.contains(&"src/utils.js".into()));
+        assert!(c.contains(&"src/utils.vue".into()));
+        assert!(c.contains(&"src/utils/index.ts".into()));
+    }
+
+    #[test]
+    fn parent_specifier_walks_up_one_directory() {
+        let ctx = ResolverContext::default();
+        let c = candidates("../x", "src/a/b.ts", &ctx);
+        assert!(c.contains(&"src/x".into()));
+        assert!(c.contains(&"src/x.ts".into()));
+        assert!(c.contains(&"src/x/index.ts".into()));
+    }
+
+    #[test]
+    fn tsconfig_alias_expands_against_first_target() {
+        let ctx = alias_ctx(&[("@", &["resources/js"])]);
+        let c = candidates("@/components/Foo", "src/a.ts", &ctx);
+        assert!(c.contains(&"resources/js/components/Foo".into()));
+        assert!(c.contains(&"resources/js/components/Foo.ts".into()));
+        assert!(c.contains(&"resources/js/components/Foo.tsx".into()));
+        assert!(c.contains(&"resources/js/components/Foo.vue".into()));
+        assert!(c.contains(&"resources/js/components/Foo/index.ts".into()));
+    }
+
+    #[test]
+    fn tsconfig_alias_matches_longest_prefix() {
+        let ctx = alias_ctx(&[("@", &["src"]), ("@lib", &["packages/lib"])]);
+        let c = candidates("@lib/util", "a.ts", &ctx);
+        assert!(c.iter().any(|p| p.starts_with("packages/lib/util")));
+        assert!(!c.iter().any(|p| p.starts_with("src/lib")));
+    }
+
+    #[test]
+    fn bare_package_specifier_returns_no_candidates() {
+        let ctx = ResolverContext::default();
+        let c = candidates("react", "src/a.ts", &ctx);
+        assert!(c.is_empty());
+    }
+
+    #[test]
+    fn svelte_alias_variant_preserves_known_extension() {
+        let ctx = alias_ctx(&[("$lib", &["src/lib"])]);
+        let c = candidates("$lib/Button.svelte", "src/app.ts", &ctx);
+        assert_eq!(c, vec!["src/lib/Button.svelte"]);
+    }
+
+    #[test]
+    fn tsx_grammar_uses_same_resolution_path() {
+        let ctx = ResolverContext::default();
+        let c = TypeScriptExtractor::new().generate_candidates("./Widget", "app.tsx", &ctx);
+        assert!(c.contains(&"Widget".into()));
+        assert!(c.contains(&"Widget.tsx".into()));
     }
 }

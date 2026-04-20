@@ -14,12 +14,18 @@
 //! imports collapse to a bare specifier since names carry no value
 //! for Go imports.
 //!
-//! Features left for later migration stages: candidate path resolution
-//! against stdlib and complexity tuning.
+//! Import resolution rejects bare package names (no `/`) and anything
+//! whose first segment is a Go stdlib package, then returns progressive
+//! suffixes of the specifier so the resolver can match either the fully
+//! qualified module path or a sub-tree inside the repo.
+//!
+//! Features left for later migration stages: complexity tuning.
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use sylvan_core::{
+    ExtractionContext, ExtractionError, Import, LanguageExtractor, ResolverContext, Symbol,
+};
 use tree_sitter::Node;
 
 use crate::extraction::spec::{
@@ -106,6 +112,43 @@ impl LanguageExtractor for GoExtractor {
         walk_imports(tree.root_node(), ctx.source_bytes, &mut out);
         Ok(out)
     }
+
+    fn supports_resolution(&self) -> bool {
+        true
+    }
+
+    fn generate_candidates(
+        &self,
+        specifier: &str,
+        _source_path: &str,
+        _context: &ResolverContext,
+    ) -> Vec<String> {
+        generate_go_candidates(specifier)
+    }
+}
+
+const GO_STDLIB: &[&str] = &[
+    "archive", "bufio", "builtin", "bytes", "cmp", "compress", "container", "context", "crypto",
+    "database", "debug", "embed", "encoding", "errors", "expvar", "flag", "fmt", "go", "hash",
+    "html", "image", "index", "io", "iter", "log", "maps", "math", "mime", "net", "os", "path",
+    "plugin", "reflect", "regexp", "runtime", "slices", "sort", "strconv", "strings", "structs",
+    "sync", "syscall", "testing", "text", "time", "unicode", "unique", "unsafe", "weak",
+];
+
+fn generate_go_candidates(specifier: &str) -> Vec<String> {
+    if !specifier.contains('/') {
+        return Vec::new();
+    }
+    let first_segment = specifier.split('/').next().unwrap_or("");
+    if GO_STDLIB.contains(&first_segment) {
+        return Vec::new();
+    }
+    let parts: Vec<&str> = specifier.split('/').collect();
+    let mut out = Vec::with_capacity(parts.len());
+    for i in 0..parts.len() {
+        out.push(parts[i..].join("/"));
+    }
+    out
 }
 
 fn walk_imports(node: Node<'_>, source: &[u8], out: &mut Vec<Import>) {
@@ -286,6 +329,43 @@ mod tests {
         let imps = imports(src);
         assert_eq!(imps.len(), 1);
         assert_eq!(imps[0].specifier, "fmt");
+    }
+
+    fn candidates(specifier: &str) -> Vec<String> {
+        let ctx = ResolverContext::default();
+        GoExtractor::new().generate_candidates(specifier, "main.go", &ctx)
+    }
+
+    #[test]
+    fn bare_package_without_slash_yields_no_candidates() {
+        assert!(candidates("fmt").is_empty());
+    }
+
+    #[test]
+    fn stdlib_path_prefix_yields_no_candidates() {
+        assert!(candidates("net/http").is_empty());
+        assert!(candidates("encoding/json").is_empty());
+    }
+
+    #[test]
+    fn third_party_module_path_emits_progressive_suffixes() {
+        let c = candidates("github.com/darki73/sylvan/pkg/util");
+        assert_eq!(
+            c,
+            vec![
+                "github.com/darki73/sylvan/pkg/util",
+                "darki73/sylvan/pkg/util",
+                "sylvan/pkg/util",
+                "pkg/util",
+                "util",
+            ]
+        );
+    }
+
+    #[test]
+    fn non_stdlib_two_segment_path_emits_both_suffixes() {
+        let c = candidates("example.com/mod");
+        assert_eq!(c, vec!["example.com/mod", "mod"]);
     }
 
     #[test]

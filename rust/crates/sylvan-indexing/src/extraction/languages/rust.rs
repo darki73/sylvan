@@ -20,12 +20,23 @@
 //! bound in the module. Wildcard imports (`use a::b::*;`) emit `*`
 //! as the lone name.
 //!
-//! Features left for later migration stages: use resolution,
-//! self-receiver stripping, and Rust-specific complexity.
+//! Import resolution rejects `std::` and `core::` specifiers outright.
+//! `crate::`-rooted paths strip the prefix and map the remaining
+//! segments to `src/…` and repo-root variants, both as `<path>.rs` and
+//! `<path>/mod.rs`. Bare `::`-separated paths with more than one
+//! segment return the same `src/…` / plain file pair without a
+//! `mod.rs` fallback, matching the legacy plugin. Single-segment paths
+//! return no candidates since the resolver cannot distinguish a local
+//! module from an external crate name without more context.
+//!
+//! Features left for later migration stages: self-receiver stripping,
+//! and Rust-specific complexity.
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use sylvan_core::{
+    ExtractionContext, ExtractionError, Import, LanguageExtractor, ResolverContext, Symbol,
+};
 use tree_sitter::Node;
 
 use crate::extraction::spec::{
@@ -113,6 +124,52 @@ impl LanguageExtractor for RustExtractor {
         walk_imports(tree.root_node(), ctx.source_bytes, &mut out);
         Ok(out)
     }
+
+    fn supports_resolution(&self) -> bool {
+        true
+    }
+
+    fn generate_candidates(
+        &self,
+        specifier: &str,
+        _source_path: &str,
+        _context: &ResolverContext,
+    ) -> Vec<String> {
+        generate_rust_candidates(specifier)
+    }
+}
+
+fn generate_rust_candidates(specifier: &str) -> Vec<String> {
+    if specifier.starts_with("std::") || specifier.starts_with("core::") {
+        return Vec::new();
+    }
+
+    if let Some(remainder) = specifier.strip_prefix("crate::") {
+        let parts: Vec<&str> = remainder.split("::").collect();
+        let module_path = if parts.len() > 1 {
+            parts[..parts.len() - 1].join("/")
+        } else {
+            parts[0].to_string()
+        };
+        return vec![
+            format!("src/{module_path}.rs"),
+            format!("src/{module_path}/mod.rs"),
+            format!("{module_path}.rs"),
+            format!("{module_path}/mod.rs"),
+        ];
+    }
+
+    let parts: Vec<&str> = specifier.split("::").collect();
+    if parts.len() > 1 {
+        let module_path = parts[..parts.len() - 1].join("/");
+        return vec![
+            format!("src/{module_path}.rs"),
+            format!("src/{module_path}/mod.rs"),
+            format!("{module_path}.rs"),
+        ];
+    }
+
+    Vec::new()
 }
 
 fn walk_imports(node: Node<'_>, source: &[u8], out: &mut Vec<Import>) {
@@ -440,6 +497,60 @@ mod tests {
         assert_eq!(imps[0].names, vec!["io"]);
         assert_eq!(imps[1].specifier, "std::fmt::Debug");
         assert_eq!(imps[1].names, vec!["Debug"]);
+    }
+
+    fn candidates(specifier: &str) -> Vec<String> {
+        let ctx = ResolverContext::default();
+        RustExtractor::new().generate_candidates(specifier, "src/lib.rs", &ctx)
+    }
+
+    #[test]
+    fn std_prefixed_path_yields_no_candidates() {
+        assert!(candidates("std::collections::HashMap").is_empty());
+    }
+
+    #[test]
+    fn core_prefixed_path_yields_no_candidates() {
+        assert!(candidates("core::mem::drop").is_empty());
+    }
+
+    #[test]
+    fn crate_rooted_path_expands_to_src_and_root_variants() {
+        let c = candidates("crate::module::Thing");
+        assert_eq!(
+            c,
+            vec![
+                "src/module.rs",
+                "src/module/mod.rs",
+                "module.rs",
+                "module/mod.rs",
+            ]
+        );
+    }
+
+    #[test]
+    fn crate_rooted_single_segment_uses_segment_as_module() {
+        let c = candidates("crate::module");
+        assert_eq!(
+            c,
+            vec![
+                "src/module.rs",
+                "src/module/mod.rs",
+                "module.rs",
+                "module/mod.rs",
+            ]
+        );
+    }
+
+    #[test]
+    fn external_multi_segment_emits_src_and_plain_rs() {
+        let c = candidates("serde::Deserialize");
+        assert_eq!(c, vec!["src/serde.rs", "src/serde/mod.rs", "serde.rs"]);
+    }
+
+    #[test]
+    fn single_segment_yields_no_candidates() {
+        assert!(candidates("serde").is_empty());
     }
 
     #[test]

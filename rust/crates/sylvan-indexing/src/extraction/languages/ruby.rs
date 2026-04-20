@@ -13,12 +13,20 @@
 //! coverage. Quotes are stripped so the specifier matches the Python
 //! plugin's output exactly.
 //!
+//! Import resolution handles `require_relative`-style specifiers that
+//! start with `.` by normalising them against the source file's
+//! directory and optionally appending `.rb`. Non-relative specifiers
+//! expand to the raw name and the same name under `lib/` and `app/`,
+//! both with and without the `.rb` suffix, matching the legacy plugin.
+//!
 //! Features left for later migration stages (not this spec walker):
 //! complexity scoring, content hashing, cross-file resolution.
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use sylvan_core::{
+    ExtractionContext, ExtractionError, Import, LanguageExtractor, ResolverContext, Symbol,
+};
 use tree_sitter::Node;
 
 use crate::extraction::spec::{
@@ -107,6 +115,77 @@ impl LanguageExtractor for RubyExtractor {
         let mut out = Vec::new();
         walk_imports(tree.root_node(), ctx.source_bytes, &mut out);
         Ok(out)
+    }
+
+    fn supports_resolution(&self) -> bool {
+        true
+    }
+
+    fn generate_candidates(
+        &self,
+        specifier: &str,
+        source_path: &str,
+        _context: &ResolverContext,
+    ) -> Vec<String> {
+        generate_ruby_candidates(specifier, source_path)
+    }
+}
+
+fn generate_ruby_candidates(specifier: &str, source_path: &str) -> Vec<String> {
+    if specifier.starts_with('.') {
+        let source_dir = parent_dir(source_path);
+        let joined = join_posix(source_dir, specifier);
+        let resolved = normalize(&joined);
+        let mut out = vec![resolved.clone()];
+        if !resolved.ends_with(".rb") {
+            out.push(format!("{resolved}.rb"));
+        }
+        return out;
+    }
+
+    let mut out = vec![specifier.to_string()];
+    if !specifier.ends_with(".rb") {
+        out.push(format!("{specifier}.rb"));
+    }
+    for prefix in ["lib/", "app/"] {
+        out.push(format!("{prefix}{specifier}"));
+        if !specifier.ends_with(".rb") {
+            out.push(format!("{prefix}{specifier}.rb"));
+        }
+    }
+    out
+}
+
+fn parent_dir(path: &str) -> &str {
+    match path.rfind('/') {
+        Some(idx) => &path[..idx],
+        None => "",
+    }
+}
+
+fn join_posix(left: &str, right: &str) -> String {
+    if left.is_empty() {
+        right.to_string()
+    } else {
+        format!("{left}/{right}")
+    }
+}
+
+fn normalize(path: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for segment in path.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            other => parts.push(other),
+        }
+    }
+    if parts.is_empty() {
+        ".".to_string()
+    } else {
+        parts.join("/")
     }
 }
 
@@ -304,6 +383,51 @@ mod tests {
     fn require_with_receiver_is_ignored() {
         let imps = imports("Kernel.require 'nope'\n");
         assert!(imps.is_empty(), "expected no imports, got {imps:?}");
+    }
+
+    fn candidates(specifier: &str, source: &str) -> Vec<String> {
+        let ctx = ResolverContext::default();
+        RubyExtractor::new().generate_candidates(specifier, source, &ctx)
+    }
+
+    #[test]
+    fn relative_specifier_normalises_against_source_dir() {
+        let c = candidates("./helper", "lib/app.rb");
+        assert_eq!(c, vec!["lib/helper", "lib/helper.rb"]);
+    }
+
+    #[test]
+    fn relative_parent_walks_up_a_directory() {
+        let c = candidates("../shared/util", "lib/app/main.rb");
+        assert_eq!(c, vec!["lib/shared/util", "lib/shared/util.rb"]);
+    }
+
+    #[test]
+    fn relative_specifier_with_rb_suffix_is_not_re_suffixed() {
+        let c = candidates("./helper.rb", "lib/app.rb");
+        assert_eq!(c, vec!["lib/helper.rb"]);
+    }
+
+    #[test]
+    fn non_relative_specifier_emits_bare_lib_and_app_variants() {
+        let c = candidates("active_record", "lib/app.rb");
+        assert_eq!(
+            c,
+            vec![
+                "active_record",
+                "active_record.rb",
+                "lib/active_record",
+                "lib/active_record.rb",
+                "app/active_record",
+                "app/active_record.rb",
+            ]
+        );
+    }
+
+    #[test]
+    fn non_relative_specifier_with_rb_suffix_skips_duplicates() {
+        let c = candidates("thing.rb", "lib/app.rb");
+        assert_eq!(c, vec!["thing.rb", "lib/thing.rb", "app/thing.rb"]);
     }
 
     #[test]

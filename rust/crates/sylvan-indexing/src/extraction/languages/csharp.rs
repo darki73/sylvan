@@ -16,12 +16,18 @@
 //! (`using X = System.Collections.Generic.List;`) record the right-hand
 //! namespace as the specifier, which the legacy regex misses.
 //!
-//! Features left for later migration stages: PSR-style candidate
-//! generation and complexity scoring.
+//! Import resolution converts the dotted namespace into a path and
+//! emits two candidates: one against the repo root and one against
+//! `src/`, both with a `.cs` extension, matching the legacy plugin's
+//! naive namespace-to-file mapping.
+//!
+//! Features left for later migration stages: complexity scoring.
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use sylvan_core::{
+    ExtractionContext, ExtractionError, Import, LanguageExtractor, ResolverContext, Symbol,
+};
 use tree_sitter::Node;
 
 use crate::extraction::spec::{
@@ -115,6 +121,20 @@ impl LanguageExtractor for CSharpExtractor {
         let mut out = Vec::new();
         walk_imports(tree.root_node(), ctx.source_bytes, &mut out);
         Ok(out)
+    }
+
+    fn supports_resolution(&self) -> bool {
+        true
+    }
+
+    fn generate_candidates(
+        &self,
+        specifier: &str,
+        _source_path: &str,
+        _context: &ResolverContext,
+    ) -> Vec<String> {
+        let path_base = specifier.replace('.', "/");
+        vec![format!("{path_base}.cs"), format!("src/{path_base}.cs")]
     }
 }
 
@@ -270,6 +290,26 @@ mod tests {
         assert_eq!(imps.len(), 1);
         assert_eq!(imps[0].specifier, "System.Collections.Generic.List");
         assert!(imps[0].names.is_empty());
+    }
+
+    fn candidates(specifier: &str) -> Vec<String> {
+        let ctx = ResolverContext::default();
+        CSharpExtractor::new().generate_candidates(specifier, "mod.cs", &ctx)
+    }
+
+    #[test]
+    fn dotted_namespace_expands_to_root_and_src_variants() {
+        let c = candidates("MyApp.Models.User");
+        assert_eq!(
+            c,
+            vec!["MyApp/Models/User.cs", "src/MyApp/Models/User.cs",]
+        );
+    }
+
+    #[test]
+    fn single_segment_specifier_emits_bare_cs_file() {
+        let c = candidates("System");
+        assert_eq!(c, vec!["System.cs", "src/System.cs"]);
     }
 
     #[test]

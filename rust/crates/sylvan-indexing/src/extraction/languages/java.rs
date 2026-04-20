@@ -16,12 +16,19 @@
 //! while wildcard (`package.*`) and static wildcard imports keep the
 //! dotted package as specifier and place `*` in the `names` list.
 //!
-//! Features left for later migration stages: candidate path resolution
-//! against `src/main/java/` and complexity tuning.
+//! Import resolution converts the dotted package to a path and emits
+//! candidates against the repo root plus the Maven / Gradle layouts
+//! `src/main/java/`, `src/main/kotlin/`, and `src/`. The extension is
+//! derived from the source file — `.kt` / `.kts` source yields `.kt`
+//! candidates, everything else yields `.java`.
+//!
+//! Features left for later migration stages: complexity tuning.
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use sylvan_core::{
+    ExtractionContext, ExtractionError, Import, LanguageExtractor, ResolverContext, Symbol,
+};
 use tree_sitter::Node;
 
 use crate::extraction::spec::{
@@ -119,6 +126,33 @@ impl LanguageExtractor for JavaExtractor {
         walk_imports(tree.root_node(), ctx.source_bytes, &mut out);
         Ok(out)
     }
+
+    fn supports_resolution(&self) -> bool {
+        true
+    }
+
+    fn generate_candidates(
+        &self,
+        specifier: &str,
+        source_path: &str,
+        _context: &ResolverContext,
+    ) -> Vec<String> {
+        generate_java_candidates(specifier, source_path)
+    }
+}
+
+fn generate_java_candidates(specifier: &str, source_path: &str) -> Vec<String> {
+    let path_base = specifier.replace('.', "/");
+    let ext = if source_path.ends_with(".kt") || source_path.ends_with(".kts") {
+        ".kt"
+    } else {
+        ".java"
+    };
+    let mut out = Vec::with_capacity(4);
+    for prefix in ["", "src/main/java/", "src/main/kotlin/", "src/"] {
+        out.push(format!("{prefix}{path_base}{ext}"));
+    }
+    out
 }
 
 fn walk_imports(node: Node<'_>, source: &[u8], out: &mut Vec<Import>) {
@@ -309,6 +343,52 @@ mod tests {
         assert_eq!(imps.len(), 1);
         assert_eq!(imps[0].specifier, "java.lang.Math");
         assert_eq!(imps[0].names, vec!["*"]);
+    }
+
+    fn candidates(specifier: &str, source: &str) -> Vec<String> {
+        let ctx = ResolverContext::default();
+        JavaExtractor::new().generate_candidates(specifier, source, &ctx)
+    }
+
+    #[test]
+    fn dotted_package_expands_to_java_layout_variants() {
+        let c = candidates("com.example.util.Helper", "Mod.java");
+        assert_eq!(
+            c,
+            vec![
+                "com/example/util/Helper.java",
+                "src/main/java/com/example/util/Helper.java",
+                "src/main/kotlin/com/example/util/Helper.java",
+                "src/com/example/util/Helper.java",
+            ]
+        );
+    }
+
+    #[test]
+    fn kotlin_source_file_selects_kt_extension() {
+        let c = candidates("com.example.Util", "App.kt");
+        assert_eq!(
+            c,
+            vec![
+                "com/example/Util.kt",
+                "src/main/java/com/example/Util.kt",
+                "src/main/kotlin/com/example/Util.kt",
+                "src/com/example/Util.kt",
+            ]
+        );
+    }
+
+    #[test]
+    fn kts_source_file_selects_kt_extension() {
+        let c = candidates("pkg.X", "build.gradle.kts");
+        assert!(c.iter().all(|p| p.ends_with(".kt")));
+    }
+
+    #[test]
+    fn single_segment_specifier_still_emits_candidates() {
+        let c = candidates("Foo", "Mod.java");
+        assert!(c.contains(&"Foo.java".to_string()));
+        assert!(c.contains(&"src/main/java/Foo.java".to_string()));
     }
 
     #[test]
