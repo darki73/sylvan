@@ -50,6 +50,7 @@ static SPEC: LanguageSpec = LanguageSpec {
         ("struct_declaration", "name"),
         ("enum_declaration", "name"),
     ],
+    name_resolutions: &[],
     param_fields: &[("method_declaration", "parameters")],
     return_type_fields: &[("method_declaration", "type")],
     container_node_types: &[
@@ -89,7 +90,7 @@ impl CSharpExtractor {
 
     fn delegate(&self) -> &SpecExtractor {
         self.inner.get_or_init(|| {
-            SpecExtractor::new(&["csharp"], tree_sitter_c_sharp::LANGUAGE.into(), &SPEC)
+            SpecExtractor::new(&["csharp"], crate::grammars::get_language("csharp").expect("csharp grammar"), &SPEC)
         })
     }
 }
@@ -102,7 +103,7 @@ impl Default for CSharpExtractor {
 
 impl LanguageExtractor for CSharpExtractor {
     fn languages(&self) -> &'static [&'static str] {
-        &["csharp"]
+        &["csharp", "c_sharp"]
     }
 
     fn extract(&self, ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError> {

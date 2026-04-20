@@ -10,8 +10,8 @@ Set ``ORT_DLL_PATH`` to bypass the download and point at an existing
 ORT installation (useful for air-gapped setups or custom builds).
 
 The provider key and file name are historical artefacts from the
-fastembed era; see the canopy memory for the rename plan deferred to
-v3.0.
+fastembed era; renaming is deferred to v3.0 to avoid breaking
+existing ``config.yaml`` files in the wild.
 """
 
 from __future__ import annotations

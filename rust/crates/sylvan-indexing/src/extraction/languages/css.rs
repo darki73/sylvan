@@ -49,7 +49,7 @@ impl LanguageExtractor for CssExtractor {
 
         let mut parser = Parser::new();
         parser
-            .set_language(&tree_sitter_css::LANGUAGE.into())
+            .set_language(&crate::grammars::get_language("css").expect("css grammar"))
             .map_err(|e| ExtractionError::GrammarLoad {
                 language: "css".into(),
                 message: e.to_string(),

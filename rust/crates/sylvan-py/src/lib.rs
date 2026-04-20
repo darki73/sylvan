@@ -12,6 +12,7 @@ mod discovery;
 mod docs;
 mod embedding;
 mod extraction;
+mod grammars;
 mod logging;
 mod watch;
 
@@ -33,6 +34,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     docs::register(m)?;
     embedding::register(m)?;
     extraction::register(m)?;
+    grammars::register(m)?;
     logging::register(m)?;
     watch::register(m)?;
     Ok(())

@@ -9,6 +9,7 @@ pub mod discovery;
 pub mod docs;
 pub mod enrichment;
 pub mod extraction;
+pub mod grammars;
 pub mod watch;
 
 /// Crate version, baked in at compile time.

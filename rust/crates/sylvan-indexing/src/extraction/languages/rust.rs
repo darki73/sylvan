@@ -60,6 +60,7 @@ static SPEC: LanguageSpec = LanguageSpec {
         ("trait_item", "name"),
         ("type_item", "name"),
     ],
+    name_resolutions: &[],
     param_fields: &[("function_item", "parameters")],
     return_type_fields: &[("function_item", "return_type")],
     container_node_types: &["impl_item", "trait_item"],
@@ -91,7 +92,7 @@ impl RustExtractor {
 
     fn delegate(&self) -> &SpecExtractor {
         self.inner.get_or_init(|| {
-            SpecExtractor::new(&["rust"], tree_sitter_rust::LANGUAGE.into(), &SPEC)
+            SpecExtractor::new(&["rust"], crate::grammars::get_language("rust").expect("rust grammar"), &SPEC)
         })
     }
 }

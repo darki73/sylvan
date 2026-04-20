@@ -46,6 +46,7 @@ static SPEC: LanguageSpec = LanguageSpec {
         ("class", "name"),
         ("module", "name"),
     ],
+    name_resolutions: &[],
     param_fields: &[
         ("method", "parameters"),
         ("singleton_method", "parameters"),
@@ -83,7 +84,7 @@ impl RubyExtractor {
 
     fn delegate(&self) -> &SpecExtractor {
         self.inner.get_or_init(|| {
-            SpecExtractor::new(&["ruby"], tree_sitter_ruby::LANGUAGE.into(), &SPEC)
+            SpecExtractor::new(&["ruby"], crate::grammars::get_language("ruby").expect("ruby grammar"), &SPEC)
         })
     }
 }

@@ -50,6 +50,7 @@ static SPEC: LanguageSpec = LanguageSpec {
         ("trait_declaration", "name"),
         ("enum_declaration", "name"),
     ],
+    name_resolutions: &[],
     param_fields: &[
         ("function_definition", "parameters"),
         ("method_declaration", "parameters"),
@@ -88,7 +89,7 @@ impl PhpExtractor {
 
     fn delegate(&self) -> &SpecExtractor {
         self.inner.get_or_init(|| {
-            SpecExtractor::new(&["php"], tree_sitter_php::LANGUAGE_PHP.into(), &SPEC)
+            SpecExtractor::new(&["php"], crate::grammars::get_language("php").expect("php grammar"), &SPEC)
         })
     }
 }

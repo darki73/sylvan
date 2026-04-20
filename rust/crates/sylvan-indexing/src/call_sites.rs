@@ -47,11 +47,11 @@ pub fn extract_call_sites(symbols: &[SymbolRange], content: &str, language: &str
         return Vec::new();
     }
 
+    let Ok(lang) = crate::grammars::get_language("python") else {
+        return Vec::new();
+    };
     let mut parser = Parser::new();
-    if parser
-        .set_language(&tree_sitter_python::LANGUAGE.into())
-        .is_err()
-    {
+    if parser.set_language(&lang).is_err() {
         return Vec::new();
     }
     let Some(tree) = parser.parse(content.as_bytes(), None) else {
@@ -225,7 +225,7 @@ fn find_chain_root(node: Node<'_>, bytes: &[u8]) -> Option<String> {
 fn find_symbol_range(content: &str, name: &str, symbol_id: &str) -> Option<SymbolRange> {
     let mut parser = Parser::new();
     parser
-        .set_language(&tree_sitter_python::LANGUAGE.into())
+        .set_language(&crate::grammars::get_language("python").expect("python grammar"))
         .ok()?;
     let tree = parser.parse(content.as_bytes(), None)?;
     find_named_function(tree.root_node(), content.as_bytes(), name).map(|node| SymbolRange {

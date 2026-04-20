@@ -51,6 +51,7 @@ static SPEC: LanguageSpec = LanguageSpec {
         ("type_alias_declaration", "name"),
         ("enum_declaration", "name"),
     ],
+    name_resolutions: &[],
     param_fields: &[
         ("function_declaration", "parameters"),
         ("method_definition", "parameters"),
@@ -94,7 +95,7 @@ impl TypeScriptExtractor {
         self.ts_extractor.get_or_init(|| {
             SpecExtractor::new(
                 &["typescript"],
-                tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+                crate::grammars::get_language("typescript").expect("typescript grammar"),
                 &SPEC,
             )
         })
@@ -104,7 +105,7 @@ impl TypeScriptExtractor {
         self.tsx_extractor.get_or_init(|| {
             SpecExtractor::new(
                 &["tsx"],
-                tree_sitter_typescript::LANGUAGE_TSX.into(),
+                crate::grammars::get_language("tsx").expect("tsx grammar"),
                 &SPEC,
             )
         })

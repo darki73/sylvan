@@ -47,6 +47,7 @@ static SPEC: LanguageSpec = LanguageSpec {
         ("class_declaration", "name"),
         ("method_definition", "name"),
     ],
+    name_resolutions: &[],
     param_fields: &[
         ("function_declaration", "parameters"),
         ("method_definition", "parameters"),
@@ -83,7 +84,7 @@ impl JavaScriptExtractor {
         self.inner.get_or_init(|| {
             SpecExtractor::new(
                 &["javascript"],
-                tree_sitter_javascript::LANGUAGE.into(),
+                crate::grammars::get_language("javascript").expect("javascript grammar"),
                 &SPEC,
             )
         })
@@ -98,7 +99,7 @@ impl Default for JavaScriptExtractor {
 
 impl LanguageExtractor for JavaScriptExtractor {
     fn languages(&self) -> &'static [&'static str] {
-        &["javascript"]
+        &["javascript", "jsx"]
     }
 
     fn extract(&self, ctx: &ExtractionContext<'_>) -> Result<Vec<Symbol>, ExtractionError> {

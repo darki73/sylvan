@@ -18,6 +18,7 @@ use crate::extraction::spec::{
 static SPEC: LanguageSpec = LanguageSpec {
     symbol_node_types: &[("function_definition", "function")],
     name_fields: &[("function_definition", "name")],
+    name_resolutions: &[],
     param_fields: &[],
     return_type_fields: &[],
     container_node_types: &[],
@@ -44,7 +45,7 @@ impl BashExtractor {
 
     fn delegate(&self) -> &SpecExtractor {
         self.inner.get_or_init(|| {
-            SpecExtractor::new(&["bash"], tree_sitter_bash::LANGUAGE.into(), &SPEC)
+            SpecExtractor::new(&["bash"], crate::grammars::get_language("bash").expect("bash grammar"), &SPEC)
         })
     }
 }

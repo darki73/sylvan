@@ -36,6 +36,7 @@ static SPEC: LanguageSpec = LanguageSpec {
         ("function_definition", "name"),
         ("class_definition", "name"),
     ],
+    name_resolutions: &[],
     param_fields: &[("function_definition", "parameters")],
     return_type_fields: &[("function_definition", "return_type")],
     container_node_types: &["class_definition"],
@@ -75,7 +76,7 @@ impl PythonExtractor {
 
     fn delegate(&self) -> &SpecExtractor {
         self.inner.get_or_init(|| {
-            SpecExtractor::new(&["python"], tree_sitter_python::LANGUAGE.into(), &SPEC)
+            SpecExtractor::new(&["python"], crate::grammars::get_language("python").expect("python grammar"), &SPEC)
         })
     }
 }

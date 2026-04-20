@@ -43,6 +43,7 @@ static SPEC: LanguageSpec = LanguageSpec {
         ("method_declaration", "name"),
         ("type_spec", "name"),
     ],
+    name_resolutions: &[],
     param_fields: &[
         ("function_declaration", "parameters"),
         ("method_declaration", "parameters"),
@@ -79,7 +80,7 @@ impl GoExtractor {
 
     fn delegate(&self) -> &SpecExtractor {
         self.inner.get_or_init(|| {
-            SpecExtractor::new(&["go"], tree_sitter_go::LANGUAGE.into(), &SPEC)
+            SpecExtractor::new(&["go"], crate::grammars::get_language("go").expect("go grammar"), &SPEC)
         })
     }
 }

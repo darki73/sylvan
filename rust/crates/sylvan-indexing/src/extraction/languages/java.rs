@@ -51,6 +51,7 @@ static SPEC: LanguageSpec = LanguageSpec {
         ("enum_declaration", "name"),
         ("constructor_declaration", "name"),
     ],
+    name_resolutions: &[],
     param_fields: &[
         ("method_declaration", "parameters"),
         ("constructor_declaration", "parameters"),
@@ -93,7 +94,7 @@ impl JavaExtractor {
 
     fn delegate(&self) -> &SpecExtractor {
         self.inner.get_or_init(|| {
-            SpecExtractor::new(&["java"], tree_sitter_java::LANGUAGE.into(), &SPEC)
+            SpecExtractor::new(&["java"], crate::grammars::get_language("java").expect("java grammar"), &SPEC)
         })
     }
 }

@@ -151,6 +151,43 @@ pub enum ConstantStrategy {
     },
 }
 
+/// How to resolve a symbol's name when a simple labeled field isn't
+/// enough. Tree-sitter grammars vary wildly: some expose a `name:`
+/// field (most common), some wrap the identifier in an unlabeled
+/// child of a specific kind (`message_name`), some bury it several
+/// layers deep (`function_definition > signature > call_expression >
+/// identifier`). This enum lets a spec pick the right strategy per
+/// node kind without pushing the decision into the walker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameResolution {
+    /// `node.child_by_field_name(field)` — same as `name_fields`, but
+    /// expressible through the unified resolver.
+    Field(&'static str),
+    /// First direct child whose kind equals `kind`. The child's text
+    /// (with surrounding whitespace trimmed) becomes the name.
+    ChildKind(&'static str),
+    /// Descend through direct children whose kinds match `path` in
+    /// order, then resolve the name on the deepest node via `leaf`.
+    Descend {
+        /// Sequence of direct-child kinds to follow.
+        path: &'static [&'static str],
+        /// How to pick the name on the deepest node.
+        leaf: NameLeaf,
+    },
+}
+
+/// Terminal step for [`NameResolution::Descend`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameLeaf {
+    /// Labeled field on the descended node.
+    Field(&'static str),
+    /// First direct child of the descended node whose kind equals this.
+    ChildKind(&'static str),
+    /// First direct child of the descended node whose kind is
+    /// `identifier`.
+    Identifier,
+}
+
 /// Per-language extraction configuration.
 ///
 /// Fields are `&'static` slices so every spec is a const. Lookups are
@@ -164,6 +201,11 @@ pub struct LanguageSpec {
     /// symbol name. Nodes without an entry rely on the child-scan
     /// fallback and silently skip if that also returns nothing.
     pub name_fields: &'static [(&'static str, &'static str)],
+    /// Explicit name-resolution strategies. Checked before
+    /// [`Self::name_fields`]. Use this when the grammar does not expose
+    /// the name as a labeled field — e.g. an unlabeled child of a
+    /// specific kind, or a nested descendant.
+    pub name_resolutions: &'static [(&'static str, NameResolution)],
     /// Map of tree-sitter node type to the field name holding its
     /// parameter list. Used to stitch the signature slice.
     pub param_fields: &'static [(&'static str, &'static str)],
@@ -203,6 +245,13 @@ impl LanguageSpec {
     /// Configured name field for `node_type`, if any.
     pub fn name_field_for(&self, node_type: &str) -> Option<&'static str> {
         self.name_fields
+            .iter()
+            .find_map(|(k, v)| (*k == node_type).then_some(*v))
+    }
+
+    /// Explicit name-resolution strategy for `node_type`, if any.
+    pub fn name_resolution_for(&self, node_type: &str) -> Option<NameResolution> {
+        self.name_resolutions
             .iter()
             .find_map(|(k, v)| (*k == node_type).then_some(*v))
     }
@@ -955,6 +1004,11 @@ impl<'a> Walker<'a> {
     }
 
     fn extract_name(&self, node: Node<'_>) -> Option<String> {
+        if let Some(resolution) = self.spec.name_resolution_for(node.kind())
+            && let Some(name) = self.apply_name_resolution(node, resolution)
+        {
+            return Some(name);
+        }
         if let Some(field) = self.spec.name_field_for(node.kind())
             && let Some(name_node) = node.child_by_field_name(field)
         {
@@ -969,6 +1023,45 @@ impl<'a> Walker<'a> {
             return Some(name);
         }
         None
+    }
+
+    fn apply_name_resolution(
+        &self,
+        node: Node<'_>,
+        resolution: NameResolution,
+    ) -> Option<String> {
+        match resolution {
+            NameResolution::Field(field) => node
+                .child_by_field_name(field)
+                .and_then(|n| self.node_text(n).map(trim_string)),
+            NameResolution::ChildKind(kind) => {
+                let target = first_direct_child_of_kind(node, kind)?;
+                self.node_text(target).map(trim_string)
+            }
+            NameResolution::Descend { path, leaf } => {
+                let mut cursor = node;
+                for step in path {
+                    cursor = first_direct_child_of_kind(cursor, step)?;
+                }
+                self.apply_name_leaf(cursor, leaf)
+            }
+        }
+    }
+
+    fn apply_name_leaf(&self, node: Node<'_>, leaf: NameLeaf) -> Option<String> {
+        match leaf {
+            NameLeaf::Field(field) => node
+                .child_by_field_name(field)
+                .and_then(|n| self.node_text(n).map(trim_string)),
+            NameLeaf::ChildKind(kind) => {
+                let target = first_direct_child_of_kind(node, kind)?;
+                self.node_text(target).map(trim_string)
+            }
+            NameLeaf::Identifier => {
+                let target = first_direct_child_of_kind(node, "identifier")?;
+                self.node_text(target).map(trim_string)
+            }
+        }
     }
 
     fn declarator_identifier(&self, node: Node<'_>) -> Option<String> {
@@ -1088,6 +1181,19 @@ fn trim_string(s: String) -> String {
     s.trim().to_string()
 }
 
+fn first_direct_child_of_kind<'tree>(
+    node: Node<'tree>,
+    kind: &str,
+) -> Option<Node<'tree>> {
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() == kind {
+            return Some(child);
+        }
+    }
+    None
+}
+
 fn is_all_caps_constant(name: &str) -> bool {
     let mut has_letter = false;
     for c in name.chars() {
@@ -1199,6 +1305,7 @@ mod tests {
         static SPEC: LanguageSpec = LanguageSpec {
             symbol_node_types: &[("function_definition", "function")],
             name_fields: &[("function_definition", "name")],
+            name_resolutions: &[],
             param_fields: &[],
             return_type_fields: &[],
             container_node_types: &["class_definition"],
@@ -1213,5 +1320,40 @@ mod tests {
         assert_eq!(SPEC.name_field_for("function_definition"), Some("name"));
         assert!(SPEC.is_container("class_definition"));
         assert!(!SPEC.is_container("function_definition"));
+    }
+
+    #[test]
+    fn name_resolution_lookup() {
+        static SPEC: LanguageSpec = LanguageSpec {
+            symbol_node_types: &[("message", "type")],
+            name_fields: &[],
+            name_resolutions: &[
+                ("message", NameResolution::ChildKind("message_name")),
+                (
+                    "function_definition",
+                    NameResolution::Descend {
+                        path: &["signature", "call_expression"],
+                        leaf: NameLeaf::Identifier,
+                    },
+                ),
+            ],
+            param_fields: &[],
+            return_type_fields: &[],
+            container_node_types: &[],
+            docstring_strategy: DocstringStrategy::PrecedingComment,
+            decorator_strategy: DecoratorStrategy::None,
+            constant_strategy: ConstantStrategy::None,
+            parameter_kinds: &[],
+            method_promotion: &[],
+        };
+        assert_eq!(
+            SPEC.name_resolution_for("message"),
+            Some(NameResolution::ChildKind("message_name")),
+        );
+        assert!(matches!(
+            SPEC.name_resolution_for("function_definition"),
+            Some(NameResolution::Descend { .. })
+        ));
+        assert_eq!(SPEC.name_resolution_for("unknown"), None);
     }
 }
