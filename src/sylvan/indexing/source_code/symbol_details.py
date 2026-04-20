@@ -53,6 +53,7 @@ def _scan_children_for_name(node: object, source_bytes: bytes) -> str | None:
         "tag_name",
         "keyframes_name",
         "keyword_query",
+        "string_value",
     )
     for child in node.children:
         if child.type in name_types:
@@ -61,6 +62,12 @@ def _scan_children_for_name(node: object, source_bytes: bytes) -> str | None:
             inner_name = child.child_by_field_name("name")
             if inner_name:
                 return source_bytes[inner_name.start_byte : inner_name.end_byte].decode("utf-8", errors="replace")
+        if child.type == "call_expression":
+            for inner in child.children:
+                if inner.type == "arguments":
+                    for arg in inner.children:
+                        if arg.type == "string_value":
+                            return source_bytes[arg.start_byte : arg.end_byte].decode("utf-8", errors="replace").strip()
     return None
 
 

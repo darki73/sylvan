@@ -323,6 +323,7 @@ _SPECS: dict[str, tuple[list[str], LanguageSpec]] = {
                 "rule_set": "selectors",
                 "keyframes_statement": "name",
                 "media_statement": "condition",
+                "import_statement": "url",
             },
             docstring_strategy="preceding_comment",
         ),

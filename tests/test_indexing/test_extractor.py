@@ -207,3 +207,32 @@ func Hello(name string) string {
         symbols = parse_file(code, "test.go", "go")
         assert len(symbols) >= 1
         assert symbols[0].docstring and "greets" in symbols[0].docstring
+
+
+class TestCssExtraction:
+    def test_extracts_rule_sets(self):
+        code = ".foo { color: red; }\n#bar { margin: 0; }\n"
+        symbols = parse_file(code, "test.css", "css")
+        names = {s.name for s in symbols if s.kind == "type"}
+        assert ".foo" in names
+        assert "#bar" in names
+
+    def test_extracts_keyframes(self):
+        code = "@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }\n"
+        symbols = parse_file(code, "test.css", "css")
+        funcs = [s for s in symbols if s.kind == "function"]
+        assert any(s.name == "fadeIn" for s in funcs)
+
+    def test_extracts_plain_import(self):
+        code = '@import "reset.css";\n'
+        symbols = parse_file(code, "test.css", "css")
+        imports = [s for s in symbols if s.kind == "constant"]
+        assert len(imports) == 1
+        assert "reset.css" in imports[0].name
+
+    def test_extracts_url_import(self):
+        code = '@import url("theme.css");\n'
+        symbols = parse_file(code, "test.css", "css")
+        imports = [s for s in symbols if s.kind == "constant"]
+        assert len(imports) == 1
+        assert "theme.css" in imports[0].name
