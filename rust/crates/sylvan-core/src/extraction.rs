@@ -11,6 +11,22 @@
 
 use crate::symbol::Symbol;
 
+/// Repo-scoped state passed to import-resolution plugins.
+///
+/// Mirrors the Python `ResolverContext` dataclass. The orchestrator
+/// builds one per repo (populated from `composer.json` / `tsconfig.json`
+/// if present) and hands it to each language's candidate generator.
+/// Keys and values are plain `String` so the Python bridge can fill it
+/// from dicts without worrying about lifetimes.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ResolverContext {
+    /// PHP PSR-4 namespace prefix to directory list mapping.
+    pub psr4_mappings: std::collections::BTreeMap<String, Vec<String>>,
+    /// TypeScript path alias to directory list mapping (without
+    /// trailing `/*`, matching the Python orchestrator's convention).
+    pub tsconfig_aliases: std::collections::BTreeMap<String, Vec<String>>,
+}
+
 /// A single import statement extracted from source.
 ///
 /// Mirrors the Python plugin's `{"specifier", "names"}` dict. The
@@ -117,6 +133,26 @@ pub trait LanguageExtractor: Send + Sync {
     /// default is `false` so incremental ports do not silently mask
     /// Python's import output with an empty Rust result.
     fn supports_imports(&self) -> bool {
+        false
+    }
+
+    /// Generate candidate file paths for an import specifier.
+    ///
+    /// Pure function: no file-system or database access. The resolver
+    /// pass in the pipeline pairs the returned candidates against the
+    /// repo's indexed files to pick the winning path. Languages that
+    /// do not participate in resolution keep the default empty list.
+    fn generate_candidates(
+        &self,
+        _specifier: &str,
+        _source_path: &str,
+        _context: &ResolverContext,
+    ) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Whether this extractor implements [`Self::generate_candidates`].
+    fn supports_resolution(&self) -> bool {
         false
     }
 }

@@ -7,8 +7,12 @@ to populate ``resolved_file_id`` in the ``file_imports`` table.
 
 from __future__ import annotations
 
+from sylvan._rust import generate_candidates as _rust_generate_candidates
+from sylvan._rust import resolution_supported_languages as _rust_resolution_languages
 from sylvan.indexing.languages.protocols import ResolverContext
 from sylvan.logging import get_logger
+
+_RUST_RESOLUTION_LANGUAGES: frozenset[str] = frozenset(_rust_resolution_languages())
 
 logger = get_logger(__name__)
 
@@ -133,7 +137,8 @@ def _generate_candidates(
 ) -> list[str]:
     """Generate candidate file paths from an import specifier.
 
-    Delegates to the language plugin's import resolver if one is registered.
+    Routes Rust-supported languages through the Rust resolver; falls
+    back to the legacy per-language plugin for everything else.
 
     Args:
         specifier: The raw import specifier string.
@@ -144,6 +149,20 @@ def _generate_candidates(
     Returns:
         Ordered list of candidate file paths to try matching.
     """
+    if language in _RUST_RESOLUTION_LANGUAGES:
+        try:
+            return list(
+                _rust_generate_candidates(
+                    specifier,
+                    source_path,
+                    language,
+                    context.psr4_mappings,
+                    context.tsconfig_aliases,
+                )
+            )
+        except Exception:
+            return []
+
     from sylvan.indexing.languages import get_import_resolver
 
     resolver = get_import_resolver(language)

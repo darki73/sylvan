@@ -16,7 +16,9 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 
-use sylvan_core::{ExtractionContext, Import, Symbol};
+use std::collections::BTreeMap;
+
+use sylvan_core::{ExtractionContext, Import, ResolverContext, Symbol};
 use sylvan_indexing::extraction::Registry;
 
 fn registry() -> &'static Registry {
@@ -128,11 +130,71 @@ fn import_supported_languages<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyLis
     Ok(list)
 }
 
+/// Subset of `supported_languages()` whose extractors implement
+/// import-specifier resolution. Parallel to `import_supported_languages`.
+#[pyfunction]
+fn resolution_supported_languages<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+    let reg = registry();
+    let list = PyList::empty(py);
+    for lang in reg.resolution_languages() {
+        list.append(lang)?;
+    }
+    Ok(list)
+}
+
+fn context_from_dicts(
+    psr4: Option<&Bound<'_, PyDict>>,
+    tsconfig: Option<&Bound<'_, PyDict>>,
+) -> PyResult<ResolverContext> {
+    let mut out = ResolverContext::default();
+    if let Some(d) = psr4 {
+        out.psr4_mappings = dict_to_map(d)?;
+    }
+    if let Some(d) = tsconfig {
+        out.tsconfig_aliases = dict_to_map(d)?;
+    }
+    Ok(out)
+}
+
+fn dict_to_map(d: &Bound<'_, PyDict>) -> PyResult<BTreeMap<String, Vec<String>>> {
+    let mut out = BTreeMap::new();
+    for (k, v) in d.iter() {
+        let key: String = k.extract()?;
+        let values: Vec<String> = v.extract()?;
+        out.insert(key, values);
+    }
+    Ok(out)
+}
+
+/// Generate candidate file paths for an import specifier. Returns an
+/// empty list when `language` has no Rust resolver registered.
+#[pyfunction]
+#[pyo3(signature = (specifier, source_path, language, psr4_mappings=None, tsconfig_aliases=None))]
+fn generate_candidates<'py>(
+    py: Python<'py>,
+    specifier: &str,
+    source_path: &str,
+    language: &str,
+    psr4_mappings: Option<&Bound<'_, PyDict>>,
+    tsconfig_aliases: Option<&Bound<'_, PyDict>>,
+) -> PyResult<Bound<'py, PyList>> {
+    let reg = registry();
+    let ctx = context_from_dicts(psr4_mappings, tsconfig_aliases)?;
+    let candidates = reg.generate_candidates(language, specifier, source_path, &ctx);
+    let list = PyList::empty(py);
+    for c in candidates {
+        list.append(c)?;
+    }
+    Ok(list)
+}
+
 /// Register extraction functions on the parent module.
 pub fn register(parent: &Bound<'_, PyModule>) -> PyResult<()> {
     parent.add_function(wrap_pyfunction!(extract_symbols, parent)?)?;
     parent.add_function(wrap_pyfunction!(extract_imports, parent)?)?;
     parent.add_function(wrap_pyfunction!(supported_languages, parent)?)?;
     parent.add_function(wrap_pyfunction!(import_supported_languages, parent)?)?;
+    parent.add_function(wrap_pyfunction!(generate_candidates, parent)?)?;
+    parent.add_function(wrap_pyfunction!(resolution_supported_languages, parent)?)?;
     Ok(())
 }

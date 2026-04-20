@@ -18,7 +18,9 @@
 
 use std::sync::OnceLock;
 
-use sylvan_core::{ExtractionContext, ExtractionError, Import, LanguageExtractor, Symbol};
+use sylvan_core::{
+    ExtractionContext, ExtractionError, Import, LanguageExtractor, ResolverContext, Symbol,
+};
 use tree_sitter::Node;
 
 use crate::extraction::spec::{
@@ -106,6 +108,100 @@ impl LanguageExtractor for PythonExtractor {
         walk_imports(tree.root_node(), ctx.source_bytes, &mut out);
         Ok(out)
     }
+
+    fn supports_resolution(&self) -> bool {
+        true
+    }
+
+    fn generate_candidates(
+        &self,
+        specifier: &str,
+        source_path: &str,
+        _context: &ResolverContext,
+    ) -> Vec<String> {
+        if specifier.starts_with('.') {
+            return relative_candidates(specifier, source_path);
+        }
+
+        let mut out = Vec::new();
+        if specifier.contains('.') {
+            let path_base = specifier.replace('.', "/");
+            for prefix in ["", "src/", "lib/"] {
+                out.push(format!("{prefix}{path_base}.py"));
+                out.push(format!("{prefix}{path_base}/__init__.py"));
+            }
+        } else {
+            for prefix in ["", "src/", "lib/"] {
+                out.push(format!("{prefix}{specifier}/__init__.py"));
+                out.push(format!("{prefix}{specifier}.py"));
+            }
+        }
+        dedupe(out)
+    }
+}
+
+fn relative_candidates(specifier: &str, source_path: &str) -> Vec<String> {
+    let dots = specifier.chars().take_while(|c| *c == '.').count();
+    let remainder = &specifier[dots..];
+
+    let source_dir = parent_dir(source_path);
+    let mut base = source_dir.to_string();
+    for _ in 1..dots {
+        base = parent_dir(&base).to_string();
+    }
+
+    let path_base = if remainder.is_empty() {
+        base
+    } else {
+        join_posix(&base, &remainder.replace('.', "/"))
+    };
+    let path_base = normalize(&path_base);
+
+    vec![format!("{path_base}.py"), format!("{path_base}/__init__.py")]
+}
+
+fn parent_dir(path: &str) -> &str {
+    match path.rfind('/') {
+        Some(idx) => &path[..idx],
+        None => "",
+    }
+}
+
+fn join_posix(left: &str, right: &str) -> String {
+    if left.is_empty() {
+        right.to_string()
+    } else {
+        format!("{left}/{right}")
+    }
+}
+
+fn normalize(path: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for segment in path.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            other => parts.push(other),
+        }
+    }
+    if parts.is_empty() {
+        ".".to_string()
+    } else {
+        parts.join("/")
+    }
+}
+
+fn dedupe(items: Vec<String>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        if seen.insert(item.clone()) {
+            out.push(item);
+        }
+    }
+    out
 }
 
 fn walk_imports(node: Node<'_>, source: &[u8], out: &mut Vec<Import>) {
@@ -187,6 +283,55 @@ mod tests {
     #[test]
     fn empty_file_yields_no_symbols() {
         assert!(extract("").is_empty());
+    }
+
+    fn candidates(specifier: &str, source: &str) -> Vec<String> {
+        let ctx = ResolverContext::default();
+        PythonExtractor::new().generate_candidates(specifier, source, &ctx)
+    }
+
+    #[test]
+    fn top_level_module_generates_prefixed_candidates() {
+        let c = candidates("os", "pkg/mod.py");
+        assert!(c.contains(&"os/__init__.py".into()));
+        assert!(c.contains(&"os.py".into()));
+        assert!(c.contains(&"src/os/__init__.py".into()));
+        assert!(c.contains(&"lib/os.py".into()));
+    }
+
+    #[test]
+    fn dotted_module_expands_path_segments() {
+        let c = candidates("sylvan.search.embeddings", "pkg/mod.py");
+        assert!(c.contains(&"sylvan/search/embeddings.py".into()));
+        assert!(c.contains(&"sylvan/search/embeddings/__init__.py".into()));
+        assert!(c.contains(&"src/sylvan/search/embeddings.py".into()));
+    }
+
+    #[test]
+    fn single_dot_relative_resolves_against_source_dir() {
+        let c = candidates(".utils", "pkg/sub/mod.py");
+        assert_eq!(
+            c,
+            vec!["pkg/sub/utils.py", "pkg/sub/utils/__init__.py"]
+        );
+    }
+
+    #[test]
+    fn double_dot_relative_walks_up_one_package() {
+        let c = candidates("..config", "pkg/sub/mod.py");
+        assert_eq!(
+            c,
+            vec!["pkg/config.py", "pkg/config/__init__.py"]
+        );
+    }
+
+    #[test]
+    fn bare_dot_relative_points_to_package_itself() {
+        let c = candidates(".", "pkg/sub/mod.py");
+        assert_eq!(
+            c,
+            vec!["pkg/sub.py", "pkg/sub/__init__.py"]
+        );
     }
 
     fn imports(src: &str) -> Vec<Import> {

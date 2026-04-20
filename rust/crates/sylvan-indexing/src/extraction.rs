@@ -75,6 +75,35 @@ impl Registry {
     }
 
     /// Sorted list of language identifiers whose extractor advertises
+    /// resolution support.
+    pub fn resolution_languages(&self) -> Vec<&'static str> {
+        let mut langs: Vec<&'static str> = self
+            .by_language
+            .iter()
+            .filter(|(_, ex)| ex.supports_resolution())
+            .map(|(k, _)| *k)
+            .collect();
+        langs.sort_unstable();
+        langs
+    }
+
+    /// Dispatch candidate generation for `language`. Returns empty
+    /// when no extractor is registered or the extractor does not
+    /// implement resolution.
+    pub fn generate_candidates(
+        &self,
+        language: &str,
+        specifier: &str,
+        source_path: &str,
+        context: &sylvan_core::ResolverContext,
+    ) -> Vec<String> {
+        match self.get(language) {
+            Some(extractor) => extractor.generate_candidates(specifier, source_path, context),
+            None => Vec::new(),
+        }
+    }
+
+    /// Sorted list of language identifiers whose extractor advertises
     /// import support (via `LanguageExtractor::supports_imports`).
     pub fn import_languages(&self) -> Vec<&'static str> {
         let mut langs: Vec<&'static str> = self

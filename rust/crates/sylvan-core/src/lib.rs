@@ -7,7 +7,9 @@ pub mod discovery;
 pub mod extraction;
 pub mod symbol;
 
-pub use extraction::{ExtractionContext, ExtractionError, Import, LanguageExtractor};
+pub use extraction::{
+    ExtractionContext, ExtractionError, Import, LanguageExtractor, ResolverContext,
+};
 pub use symbol::{Symbol, SymbolKind, UnknownSymbolKind, make_symbol_id};
 
 /// Crate version, baked in at compile time.
