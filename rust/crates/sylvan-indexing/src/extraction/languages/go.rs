@@ -40,7 +40,12 @@ static SPEC: LanguageSpec = LanguageSpec {
     container_node_types: &[],
     docstring_strategy: DocstringStrategy::PrecedingComment,
     decorator_strategy: DecoratorStrategy::None,
-    constant_strategy: ConstantStrategy::None,
+    constant_strategy: ConstantStrategy::WrappedSpecs {
+        wrapper_kinds: &["const_declaration", "var_declaration"],
+        spec_kinds: &["const_spec", "var_spec"],
+        name_field: "name",
+        uppercase_only: true,
+    },
     parameter_kinds: &["parameter_declaration", "variadic_parameter_declaration"],
     method_promotion: &[],
 };
@@ -145,5 +150,25 @@ mod tests {
     #[test]
     fn advertises_go_language() {
         assert_eq!(GoExtractor::new().languages(), &["go"]);
+    }
+
+    #[test]
+    fn uppercase_const_declaration_emits_constant() {
+        let src = "package main\n\nconst MAX = 5\n";
+        let syms = extract(src);
+        let c = syms.iter().find(|s| s.kind == "constant").expect("constant");
+        assert_eq!(c.name, "MAX");
+    }
+
+    #[test]
+    fn grouped_const_block_emits_each_uppercase_spec() {
+        let src = "package main\n\nconst (\n    FOO = 1\n    bar = 2\n    BAZ = 3\n)\n";
+        let syms = extract(src);
+        let names: Vec<&str> = syms
+            .iter()
+            .filter(|s| s.kind == "constant")
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["FOO", "BAZ"]);
     }
 }

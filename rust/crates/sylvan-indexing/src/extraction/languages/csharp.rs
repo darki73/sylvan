@@ -15,7 +15,8 @@ use std::sync::OnceLock;
 use sylvan_core::{ExtractionContext, ExtractionError, LanguageExtractor, Symbol};
 
 use crate::extraction::spec::{
-    ConstantStrategy, DecoratorStrategy, DocstringStrategy, LanguageSpec, SpecExtractor,
+    ConstantStrategy, DecoratorStrategy, DocstringStrategy, LanguageSpec, ModifierLocation,
+    SpecExtractor,
 };
 
 static SPEC: LanguageSpec = LanguageSpec {
@@ -45,7 +46,14 @@ static SPEC: LanguageSpec = LanguageSpec {
     decorator_strategy: DecoratorStrategy::PrecedingSiblings {
         kinds: &["attribute_list"],
     },
-    constant_strategy: ConstantStrategy::None,
+    constant_strategy: ConstantStrategy::ModifiedField {
+        field_kinds: &["field_declaration"],
+        modifiers: ModifierLocation::DirectByText { kind: "modifier" },
+        required_modifiers: &["const"],
+        declarator_kind: "variable_declarator",
+        name_field: "name",
+        uppercase_only: false,
+    },
     parameter_kinds: &["parameter"],
     method_promotion: &[],
 };
@@ -134,5 +142,25 @@ mod tests {
     #[test]
     fn advertises_csharp_language() {
         assert_eq!(CSharpExtractor::new().languages(), &["csharp"]);
+    }
+
+    #[test]
+    fn const_field_emits_constant_under_class() {
+        let src = "class C { public const int Max = 10; }";
+        let syms = extract(src);
+        let cls = syms.iter().find(|s| s.kind == "class").expect("class");
+        let c = syms
+            .iter()
+            .find(|s| s.kind == "constant" && s.name == "Max")
+            .expect("constant");
+        assert_eq!(c.qualified_name, "C.Max");
+        assert_eq!(c.parent_symbol_id.as_deref(), Some(cls.symbol_id.as_str()));
+    }
+
+    #[test]
+    fn non_const_field_is_not_a_constant() {
+        let src = "class C { public int Mutable = 0; }";
+        let syms = extract(src);
+        assert!(syms.iter().all(|s| s.kind != "constant"));
     }
 }

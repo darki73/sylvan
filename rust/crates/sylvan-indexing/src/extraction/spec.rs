@@ -73,6 +73,29 @@ pub enum DecoratorStrategy {
     },
 }
 
+/// Where a grammar parks the modifier keywords on a declaration.
+///
+/// Java wraps them in a `modifiers` child node whose children carry the
+/// keyword kind directly (`static`, `final`). C# parks sibling
+/// `modifier` nodes directly on the declaration whose text identifies
+/// the keyword (`const`, `readonly`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModifierLocation {
+    /// Modifiers are children of a named container. Each child's node
+    /// kind identifies the keyword.
+    Container {
+        /// Child kind holding the modifier list (e.g. `modifiers`).
+        name: &'static str,
+    },
+    /// Modifier nodes are direct children of the declaration. Each
+    /// node shares the same wrapper kind; the keyword is the node's
+    /// source text.
+    DirectByText {
+        /// Wrapper kind for modifier nodes (e.g. `modifier`).
+        kind: &'static str,
+    },
+}
+
 /// How a language flags module-level named constants. Strategies name
 /// the grammar shape explicitly so the walker never has to guess which
 /// node layout a language uses.
@@ -83,6 +106,49 @@ pub enum ConstantStrategy {
     /// Python: `expression_statement` containing an `assignment` whose
     /// left-hand identifier matches `UPPER_SNAKE_CASE`.
     PythonAssignment,
+    /// Go-style: an outer declaration node (`const_declaration`,
+    /// `var_declaration`) wraps one or more inner spec nodes, each
+    /// carrying the constant's name via a named field.
+    WrappedSpecs {
+        /// Outer wrapper node kinds (e.g. `const_declaration`).
+        wrapper_kinds: &'static [&'static str],
+        /// Inner spec node kinds (e.g. `const_spec`).
+        spec_kinds: &'static [&'static str],
+        /// Field on each spec that holds the identifier.
+        name_field: &'static str,
+        /// When true, only emit if the name matches `UPPER_SNAKE_CASE`.
+        uppercase_only: bool,
+    },
+    /// Rust-style: single-item nodes with a direct `name` field
+    /// (`const_item`, `static_item`).
+    DirectItems {
+        /// Node kinds recognised as a constant declaration.
+        item_kinds: &'static [&'static str],
+        /// Field on the item that holds the identifier.
+        name_field: &'static str,
+        /// When true, only emit if the name matches `UPPER_SNAKE_CASE`.
+        uppercase_only: bool,
+    },
+    /// Java / C# style: a field declaration whose modifier list
+    /// carries every entry in `required_modifiers`. The name lives
+    /// inside a nested declarator.
+    ModifiedField {
+        /// Node kinds recognised as field declarations.
+        field_kinds: &'static [&'static str],
+        /// Where to find the modifier keywords on the field.
+        modifiers: ModifierLocation,
+        /// Modifier keywords that must all be present for the field
+        /// to count as a constant. Matched against the grammar's
+        /// modifier representation as configured by `modifiers`.
+        required_modifiers: &'static [&'static str],
+        /// Nested declarator node kind that holds the name (e.g.
+        /// `variable_declarator`).
+        declarator_kind: &'static str,
+        /// Field on the declarator holding the identifier.
+        name_field: &'static str,
+        /// When true, only emit if the name matches `UPPER_SNAKE_CASE`.
+        uppercase_only: bool,
+    },
 }
 
 /// Per-language extraction configuration.
@@ -317,9 +383,7 @@ impl<'a> Walker<'a> {
             return;
         }
 
-        if parent_symbol_id.is_none() {
-            self.try_emit_constant(node, out);
-        }
+        self.try_emit_constant(node, parent_symbol_id, scope, out);
 
         let kind_str = self.spec.kind_for(node.kind());
         if let Some(raw_kind) = kind_str {
@@ -404,14 +468,263 @@ impl<'a> Walker<'a> {
         }
     }
 
-    fn try_emit_constant(&self, node: Node<'_>, out: &mut Vec<Symbol>) {
+    fn try_emit_constant(
+        &self,
+        node: Node<'_>,
+        parent_symbol_id: Option<&str>,
+        scope: &[String],
+        out: &mut Vec<Symbol>,
+    ) {
+        let at_module_scope = parent_symbol_id.is_none();
         match self.spec.constant_strategy {
             ConstantStrategy::None => {}
-            ConstantStrategy::PythonAssignment => self.emit_python_constant(node, out),
+            ConstantStrategy::PythonAssignment if at_module_scope => {
+                self.emit_python_constant(node, parent_symbol_id, scope, out);
+            }
+            ConstantStrategy::WrappedSpecs {
+                wrapper_kinds,
+                spec_kinds,
+                name_field,
+                uppercase_only,
+            } if at_module_scope => {
+                if wrapper_kinds.contains(&node.kind()) {
+                    self.emit_wrapped_specs(
+                        node,
+                        spec_kinds,
+                        name_field,
+                        uppercase_only,
+                        parent_symbol_id,
+                        scope,
+                        out,
+                    );
+                }
+            }
+            ConstantStrategy::DirectItems {
+                item_kinds,
+                name_field,
+                uppercase_only,
+            } => {
+                if item_kinds.contains(&node.kind()) {
+                    self.emit_direct_item(
+                        node,
+                        name_field,
+                        uppercase_only,
+                        parent_symbol_id,
+                        scope,
+                        out,
+                    );
+                }
+            }
+            ConstantStrategy::ModifiedField {
+                field_kinds,
+                modifiers,
+                required_modifiers,
+                declarator_kind,
+                name_field,
+                uppercase_only,
+            } => {
+                if field_kinds.contains(&node.kind())
+                    && self.field_has_modifiers(node, modifiers, required_modifiers)
+                {
+                    self.emit_field_constants(
+                        node,
+                        declarator_kind,
+                        name_field,
+                        uppercase_only,
+                        parent_symbol_id,
+                        scope,
+                        out,
+                    );
+                }
+            }
+            _ => {}
         }
     }
 
-    fn emit_python_constant(&self, node: Node<'_>, out: &mut Vec<Symbol>) {
+    fn emit_wrapped_specs(
+        &self,
+        wrapper: Node<'_>,
+        spec_kinds: &[&str],
+        name_field: &str,
+        uppercase_only: bool,
+        parent_symbol_id: Option<&str>,
+        scope: &[String],
+        out: &mut Vec<Symbol>,
+    ) {
+        let mut cursor = wrapper.walk();
+        for child in wrapper.children(&mut cursor) {
+            if !spec_kinds.contains(&child.kind()) {
+                continue;
+            }
+            let Some(name_node) = child.child_by_field_name(name_field) else {
+                continue;
+            };
+            let Some(name) = self.node_text(name_node).map(trim_string) else {
+                continue;
+            };
+            self.push_constant(&child, name, uppercase_only, parent_symbol_id, scope, out);
+        }
+    }
+
+    fn emit_direct_item(
+        &self,
+        node: Node<'_>,
+        name_field: &str,
+        uppercase_only: bool,
+        parent_symbol_id: Option<&str>,
+        scope: &[String],
+        out: &mut Vec<Symbol>,
+    ) {
+        let Some(name_node) = node.child_by_field_name(name_field) else {
+            return;
+        };
+        let Some(name) = self.node_text(name_node).map(trim_string) else {
+            return;
+        };
+        self.push_constant(&node, name, uppercase_only, parent_symbol_id, scope, out);
+    }
+
+    fn field_has_modifiers(
+        &self,
+        node: Node<'_>,
+        location: ModifierLocation,
+        required: &[&str],
+    ) -> bool {
+        if required.is_empty() {
+            return true;
+        }
+        match location {
+            ModifierLocation::Container { name } => {
+                let mut cursor = node.walk();
+                let Some(container) =
+                    node.children(&mut cursor).find(|c| c.kind() == name)
+                else {
+                    return false;
+                };
+                let mut mod_cursor = container.walk();
+                let present: Vec<&str> = container
+                    .children(&mut mod_cursor)
+                    .map(|c| c.kind())
+                    .collect();
+                required.iter().all(|r| present.contains(r))
+            }
+            ModifierLocation::DirectByText { kind } => {
+                let mut cursor = node.walk();
+                let present: Vec<String> = node
+                    .children(&mut cursor)
+                    .filter(|c| c.kind() == kind)
+                    .filter_map(|c| self.node_text(c).map(|s| s.to_string()))
+                    .collect();
+                required
+                    .iter()
+                    .all(|r| present.iter().any(|p| p == *r))
+            }
+        }
+    }
+
+    fn emit_field_constants(
+        &self,
+        node: Node<'_>,
+        declarator_kind: &str,
+        name_field: &str,
+        uppercase_only: bool,
+        parent_symbol_id: Option<&str>,
+        scope: &[String],
+        out: &mut Vec<Symbol>,
+    ) {
+        self.walk_declarators(node, declarator_kind, &mut |declarator| {
+            let Some(name_node) = declarator.child_by_field_name(name_field) else {
+                return;
+            };
+            let Some(name) = self.node_text(name_node).map(trim_string) else {
+                return;
+            };
+            self.push_constant(&node, name, uppercase_only, parent_symbol_id, scope, out);
+        });
+    }
+
+    fn walk_declarators<F: FnMut(Node<'_>)>(
+        &self,
+        node: Node<'_>,
+        declarator_kind: &str,
+        visit: &mut F,
+    ) {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == declarator_kind {
+                visit(child);
+            } else {
+                self.walk_declarators(child, declarator_kind, visit);
+            }
+        }
+    }
+
+    fn push_constant(
+        &self,
+        range_node: &Node<'_>,
+        name: String,
+        uppercase_only: bool,
+        parent_symbol_id: Option<&str>,
+        scope: &[String],
+        out: &mut Vec<Symbol>,
+    ) {
+        if name.is_empty() {
+            return;
+        }
+        if uppercase_only && !is_all_caps_constant(&name) {
+            return;
+        }
+        let start = range_node.start_byte();
+        let end = range_node.end_byte();
+        let qualified_name = if scope.is_empty() {
+            name.clone()
+        } else {
+            let mut q = scope.join(".");
+            q.push('.');
+            q.push_str(&name);
+            q
+        };
+        if out.iter().any(|s| {
+            s.kind == "constant"
+                && s.qualified_name == qualified_name
+                && s.byte_offset as usize == start
+        }) {
+            return;
+        }
+        let Some(byte_offset) = u32::try_from(start).ok() else {
+            return;
+        };
+        let Some(byte_length) = u32::try_from(end.saturating_sub(start)).ok() else {
+            return;
+        };
+        let Some(line_start) = u32::try_from(range_node.start_position().row).ok() else {
+            return;
+        };
+        let Some(line_end) = u32::try_from(range_node.end_position().row).ok() else {
+            return;
+        };
+        out.push(Symbol {
+            symbol_id: make_symbol_id(self.filename, &qualified_name, "constant"),
+            name,
+            qualified_name,
+            kind: "constant".to_string(),
+            language: self.language.to_string(),
+            parent_symbol_id: parent_symbol_id.map(str::to_string),
+            line_start: Some(line_start.saturating_add(1)),
+            line_end: Some(line_end.saturating_add(1)),
+            byte_offset,
+            byte_length,
+            ..Symbol::default()
+        });
+    }
+
+    fn emit_python_constant(
+        &self,
+        node: Node<'_>,
+        parent_symbol_id: Option<&str>,
+        scope: &[String],
+        out: &mut Vec<Symbol>,
+    ) {
         let assign = match node.kind() {
             "expression_statement" => {
                 let mut cursor = node.walk();
@@ -433,41 +746,7 @@ impl<'a> Walker<'a> {
         let Some(name) = self.node_text(lhs).map(trim_string) else {
             return;
         };
-        if name.is_empty() || !is_all_caps_constant(&name) {
-            return;
-        }
-        let start = assign.start_byte();
-        let end = assign.end_byte();
-        if out
-            .iter()
-            .any(|s| s.kind == "constant" && s.name == name && s.byte_offset as usize == start)
-        {
-            return;
-        }
-        let Some(byte_offset) = u32::try_from(start).ok() else {
-            return;
-        };
-        let Some(byte_length) = u32::try_from(end.saturating_sub(start)).ok() else {
-            return;
-        };
-        let Some(line_start) = u32::try_from(assign.start_position().row).ok() else {
-            return;
-        };
-        let Some(line_end) = u32::try_from(assign.end_position().row).ok() else {
-            return;
-        };
-        out.push(Symbol {
-            symbol_id: make_symbol_id(self.filename, &name, "constant"),
-            name: name.clone(),
-            qualified_name: name,
-            kind: "constant".to_string(),
-            language: self.language.to_string(),
-            line_start: Some(line_start.saturating_add(1)),
-            line_end: Some(line_end.saturating_add(1)),
-            byte_offset,
-            byte_length,
-            ..Symbol::default()
-        });
+        self.push_constant(&assign, name, true, parent_symbol_id, scope, out);
     }
 
     fn build_symbol(

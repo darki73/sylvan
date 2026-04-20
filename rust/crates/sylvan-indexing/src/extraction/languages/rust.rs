@@ -44,7 +44,11 @@ static SPEC: LanguageSpec = LanguageSpec {
     decorator_strategy: DecoratorStrategy::PrecedingSiblings {
         kinds: &["attribute_item", "inner_attribute_item"],
     },
-    constant_strategy: ConstantStrategy::None,
+    constant_strategy: ConstantStrategy::DirectItems {
+        item_kinds: &["const_item", "static_item"],
+        name_field: "name",
+        uppercase_only: false,
+    },
     parameter_kinds: &["parameter", "self_parameter"],
     method_promotion: &[],
 };
@@ -153,5 +157,19 @@ mod tests {
     #[test]
     fn advertises_rust_language() {
         assert_eq!(RustExtractor::new().languages(), &["rust"]);
+    }
+
+    #[test]
+    fn const_item_emits_constant() {
+        let syms = extract("const MAX: u32 = 5;\n");
+        let c = syms.iter().find(|s| s.kind == "constant").expect("constant");
+        assert_eq!(c.name, "MAX");
+    }
+
+    #[test]
+    fn static_item_emits_constant() {
+        let syms = extract("static TABLE: &[u8] = &[];\n");
+        let c = syms.iter().find(|s| s.kind == "constant").expect("constant");
+        assert_eq!(c.name, "TABLE");
     }
 }
