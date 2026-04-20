@@ -168,5 +168,9 @@ mod tests {
             langs.contains(&"json"),
             "expected json in builtins, got {langs:?}"
         );
+        assert!(
+            langs.contains(&"css"),
+            "expected css in builtins, got {langs:?}"
+        );
     }
 }

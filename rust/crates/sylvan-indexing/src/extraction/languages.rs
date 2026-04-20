@@ -14,12 +14,14 @@ use std::sync::Arc;
 
 use super::Registry;
 
+pub mod css;
 pub mod json;
 
 /// Populate `reg` with every extractor this crate ships. Safe to call
 /// on a pre-populated registry; later registrations replace earlier
 /// ones for the same language identifier.
 pub fn register_builtins(reg: &mut Registry) {
+    reg.register(Arc::new(css::CssExtractor::new()));
     reg.register(Arc::new(json::JsonExtractor::new()));
     // Additional languages land here one file at a time — see the
     // module doc for the three-step addition recipe.
