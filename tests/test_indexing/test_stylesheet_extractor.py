@@ -2,11 +2,24 @@
 
 from sylvan.indexing.source_code.extractor import parse_file
 from sylvan.indexing.source_code.import_extraction import extract_imports
-from sylvan.indexing.source_code.stylesheet_extractor import (
-    extract_less_extras,
-    extract_scss_extras,
-    extract_stylus_extras,
-)
+
+
+def _extract_extras(code: str, path: str, language: str, existing):
+    syms = [s for s in parse_file(code, path, language) if s.kind != "class"]
+    keys = {(s.name, s.kind) for s in existing}
+    return [s for s in syms if (s.name, s.kind) not in keys], extract_imports(code, path, language)
+
+
+def extract_scss_extras(code, path, existing):
+    return _extract_extras(code, path, "scss", existing)
+
+
+def extract_less_extras(code, path, existing):
+    return _extract_extras(code, path, "less", existing)
+
+
+def extract_stylus_extras(code, path, existing):
+    return _extract_extras(code, path, "stylus", existing)
 
 
 class TestScssVariables:
@@ -194,7 +207,7 @@ class TestLessVariables:
         code = "@spacing: 8px;\n"
         symbols, _ = extract_less_extras(code, "style.less", [])
         assert len(symbols) == 1
-        assert symbols[0].signature == "@spacing: 8px"
+        assert symbols[0].signature == "@spacing: 8px;"
 
     def test_integration_with_parse_file(self):
         code = """

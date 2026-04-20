@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
-from sylvan.indexing.source_code.blade_extractor import (
-    extract_blade_imports,
-    extract_blade_symbols,
-)
+from sylvan.indexing.source_code.extractor import parse_file
+from sylvan.indexing.source_code.import_extraction import extract_imports
 from sylvan.indexing.source_code.language_specs import detect_language
+
+
+def extract_blade_symbols(content: str, path: str):
+    return parse_file(content, path, "blade")
+
+
+def extract_blade_imports(content: str):
+    return extract_imports(content, "view.blade.php", "blade")
 
 
 class TestCompoundExtensionDetection:
