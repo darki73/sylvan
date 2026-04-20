@@ -11,6 +11,7 @@ use std::sync::Arc;
 use sylvan_core::{ExtractionContext, ExtractionError, LanguageExtractor, Symbol};
 
 pub mod languages;
+pub mod spec;
 
 /// Thread-safe registry of language extractors.
 ///
@@ -171,6 +172,10 @@ mod tests {
         assert!(
             langs.contains(&"css"),
             "expected css in builtins, got {langs:?}"
+        );
+        assert!(
+            langs.contains(&"bash"),
+            "expected bash in builtins, got {langs:?}"
         );
     }
 }
